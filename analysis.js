@@ -1,132 +1,345 @@
-// Cognitive Dashboard logic - reuses lightweight analysis subset from popup.js
-// Assumes identical algorithms to maintain consistency.
-
-(function(){
-  const STATUS = document.getElementById('status');
-  const exportBtn = document.getElementById('export-btn');
-
-  function logStatus(msg){ STATUS.textContent = msg; }
-
-  function calculateComplexity(domain, title='') {
-    const base = {'github.com':0.7,'stackoverflow.com':0.8,'arxiv.org':0.9,'wikipedia.org':0.6,'reddit.com':0.4,'youtube.com':0.3};
-    let score = base[domain] ?? 0.5;
-    const lower = title.toLowerCase();
-    ['documentation','api','tutorial','research'].forEach(k=>{ if(lower.includes(k)) score += 0.1; });
-    ['meme','funny','social'].forEach(k=>{ if(lower.includes(k)) score -= 0.1; });
-    return Math.min(1, Math.max(0, score));
+class TrustAuditDashboard {
+  constructor() {
+    this.analysis = null;
+    this.bindControls();
+    const params = new URLSearchParams(window.location.search);
+    this.load(params.get('refresh') === '1' || params.get('forceRefresh') === '1');
   }
 
-  function jaccard(a,b){
-    const ta=(a||'').toLowerCase().match(/\b\w+\b/g)||[];
-    const tb=(b||'').toLowerCase().match(/\b\w+\b/g)||[];
-    const sa=new Set(ta), sb=new Set(tb);
-    const inter=[...sa].filter(x=>sb.has(x));
-    const uni=new Set([...sa,...sb]);
-    return uni.size? inter.length/uni.size:0;
+  bindControls() {
+    document.getElementById('refresh-btn').addEventListener('click', () => this.load(true));
   }
 
-  async function getHistory(){
-    return new Promise((resolve,reject)=>{
-      if(!chrome?.history) return reject(new Error('History API unavailable'));
-      chrome.history.search({text:'', maxResults:2000, startTime: Date.now()-7*24*60*60*1000}, results=>{
-        if(chrome.runtime.lastError) reject(new Error(chrome.runtime.lastError.message)); else resolve(results||[]);
+  async load(forceRefresh) {
+    this.setLoading(true, forceRefresh ? 'Re-running local analysis...' : 'Loading stored analysis...');
+    this.setStatus(forceRefresh ? 'Re-running the full local analysis...' : 'Loading stored analysis...');
+    this.setHealth('checking', forceRefresh ? 'Analyzing locally' : 'Loading');
+    try {
+      let analysis;
+      if (typeof chrome === 'undefined' || !chrome.history) {
+        this.setStatus('Demo mode: Chrome history API is unavailable in this context.');
+        analysis = await AttentionAnalysis.createDemoAnalysis();
+      } else {
+        analysis = await AttentionAnalysis.runAnalysis({
+          forceRefresh,
+          onProgress: message => this.showProgress(message)
+        });
+      }
+      if (!analysis.ok) {
+        this.renderUnavailable(analysis);
+        return;
+      }
+      this.analysis = analysis;
+      this.setHealth('ok', analysis.fromCache ? 'Stored analysis' : 'Fresh local analysis');
+      this.render(analysis);
+      this.setLoading(false);
+      const when = analysis.generatedAt ? ` Analyzed ${new Date(analysis.generatedAt).toLocaleString()}.` : '';
+      this.setStatus(`${analysis.coverage.visitsExpanded} visits expanded into ${analysis.topics.length} topics.${when}`);
+    } catch (error) {
+      console.error(error);
+      this.renderUnavailable({ message: error.message || String(error), warnings: ['Audit failed before rendering.'] });
+    }
+  }
+
+  render(analysis) {
+    this.renderCoverage(analysis);
+    this.renderTopicShare(analysis);
+    this.renderSwitchBurden(analysis);
+    this.renderFocusedRuns(analysis);
+    this.renderRecentPath(analysis);
+    this.renderValidationQueue(analysis);
+  }
+
+  renderUnavailable(result) {
+    this.setLoading(false);
+    this.setHealth('bad', 'Ollama unavailable');
+    this.setStatus(result.message || 'Local audit is unavailable.');
+    const message = `
+      <div class="setup-box">
+        <div>${escapeHtml(result.message || 'Could not run the local trust audit.')}</div>
+        <div>Expected local endpoint: <code>http://localhost:11434</code></div>
+        <div>Required models: <code>bge-m3:latest</code> and <code>gemma3:12b-32k</code></div>
+      </div>
+    `;
+    for (const id of ['coverage-content', 'topic-share-content', 'switch-content', 'run-content', 'path-content', 'validation-content']) {
+      document.getElementById(id).innerHTML = message;
+    }
+  }
+
+  renderCoverage(analysis) {
+    const c = analysis.coverage;
+    const mapped = analysis.categorizedCoverage || {};
+    const models = analysis.models || {};
+    document.getElementById('coverage-content').innerHTML = `
+      <div class="audit-metrics">
+        ${metric('Visits read', c.visitsExpanded, 'Individual Chrome visit records expanded from the History API. Repeated visits are separate records.')}
+        ${metric('Visits mapped', `${mapped.visitsCategorized || 0} (${formatPercent(mapped.visitCoverage || 0)})`, 'Mapped visits are visits whose page was included in the topic analysis set.')}
+        ${metric('Mapped active time', `${mapped.estimatedActiveMinutes || 0}m (${formatPercent(mapped.activeTimeCoverage || 0)})`, 'Estimated active time represented by categorized pages.')}
+        ${metric('History sessions', c.sessionCount, 'A new session starts after a gap longer than 30 minutes.')}
+        ${metric('Source', analysis.source + (analysis.fromCache ? ' cache' : ''), 'local-ollama means embeddings and labels came from local Ollama. local-test means demo/test fallback data.')}
+        ${metric('Models', `${models.embedding || 'n/a'} / ${models.chat || 'n/a'}`, 'Embedding model and chat model used for semantic grouping and labels.')}
+      </div>
+      <div class="audit-note-grid">
+        <p class="audit-note"><strong>Range:</strong> ${formatDate(c.startTime)} to ${formatDate(c.endTime)}</p>
+        <p class="audit-note"><strong>Dwell method:</strong> ${escapeHtml(c.dwellMethod)}.</p>
+      </div>
+      ${analysis.fromCache ? '<p class="audit-note">Loaded from the stored analysis. Use Re-run analysis to compute a fresh one.</p>' : ''}
+    `;
+  }
+
+  renderTopicShare(analysis) {
+    const rows = analysis.metrics.topicTimeShare.slice(0, 12).map(item => {
+      const pct = Math.round((item.share || 0) * 100);
+      const domains = (item.topDomains || []).slice(0, 3).map(domain => domain.domain).join(', ');
+      return `
+        <div class="bar-row" title="${escapeAttribute(`${item.label}: ${pct}% of estimated active time, ${item.visitCount} visits, ${Math.round(item.confidence * 100)}% label confidence.`)}">
+          <div class="bar-row-label">
+            <strong><span class="topic-swatch" style="background:${escapeAttribute(item.color || '#64748b')}"></span>${escapeHtml(item.label)}</strong>
+            <span>${pct}% active time · ${item.estimatedDwellMinutes}m · ${item.visitCount} visits</span>
+          </div>
+          <div class="bar-track"><div style="width:${Math.max(3, pct)}%; background:${escapeAttribute(item.color || '#4285f4')}"></div></div>
+          <div class="bar-meta">${escapeHtml(item.bandLabel || 'Topic')} · ${Math.round(item.confidence * 100)}% label confidence${domains ? ` · ${escapeHtml(domains)}` : ''}</div>
+        </div>
+      `;
+    }).join('');
+    document.getElementById('topic-share-content').innerHTML = rows || '<p>No topics available.</p>';
+  }
+
+  renderSwitchBurden(analysis) {
+    const burden = analysis.metrics.switchBurden;
+    const mix = analysis.metrics.transitionMix?.items || [];
+    const mixRows = mix.map(item => `
+      <div class="flow-mix-card" title="${escapeAttribute(item.description)}">
+        <span class="flow-mix-dot" style="background:${escapeAttribute(item.color)}"></span>
+        <strong>${escapeHtml(item.label)}</strong>
+        <b>${item.count}</b>
+        <small>${formatPercent(item.share)} of observed transitions</small>
+      </div>
+    `).join('');
+    const contextExamples = burden.representativeTransitions.map(t => `
+      <li>
+        <strong>${escapeHtml(t.sourceLabel)} -> ${escapeHtml(t.targetLabel)}</strong>
+        <span>${t.visitCount} consecutive visits · ${Math.round(t.confidence * 100)}% confidence · ${escapeHtml(t.rationale)}</span>
+      </li>
+    `).join('');
+    const adjacentExamples = (burden.adjacentExamples || []).map(t => `
+      <li>
+        <strong>${escapeHtml(t.sourceLabel)} -> ${escapeHtml(t.targetLabel)}</strong>
+        <span>${t.visitCount} consecutive visits · ${Math.round(t.confidence * 100)}% confidence · ${escapeHtml(t.rationale)}</span>
+      </li>
+    `).join('');
+    document.getElementById('switch-content').innerHTML = `
+      <div class="audit-metrics">
+        ${metric('Same-topic continuations', burden.sameTopicCount || 0, 'Consecutive visits that stayed inside the same topic cluster.')}
+        ${metric('Related continuations', burden.adjacentJumpCount || 0, 'Consecutive visits that moved to a related topic.')}
+        ${metric('Context switches', burden.switchCount, 'Consecutive visits that moved to a less-related topic or different task.')}
+        ${metric('Switches / active hr', burden.switchesPerActiveHour, 'Context switches divided by estimated active browsing hours.')}
+      </div>
+      <div class="flow-mix">${mixRows}</div>
+      <h3>Largest context-switch routes</h3>
+      <ul class="evidence-list">${contextExamples || '<li><strong>No context switches found.</strong><span>Consecutive mapped visits stayed within the same or related topics.</span></li>'}</ul>
+      ${adjacentExamples ? `<h3>Related continuation routes</h3><ul class="evidence-list">${adjacentExamples}</ul>` : ''}
+    `;
+  }
+
+  renderFocusedRuns(analysis) {
+    const runs = analysis.metrics.focusedRuns;
+    const longest = runs.longestRun;
+    const topRuns = runs.topRuns || (longest ? [longest] : []);
+    document.getElementById('run-content').innerHTML = `
+      <div class="audit-metrics">
+        ${metric('Focus runs', runs.runCount, 'A focus run is consecutive mapped visits in the same topic before a topic change or session break.')}
+        ${metric('Median run', `${runs.medianEstimatedDwellMinutes}m est.`, 'The middle focus-run duration after sorting all focus runs by estimated dwell time.')}
+        ${metric('Longest run', longest ? `${longest.estimatedDwellMinutes}m est.` : 'n/a', 'The single longest same-topic run in the selected history window.')}
+        ${metric('Longest topic', longest ? longest.label : 'n/a', 'The topic attached to the longest focus run.')}
+      </div>
+      <h3>Longest focus runs</h3>
+      <div class="run-list">
+        ${topRuns.map((run, index) => focusRunCard(run, index + 1)).join('') || '<p>No focus runs available.</p>'}
+      </div>
+    `;
+  }
+
+  renderRecentPath(analysis) {
+    const recentRuns = (analysis.metrics.focusedRuns.recentRuns || []).slice().reverse();
+    document.getElementById('path-content').innerHTML = recentRuns.length ? `
+      <div class="path-list">
+        ${recentRuns.map((run, index) => `
+          <article class="path-run" title="${escapeAttribute(`${run.label}: ${run.estimatedDwellMinutes} minutes estimated across ${run.visitCount} visits.`)}">
+            <div class="path-index">${index + 1}</div>
+            <div>
+              <h3>${escapeHtml(run.label)}</h3>
+              <p>${formatTime(run.startTime)} - ${formatTime(run.endTime)} · ${run.estimatedDwellMinutes}m est. · ${run.visitCount} visits</p>
+              <span>${run.pages.slice(0, 2).map(page => escapeHtml(page.title)).join(' / ')}</span>
+            </div>
+          </article>
+        `).join('')}
+      </div>
+    ` : '<p>No recent mapped topic path available.</p>';
+  }
+
+  renderValidationQueue(analysis) {
+    const items = analysis.validationQueue;
+    if (!items.length) {
+      document.getElementById('validation-content').innerHTML = '<p>No low-confidence topics or transitions were flagged.</p>';
+      return;
+    }
+    document.getElementById('validation-content').innerHTML = `
+      <div class="validation-list">
+        ${items.map(item => this.validationItem(item)).join('')}
+      </div>
+    `;
+    document.querySelectorAll('.validation-form').forEach(form => {
+      form.addEventListener('submit', async event => {
+        event.preventDefault();
+        const data = new FormData(event.currentTarget);
+        const kind = data.get('kind').toString();
+        const targetId = data.get('targetId').toString();
+        const value = data.get('value').toString().trim();
+        if (!value) return;
+        await AttentionAnalysis.TrustStore.saveCorrection({
+          kind,
+          targetId,
+          label: kind === 'topic' ? value : undefined,
+          type: kind === 'transition' ? value : undefined
+        });
+        event.currentTarget.querySelector('button').textContent = 'Saved';
       });
     });
   }
 
-  function extractDomain(url){ try { return new URL(url).hostname.replace('www.',''); } catch { return url; } }
-
-  function analyze(history){
-    const events = history.map(h=>({domain:extractDomain(h.url), title:h.title||'', time:h.lastVisitTime})).sort((a,b)=>a.time-b.time);
-    // Temporal patterns
-    const hourlyActivity = new Array(24).fill(0);
-    let sessions=[]; let last=null; let start=null; const GAP=5*60*1000;
-    events.forEach(e=>{ const h=new Date(e.time).getHours(); hourlyActivity[h]++; if(last===null|| e.time-last>GAP){ if(start!==null) sessions.push(last-start); start=e.time; } last=e.time; });
-    if(start!==null&&last!==null) sessions.push(last-start);
-    const avgSessionMinutes = sessions.length? sessions.reduce((a,b)=>a+b,0)/sessions.length/60000:0;
-    const sortedCounts=[...hourlyActivity].sort((a,b)=>a-b); const threshold=sortedCounts[Math.floor(0.75*sortedCounts.length)]||0; const peakHours=hourlyActivity.map((c,i)=>({c,i})).filter(o=>o.c>=threshold&&o.c>0).map(o=>o.i);
-    // Focus sessions
-    let focus=[]; let cur=[];
-    events.forEach(e=>{ if(!cur.length){ cur.push(e); return;} const prev=cur[cur.length-1]; const sim=jaccard(prev.title+prev.domain, e.title+e.domain); if(e.time-prev.time<=GAP && (prev.domain===e.domain || sim>0.4)){ cur.push(e);} else { focus.push(cur); cur=[e]; } }); if(cur.length) focus.push(cur);
-    const focusSessions = focus.map(evts=>{ const dur=(evts[evts.length-1].time-evts[0].time)/60000; const avgC=evts.reduce((s,v)=>s+calculateComplexity(v.domain,v.title),0)/evts.length; return { durationMinutes:+dur.toFixed(2), pages: evts.length, avgComplexity:+avgC.toFixed(2), events:evts }; });
-    // Complexity by hour
-    const complexityByHour=new Array(24).fill().map(()=>({total:0,count:0}));
-    focusSessions.forEach(s=> s.events.forEach(ev=>{ const h=new Date(ev.time).getHours(); const c=calculateComplexity(ev.domain, ev.title); complexityByHour[h].total+=c; complexityByHour[h].count++; }));
-    const hourlyComplexity = complexityByHour.map(o=> o.count? o.total/o.count:0);
-    // Chains
-    let chains=[]; let chain=[];
-    events.forEach(e=>{ if(!chain.length){ chain.push(e); return;} const prev=chain[chain.length-1]; const sim=jaccard(prev.title+prev.domain, e.title+e.domain); if(e.time-prev.time<=GAP && sim>0.3){ chain.push(e);} else { if(chain.length>1) chains.push(chain); chain=[e]; } }); if(chain.length>1) chains.push(chain);
-    const chainSummaries = chains.map(c=>{ const dur=(c[c.length-1].time-c[0].time)/60000||1; const avgC=c.reduce((s,v)=>s+calculateComplexity(v.domain,v.title),0)/c.length; return { length:c.length, durationMinutes:+dur.toFixed(2), avgComplexity:+avgC.toFixed(2), scentStrength:+(c.length/dur).toFixed(2)}; });
-    // Graph metrics (entropy)
-    const domainCounts={}; events.forEach(e=>{ domainCounts[e.domain]=(domainCounts[e.domain]||0)+1; }); const total=events.length||1; const diversity=-Object.values(domainCounts).reduce((s,c)=>{ const p=c/total; return s+(p? p*Math.log2(p):0);},0);
-    return { hourlyComplexity, peakHours, avgSessionMinutes:+avgSessionMinutes.toFixed(2), focusSessions, chainSummaries, diversity:+diversity.toFixed(3) };
+  validationItem(item) {
+    const control = item.kind === 'topic'
+      ? `<input name="value" value="${escapeAttribute(item.title)}" />`
+      : `<select name="value">
+          ${Object.keys(AttentionAnalysis.TRANSITION_TYPES).map(type => `<option value="${type}">${AttentionAnalysis.TRANSITION_TYPES[type].label}</option>`).join('')}
+        </select>`;
+    return `
+      <article class="validation-card">
+        <div>
+          <div class="panel-kicker">${escapeHtml(item.kind)}</div>
+          <h3>${escapeHtml(item.title)}</h3>
+          <p>${escapeHtml(item.reason)} · ${Math.round(item.confidence * 100)}% confidence</p>
+          ${validationEvidence(item)}
+        </div>
+        <form class="validation-form">
+          <input type="hidden" name="kind" value="${escapeAttribute(item.kind)}" />
+          <input type="hidden" name="targetId" value="${escapeAttribute(item.targetId)}" />
+          ${control}
+          <button type="submit">Save correction</button>
+        </form>
+      </article>
+    `;
   }
 
-  function renderHeatmap(values){
-    const container=document.getElementById('complexity-heatmap'); container.innerHTML='';
-    const svg=d3.select(container).append('svg').attr('width',12*24).attr('height',70);
-    const color=d3.scaleSequential(d3.interpolateRdYlBu).domain([1,0]);
-    svg.selectAll('rect').data(values).enter().append('rect')
-      .attr('x',(d,i)=>i*12).attr('y',10).attr('width',12).attr('height',30)
-      .attr('fill',d=>color(d)).attr('stroke',d=> d>0.7? '#000':'#fff')
-      .append('title').text((d,i)=>`Hour ${i}: ${(d*100).toFixed(0)}% complexity`);
-    svg.selectAll('text.hour').data([0,6,12,18,23]).enter().append('text').attr('x',d=>d*12+6).attr('y',55).attr('text-anchor','middle').attr('font-size',9).text(d=>d);
+  setLoading(visible, message) {
+    const loading = document.getElementById('loading');
+    loading.style.display = visible ? 'block' : 'none';
+    if (message) loading.textContent = message;
   }
 
-  function renderFocusTimeline(sessions){
-    const container=document.getElementById('focus-timeline'); container.innerHTML='';
-    const w=container.clientWidth||400; const barH=10; const h=sessions.length*(barH+4)+30;
-    const svg=d3.select(container).append('svg').attr('width',w).attr('height',h);
-    const maxDur=d3.max(sessions,s=>s.durationMinutes)||1; const x=d3.scaleLinear().domain([0,maxDur]).range([60,w-10]);
-    svg.selectAll('rect.session').data(sessions).enter().append('rect').attr('class','session').attr('x',60).attr('y',(d,i)=>i*(barH+4)+10).attr('height',barH).attr('width',d=>x(d.durationMinutes)-60).attr('fill','#4285f4').attr('opacity',d=>0.4+0.6*d.avgComplexity).append('title').text(d=>`Duration ${d.durationMinutes}m complexity ${d.avgComplexity}`);
-    svg.selectAll('text.label').data(sessions).enter().append('text').attr('x',0).attr('y',(d,i)=>i*(barH+4)+18).attr('font-size',9).text((d,i)=>'S'+(i+1));
-    svg.selectAll('text.tick').data(x.ticks(4)).enter().append('text').attr('x',d=>x(d)).attr('y',h-6).attr('font-size',9).attr('text-anchor','middle').text(d=>d+'m');
+  showProgress(message) {
+    this.setLoading(true, message);
+    this.setStatus(message);
+    if (/ollama/i.test(message)) this.setHealth('checking', 'Checking Ollama');
+    else if (/embedding|labeling|auditing|analyzing/i.test(message)) this.setHealth('checking', 'Analyzing locally');
+    else if (/history|visits/i.test(message)) this.setHealth('checking', 'Reading history');
   }
 
-  function renderChains(chains){
-    const tbody=document.querySelector('#chains-table tbody'); tbody.innerHTML='';
-    chains.slice(0,50).forEach((c,i)=>{ const tr=document.createElement('tr'); tr.innerHTML=`<td>${i+1}</td><td>${c.length}</td><td>${c.durationMinutes}</td><td>${c.avgComplexity}</td><td>${c.scentStrength}</td>`; tbody.appendChild(tr); });
+  setStatus(message) {
+    document.getElementById('status').textContent = message;
+    document.title = `Cognitive Trails Audit - ${String(message || '').slice(0, 70)}`;
   }
 
-  function renderInsights(data){
-    const list=document.getElementById('insights-list'); list.innerHTML='';
-    const averageFocus = data.focusSessions.length? (data.focusSessions.reduce((a,b)=>a+b.durationMinutes,0)/data.focusSessions.length):0;
-    const topicSwitchRate = 0; // Not recomputed here; could be passed via storage
-    const peakComplexityHours = data.hourlyComplexity.map((v,i)=>({v,i})).filter(o=>o.v>0.7).map(o=>o.i);
-    const recs=[];
-    if(averageFocus<5) recs.push('Short focus periods. Minimize interruptions.');
-    if(peakComplexityHours.length===0) recs.push('No high-complexity periods detected—consider blocking time for deep work.');
-    list.appendChild(li(`Peak Complexity Hours: ${peakComplexityHours.join(', ')||'None'}`));
-    list.appendChild(li(`Avg Focus Duration: ${averageFocus.toFixed(2)}m`));
-    list.appendChild(li(`Information Diversity (entropy): ${data.diversity}`));
-    recs.length && list.appendChild(li('Recommendations:'));
-    recs.forEach(r=> list.appendChild(li('• '+r)));
+  setHealth(state, label) {
+    const pill = document.getElementById('health-pill');
+    pill.textContent = label;
+    pill.className = `health-pill ${state}`;
   }
-  function li(text){ const el=document.createElement('li'); el.textContent=text; return el; }
+}
 
-  function wireExport(payload){
-    exportBtn.addEventListener('click',()=>{
-      const blob=new Blob([JSON.stringify(payload,null,2)],{type:'application/json'});
-      const url=URL.createObjectURL(blob); const a=document.createElement('a'); a.href=url; a.download=`cognitive-dashboard-${Date.now()}.json`; document.body.appendChild(a); a.click(); document.body.removeChild(a); URL.revokeObjectURL(url);
-    });
+function validationEvidence(item) {
+  const evidence = item.evidence || [];
+  if (!evidence.length) return '';
+  if (item.kind === 'topic') {
+    return `
+      <ul class="evidence-list compact validation-evidence">
+        ${evidence.slice(0, 3).map(page => `
+          <li>
+            <strong>${escapeHtml(page.title)}</strong>
+            <span>${escapeHtml(page.domain)} · ${page.visitCount || 0} visits</span>
+          </li>
+        `).join('')}
+      </ul>
+    `;
   }
+  return `
+    <ul class="evidence-list compact validation-evidence">
+      ${evidence.slice(0, 3).map(item => `
+        <li>
+          <strong>${escapeHtml(item.from?.title || 'Previous visit')}</strong>
+          <span>to ${escapeHtml(item.to?.title || 'Next visit')} · ${item.estimatedGapMinutes || 0}m gap</span>
+        </li>
+      `).join('')}
+    </ul>
+  `;
+}
 
-  async function run(){
-    try {
-      logStatus('Loading history...');
-      const history = await getHistory();
-      logStatus(`Processing ${history.length} items...`);
-      const analysis = analyze(history);
-      renderHeatmap(analysis.hourlyComplexity);
-      renderFocusTimeline(analysis.focusSessions.slice(-40));
-      renderChains(analysis.chainSummaries);
-      renderInsights(analysis);
-      wireExport(analysis);
-      logStatus('Done');
-    } catch (e) {
-      logStatus('Error: '+e.message);
-    }
-  }
+function metric(label, value, help) {
+  return `
+    <div title="${escapeAttribute(help || label)}">
+      <strong>${escapeHtml(label)}</strong>
+      <span>${escapeHtml(value)}</span>
+    </div>
+  `;
+}
 
-  document.addEventListener('DOMContentLoaded', run);
-})();
+function focusRunCard(run, rank) {
+  const pages = (run.pages || []).slice(0, 3).map(page => `
+    <li>
+      <strong>${escapeHtml(page.title)}</strong>
+      <span>${escapeHtml(page.domain)}</span>
+    </li>
+  `).join('');
+  return `
+    <article class="run-card" title="${escapeAttribute(`${run.label}: ${run.estimatedDwellMinutes} minutes estimated across ${run.visitCount} visits.`)}">
+      <div class="run-rank">${rank}</div>
+      <div class="run-card-body">
+        <h3>${escapeHtml(run.label)}</h3>
+        <p>${formatDate(run.startTime)} - ${formatDate(run.endTime)} · ${run.estimatedDwellMinutes}m est. · ${run.visitCount} visits</p>
+        <ul class="evidence-list compact">${pages}</ul>
+      </div>
+    </article>
+  `;
+}
+
+function formatDate(ms) {
+  if (!ms) return 'n/a';
+  return new Date(ms).toLocaleString();
+}
+
+function formatTime(ms) {
+  if (!ms) return 'n/a';
+  return new Date(ms).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+}
+
+function formatPercent(value) {
+  return `${Math.round((Number(value) || 0) * 100)}%`;
+}
+
+function escapeHtml(value) {
+  return String(value == null ? '' : value)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#039;');
+}
+
+function escapeAttribute(value) {
+  return escapeHtml(value).replace(/`/g, '&#096;');
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+  new TrustAuditDashboard();
+});

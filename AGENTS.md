@@ -1,4 +1,4 @@
-# CLAUDE.md
+# AGENTS.md
 
 This repository is a Manifest V3 Chrome extension. There is no build system; development is vanilla JavaScript, HTML, CSS, D3, Chrome History APIs, IndexedDB, and local Ollama.
 
@@ -14,9 +14,7 @@ Load the extension through `chrome://extensions/` with Developer mode enabled.
 
 ## Current Architecture
 
-- `attentionAnalysis.js` is the shared data and trust layer. It expands `chrome.history.search` results with `chrome.history.getVisits` (concurrently), estimates dwell time, calls local Ollama, clusters pages into topics, builds topic transitions, caches analyses, and stores user corrections.
-- Analyses run once and persist: `runAnalysis` serves the stored latest analysis from IndexedDB unless `forceRefresh` is set (the Re-run analysis button). Opening the map or dashboard never triggers Ollama work by itself.
-- Per-page embeddings are cached in the IndexedDB `embeddings` store keyed by `model|hash(pageText)`, so re-runs only embed pages that are new or changed.
+- `attentionAnalysis.js` is the shared data and trust layer. It expands `chrome.history.search` results with `chrome.history.getVisits`, estimates dwell time, calls local Ollama, clusters pages into topics, builds topic transitions, caches analyses, and stores user corrections.
 - `popup.js` renders the topic-sector map. Topic nodes are first-class; top cross-topic flows are filtered by the Top 25 / Top 50 / All control; selecting a topic or flow opens the evidence panel.
 - `analysis.js` renders the trust audit dashboard. It shows coverage, topic time share, switch burden, focused runs, and low-confidence validation items.
 - `background.js` opens `popup.html` in a full browser tab.

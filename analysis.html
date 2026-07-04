@@ -3,56 +3,54 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Cognitive Dashboard</title>
+  <title>Cognitive Trails Audit</title>
   <link rel="stylesheet" href="popup.css" />
-  <script src="d3.min.js"></script>
-  <style>
-    body { overflow:auto; }
-    .dashboard-header {display:flex;align-items:center;gap:12px;}
-    .back-link button {background:#4285f4;color:#fff;border:none;padding:8px 14px;border-radius:6px;cursor:pointer;font-size:14px;font-weight:500;}
-    .export-btn {background:#6a4df5;color:#fff;border:none;padding:8px 14px;border-radius:6px;cursor:pointer;font-size:14px;font-weight:500;}
-    .export-btn:hover {background:#5536e6;}
-    .panels-wrapper {display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:20px;margin-top:20px;}
-    .panel {background:#fff;border:1px solid #e0e0e0;border-radius:10px;padding:16px;min-height:200px;display:flex;flex-direction:column;gap:12px;position:relative;}
-    .panel h2 {margin:0;font-size:18px;color:#333;}
-    #chains-table {width:100%;border-collapse:collapse;font-size:12px;}
-    #chains-table th,#chains-table td {border:1px solid #eee;padding:4px 6px;text-align:left;}
-    #chains-table th {background:#fafafa;font-weight:600;}
-    .metric-badge {display:inline-block;background:#f5f5f5;border:1px solid #ddd;padding:2px 6px;border-radius:4px;font-size:11px;margin:2px 4px 0 0;}
-  </style>
+  <script src="attentionAnalysis.js"></script>
 </head>
-<body>
-  <div class="container" style="height:auto;min-height:100vh;">
-    <header style="position:sticky;top:0;z-index:50;">
-      <div class="dashboard-header">
-        <div class="back-link"><a href="popup.html"><button type="button">← Graph</button></a></div>
-        <h1 style="margin:0;flex:1;">Cognitive Dashboard</h1>
-        <button id="export-btn" class="export-btn">Export JSON</button>
+<body class="dashboard-body">
+  <div class="container dashboard-container">
+    <header>
+      <div class="topbar">
+        <div>
+          <h1>Flow of Thought</h1>
+          <div id="status" class="status-line">Preparing audit dashboard...</div>
+        </div>
+        <div id="health-pill" class="health-pill">Ollama</div>
       </div>
-      <div id="status" style="font-size:12px;color:#555;margin-top:6px;">Analyzing history...</div>
+      <div class="controls">
+        <div class="buttons">
+          <a class="secondary-btn" href="popup.html">Graph</a>
+          <button id="refresh-btn" title="Re-run the full local analysis. Otherwise the stored result is reused.">Re-run analysis</button>
+        </div>
+      </div>
     </header>
-    <main class="panels-wrapper">
-      <section class="panel" id="panel-hourly">
-        <h2>Hourly Complexity</h2>
-        <div id="complexity-heatmap"></div>
+    <main class="audit-grid">
+      <section class="audit-panel" id="coverage-panel">
+        <h2>Scope & Reliability <button class="info-dot" type="button" title="How much history was read, how much was categorized into topics, and whether the analysis came from local Ollama or cache.">?</button></h2>
+        <div id="coverage-content" class="audit-content"></div>
       </section>
-      <section class="panel" id="panel-focus">
-        <h2>Focus Sessions</h2>
-        <div id="focus-timeline"></div>
+      <section class="audit-panel" id="topic-share-panel">
+        <h2>Attention Mix <button class="info-dot" type="button" title="Estimated active browsing time by topic. Time is estimated from gaps between Chrome visits and capped at 30 minutes.">?</button></h2>
+        <div id="topic-share-content" class="audit-content"></div>
       </section>
-      <section class="panel" id="panel-insights">
-        <h2>Insights</h2>
-        <ul id="insights-list" style="list-style:disc;padding-left:18px;margin:4px 0 0 0;font-size:13px;"></ul>
+      <section class="audit-panel" id="switch-panel">
+        <h2>Thought Flow <button class="info-dot" type="button" title="How often consecutive visits stayed in one topic, continued into a related topic, or switched context.">?</button></h2>
+        <div id="switch-content" class="audit-content"></div>
       </section>
-      <section class="panel" id="panel-chains">
-        <h2>Information Foraging Chains</h2>
-        <table id="chains-table"><thead><tr><th>#</th><th>Length</th><th>Duration (m)</th><th>Avg Complexity</th><th>Scent</th></tr></thead><tbody></tbody></table>
+      <section class="audit-panel" id="run-panel">
+        <h2>Focus Runs <button class="info-dot" type="button" title="Consecutive visits grouped under the same topic before a topic change or session break.">?</button></h2>
+        <div id="run-content" class="audit-content"></div>
       </section>
-      <section class="panel" id="panel-graph-metrics">
-        <h2>Graph Metrics</h2>
-        <div id="graph-metrics"></div>
+      <section class="audit-panel audit-panel-wide" id="path-panel">
+        <h2>Recent Topic Path <button class="info-dot" type="button" title="The most recent grouped topic runs in chronological order. This is the closest view to the browsing train of thought.">?</button></h2>
+        <div id="path-content" class="audit-content"></div>
+      </section>
+      <section class="audit-panel audit-panel-wide" id="validation-panel">
+        <h2>Review Queue <button class="info-dot" type="button" title="Low-confidence topic or flow labels that should be corrected before trusting the analysis.">?</button></h2>
+        <div id="validation-content" class="audit-content"></div>
       </section>
     </main>
+    <div id="loading" class="loading">Loading audit...</div>
   </div>
   <script src="analysis.js"></script>
 </body>
