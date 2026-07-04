@@ -1,108 +1,62 @@
 # Cognitive Trails
 
-A Chrome extension that visualizes your browser history as an interactive graph, showing how your websites connect by topic.
+A local-first Chrome extension that maps browser history into auditable topic flows.
+
+The app answers:
+
+- What topics did my attention move through?
+- How often did I switch between topics?
+- What evidence supports each topic or flow label?
+
+## Requirements
+
+- Chrome or another Chromium browser with Manifest V3 support
+- Local Ollama at `http://localhost:11434`
+- Models:
+  - `bge-m3:latest` for embeddings
+  - `gemma3:12b-32k` for topic and transition labels
+
+Install the models with:
+
+```bash
+ollama pull bge-m3
+ollama pull gemma3:12b-32k
+```
+
+The extension includes a local-only Chrome network rule that rewrites requests to `localhost:11434` so Ollama sees a normal localhost origin. No hosted API calls are made.
 
 ## Installation
 
-1. Download or clone this repository
-2. Open Chrome → `chrome://extensions/`
-3. Enable "Developer mode" 
-4. Click "Load unpacked" → Select the downloaded folder
-5. Click the extension icon to open
+1. Open Chrome and go to `chrome://extensions/`
+2. Enable Developer mode
+3. Click Load unpacked
+4. Select this repository folder
+5. Click the extension icon
 
-## Features
+## What Changed
 
-- Interactive graph of your browsing history
-- Automatic topic clustering (Programming, Social, News, etc.)
-- Pan and zoom to explore connections
-- Full browser tab interface
+This version replaces the old heuristic dashboard with a trust-audit workflow:
 
-Built with D3.js
+- Expands Chrome history with `chrome.history.getVisits` so repeated visits are preserved.
+- Estimates dwell time from time until next visit, capped at 30 minutes.
+- Uses local Ollama only. No hosted API calls are made.
+- Builds topic clusters with `bge-m3` embeddings and labels them with `gemma3:12b-32k`.
+- Categorizes the highest-attention pages by default and reports how much estimated active time and how many visits those topics cover.
+- Shows topic and transition confidence, rationale, and representative visit evidence.
+- Stores analysis cache and user corrections in IndexedDB.
 
-### File Structure
+## Views
+
+- `popup.html`: topic-sector map with top flow controls and an evidence panel.
+- `analysis.html`: trust audit dashboard with data coverage, topic time share, switch burden, focused runs, and validation queue.
+- `test.html`: static demo page for smoke testing outside the Chrome extension context.
+
+## Development Checks
+
+```bash
+node tests/attentionAnalysis.test.js
+node tools/auditHistory.js --days=7 --max-results=2000
+node tools/auditHistory.js --days=7 --max-results=2000 --with-ollama --max-pages=420
 ```
-browser-graph-extension/
-├── manifest.json        # Extension configuration
-├── popup.html           # Main UI layout
-├── popup.css            # Styling
-├── popup.js             # Core functionality with enhanced semantic clustering
-├── d3.min.js            # D3.js library (local copy)
-├── icon16.png           # Extension icon (16x16)
-├── icon48.png           # Extension icon (48x48)
-├── icon128.png          # Extension icon (128x128)
-├── README.md            # Documentation
-└── DEBUGGING.md         # Troubleshooting guide
-```
 
-### Topic Classification
-Websites are automatically categorized using **enhanced semantic clustering** with intelligent content analysis:
-
-- **Multi-Factor Analysis**: Combines domain matching, URL path analysis, and title content understanding
-- **Weighted Topic Recognition**: Enhanced categories including Programming, Social, E-commerce, News, Entertainment, and Education
-- **Path Intelligence**: Analyzes URL structures (e.g., `/docs/`, `/tutorial/`, `/api/`) for better context
-- **Content Similarity**: Uses Jaccard similarity and word overlap for grouping related content
-- **Smart Filtering**: Automatically filters out search engines (Google, Bing, DuckDuckGo) to eliminate hub problems
-- **Dynamic Clustering**: Groups similar content even across different domains
-
-**Examples:**
-- `github.com/react/hooks` + "React Hooks Tutorial" → "React JavaScript Development" cluster
-- `stackoverflow.com/questions/react-hooks` → same cluster (content similarity)  
-- `medium.com/javascript-react-tutorial` → same cluster (semantic understanding)
-- `coursera.org/learn/react` → "Education" cluster (learning context)
-
-**Enhanced Topic Categories:**
-- **Programming**: Development tools, documentation, code repositories
-- **Social**: Social media, messaging, community platforms  
-- **E-commerce**: Online shopping, product pages, marketplaces
-- **News**: News articles, journalism, current events
-- **Entertainment**: Streaming, gaming, music, videos
-- **Education**: Courses, tutorials, learning platforms
-- **Miscellaneous**: Everything else
-
-This approach provides much more accurate categorization than simple keyword matching while remaining fast and lightweight without external dependencies.
-
-### Privacy & Permissions
-
-- **History Permission**: Required to access browser history data
-- **Local Processing**: All data processing happens locally in your browser
-- **No External Requests**: No data is sent to external servers
-- **Temporary Storage**: History data is only processed in memory, not stored
-
-## Browser Compatibility
-
-- **Chrome**: Manifest V3 (Chrome 88+)
-- **Edge**: Compatible with Chromium-based Edge
-- **Other Chromium browsers**: Should work with most Chromium-based browsers
-
-## Troubleshooting
-
-**Extension not loading:**
-- Make sure all files are in the same folder
-- Check that Developer Mode is enabled in Chrome
-- Try reloading the extension from `chrome://extensions/`
-
-**No graph showing:**
-- Ensure you've granted history access permissions
-- Check that you have sufficient browser history (last 30 days)
-- Try clicking the Refresh button
-
-**Performance issues:**
-- The extension processes up to 500 recent history entries
-- For very active browsing, the graph may take a few seconds to render
-- Close and reopen the popup if it becomes unresponsive
-
-## Development
-
-Built with:
-- Vanilla JavaScript (ES6+)
-- D3.js v7 for graph visualization
-- Chrome Extensions API (Manifest V3)
-- SVG/CSS for styling
-
-## Future Enhancements
-
-- Time-based filtering options
-- Export graph as image
-- Custom topic definitions
-- Search/filter functionality
-- Performance optimizations for large datasets
+The test suite covers visit expansion, same-domain false positives, Ollama JSON parsing, evidence generation, and validation queue behavior.

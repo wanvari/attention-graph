@@ -20,11 +20,13 @@ npm-debug.log*
 # Temporary files
 *.tmp
 *.temp
+.tmp/
 
 # Chrome extension development
 *.crx
 *.pem
 key.pem
+_metadata/
 
 # Node modules (if using any build tools)
 node_modules/
