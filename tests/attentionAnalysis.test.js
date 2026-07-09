@@ -116,6 +116,54 @@ async function testOllamaOriginRejectionIsAuditable() {
   }
 }
 
+async function testForcedMergeOfUnrelatedDomainsLowersConfidence() {
+  const base = Date.now() - 3 * 60 * 60000;
+  const history = [
+    item('https://amazon.com/dp/standing-desk', 'Standing desk deal', base),
+    item('https://amazon.com/dp/office-chair', 'Ergonomic office chair', base + 2 * 60000),
+    item('https://reddit.com/r/buildapc/comments/1', 'Best budget GPU thread', base + 20 * 60000),
+    item('https://reddit.com/r/buildapc/comments/2', 'PC case airflow discussion', base + 22 * 60000)
+  ];
+  const visits = {};
+  history.forEach((entry, index) => { visits[entry.url] = [visit(`forced-${index}`, entry.lastVisitTime)]; });
+  const events = AttentionAnalysis.buildVisitEventsFromHistoryItems(history, visits).events;
+  const pages = AttentionAnalysis.aggregatePages(events).map(page => ({
+    ...page,
+    embedding: AttentionAnalysis.fallbackPageVector(page)
+  }));
+  const clusters = AttentionAnalysis.buildInitialClusters(pages, {
+    maxTopicCount: 1,
+    topicClusterThreshold: 0.95,
+    topicMergeThreshold: -1
+  });
+  assert.strictEqual(clusters.length, 1, 'squeezing to maxTopicCount=1 should merge every cluster');
+  assert.ok(clusters[0].topDomains.length >= 2, 'the forced merge should actually span multiple domains');
+  assert.ok(
+    clusters[0].confidence < 0.68,
+    'a cluster spanning unrelated domains without one dominant domain should read as low confidence, not a confident blended label'
+  );
+}
+
+async function testCorrectionsRefreshDerivedMetrics() {
+  const analysis = await AttentionAnalysis.analyzeVisitEvents(buildSampleEvents(), {
+    useOllama: false,
+    maxPagesForAi: 20
+  });
+  const crossTopicTransition = analysis.transitions.find(t => t.sourceTopicId !== t.targetTopicId);
+  assert.ok(crossTopicTransition, 'sample history should include a cross-topic transition to correct');
+  const correctedType = crossTopicTransition.type === 'topic_switch' ? 'adjacent_topic_jump' : 'topic_switch';
+  const before = analysis.metrics.transitionMix.items.find(item => item.type === correctedType).count;
+  AttentionAnalysis.applyCorrections(analysis, [
+    { kind: 'transition', targetId: crossTopicTransition.id, type: correctedType }
+  ]);
+  const after = analysis.metrics.transitionMix.items.find(item => item.type === correctedType).count;
+  assert.strictEqual(
+    after,
+    before + crossTopicTransition.visitCount,
+    'transitionMix counts should reflect a corrected transition type, not the stale pre-correction aggregate'
+  );
+}
+
 async function testEmbeddingCacheAvoidsRefetch() {
   const originalFetch = global.fetch;
   let embedCalls = 0;
@@ -160,6 +208,8 @@ async function run() {
   await testAnalysisCreatesEvidenceAndValidationQueue();
   await testLowConfidenceTransitionsAppearInQueue();
   await testOllamaOriginRejectionIsAuditable();
+  await testForcedMergeOfUnrelatedDomainsLowersConfidence();
+  await testCorrectionsRefreshDerivedMetrics();
   await testEmbeddingCacheAvoidsRefetch();
   await testStoredAnalysisIsReusedUntilRerun();
   console.log('attentionAnalysis tests passed');

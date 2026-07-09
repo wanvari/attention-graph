@@ -18,8 +18,9 @@
     sameTopicThreshold: 0.72,
     topicClusterThreshold: 0.62,
     topicMergeThreshold: 0.66,
-    crossDomainWeakTokenThreshold: 0.08,
-    crossDomainStrongTokenThreshold: 0.16,
+    crossDomainWeakTokenThreshold: 0.16,
+    crossDomainStrongTokenThreshold: 0.30,
+    forcedMergeCrossDomainDiscount: 0.08,
     fallbackTopicClusterThreshold: 0.30,
     adjacentTopicThreshold: 0.58,
     embeddingBatchSize: 32,
@@ -36,7 +37,7 @@
   const TRANSITION_TYPES = {
     same_topic_flow: {
       label: 'Same-topic continuation',
-      color: '#94a3b8',
+      color: '#8d94c7',
       description: 'Consecutive visits stayed inside one topic.'
     },
     adjacent_topic_jump: {
@@ -54,7 +55,7 @@
   const TOPIC_COLORS = [
     '#4c6ef5', '#7048e8', '#d6336c',
     '#748ffc', '#9775fa', '#f783ac',
-    '#8e99a4', '#a5aeb8', '#b9c0c9'
+    '#f59f00', '#f08c00', '#e67700'
   ];
 
   const ATTENTION_BANDS = {
@@ -70,7 +71,7 @@
     },
     long_tail: {
       label: 'Long-tail topic',
-      color: '#a5aeb8',
+      color: '#f59f00',
       description: 'A smaller topic with limited estimated time or visit evidence.'
     }
   };
@@ -78,7 +79,7 @@
   const ATTENTION_BAND_COLORS = {
     primary: ['#4c6ef5', '#7048e8', '#d6336c'],
     secondary: ['#748ffc', '#9775fa', '#f783ac'],
-    long_tail: ['#8e99a4', '#a5aeb8', '#b9c0c9']
+    long_tail: ['#f59f00', '#f08c00', '#e67700']
   };
 
   const STOP_WORDS = new Set([
@@ -652,7 +653,12 @@
       let bestScore = -Infinity;
       for (let i = 0; i < clusters.length; i++) {
         for (let j = i + 1; j < clusters.length; j++) {
-          const score = clusterSimilarity(clusters[i], clusters[j], cfg);
+          const rawScore = clusterSimilarity(clusters[i], clusters[j], cfg);
+          // Squeezing to fit maxTopicCount should not be an excuse to blend
+          // unrelated domains (e.g. Amazon + Reddit) into one confident-looking
+          // topic; cross-domain pairs need a clearly higher raw score to win.
+          const sharesDomain = Array.from(clusters[i].domains).some(domain => clusters[j].domains.has(domain));
+          const score = sharesDomain ? rawScore : rawScore - cfg.forcedMergeCrossDomainDiscount;
           if (score > bestScore) {
             bestScore = score;
             bestPair = [i, j];
@@ -689,7 +695,12 @@
       : 0.55;
     const dominantDomainVisits = topDomains[0] ? topDomains[0].visitCount : 0;
     const dominantDomainShare = visitCount ? dominantDomainVisits / visitCount : 0;
-    const mixedDomainPenalty = topDomains.length >= 4 && dominantDomainShare < 0.55 ? 0.12 : 0;
+    // Penalize any cluster without one clearly dominant domain, not just ones
+    // with 4+ domains, so a 2-domain forced merge (e.g. Amazon + Reddit) reads
+    // as low confidence instead of a fabricated, confident-looking blend.
+    const mixedDomainPenalty = topDomains.length >= 2 && dominantDomainShare < 0.75
+      ? (0.75 - dominantDomainShare) * 0.6
+      : 0;
     const thinEvidencePenalty = cluster.pages.length < 3 ? 0.08 : 0;
     const keywords = keywordSummary(cluster.pages, 10);
     return {
@@ -1274,12 +1285,59 @@
       if (topicById.has(transition.sourceTopicId)) transition.sourceLabel = topicById.get(transition.sourceTopicId).label;
       if (topicById.has(transition.targetTopicId)) transition.targetLabel = topicById.get(transition.targetTopicId).label;
     }
+    // Metrics (transitionMix, switchBurden, topicTimeShare labels, focused-run
+    // labels) were aggregated once at analysis time from the original topic
+    // labels/transition types. A correction changes topics/transitions but,
+    // without this, the dashboard's charts would keep showing stale counts
+    // and labels even though the "corrected" record underneath had changed.
     if (analysis.metrics && Array.isArray(analysis.metrics.topicTimeShare)) {
       for (const item of analysis.metrics.topicTimeShare) {
         if (topicById.has(item.topicId)) item.label = topicById.get(item.topicId).label;
       }
-      const longest = analysis.metrics.focusedRuns && analysis.metrics.focusedRuns.longestRun;
-      if (longest && topicById.has(longest.topicId)) longest.label = topicById.get(longest.topicId).label;
+      const transitions = analysis.transitions || [];
+      const crossTopic = transitions.filter(t => t.sourceTopicId !== t.targetTopicId);
+      const countByType = type => crossTopic.filter(t => t.type === type).reduce((sum, t) => sum + t.visitCount, 0);
+      const sameTopicCount = transitions
+        .filter(t => t.sourceTopicId === t.targetTopicId)
+        .reduce((sum, t) => sum + t.visitCount, 0);
+      const switchCount = countByType('topic_switch');
+      const adjacentJumpCount = countByType('adjacent_topic_jump');
+      const totalObservedTransitions = sameTopicCount + adjacentJumpCount + switchCount;
+
+      const mix = analysis.metrics.transitionMix;
+      if (mix && Array.isArray(mix.items)) {
+        mix.totalObservedTransitions = totalObservedTransitions;
+        const countForType = {
+          same_topic_flow: sameTopicCount,
+          adjacent_topic_jump: adjacentJumpCount,
+          topic_switch: switchCount
+        };
+        for (const entry of mix.items) {
+          const count = countForType[entry.type];
+          if (count === undefined) continue;
+          entry.count = count;
+          entry.share = totalObservedTransitions ? count / totalObservedTransitions : 0;
+        }
+      }
+
+      const burden = analysis.metrics.switchBurden;
+      if (burden) {
+        burden.switchCount = switchCount;
+        burden.adjacentJumpCount = adjacentJumpCount;
+        burden.sameTopicCount = sameTopicCount;
+        burden.crossTopicMovementCount = switchCount + adjacentJumpCount;
+        burden.switchesPerActiveHour = burden.activeHours ? Number((switchCount / burden.activeHours).toFixed(2)) : 0;
+        burden.representativeTransitions = crossTopic.filter(t => t.type === 'topic_switch').slice(0, 5);
+        burden.adjacentExamples = crossTopic.filter(t => t.type === 'adjacent_topic_jump').slice(0, 5);
+      }
+
+      const runs = analysis.metrics.focusedRuns;
+      if (runs) {
+        const relabel = run => { if (run && topicById.has(run.topicId)) run.label = topicById.get(run.topicId).label; };
+        relabel(runs.longestRun);
+        (runs.topRuns || []).forEach(relabel);
+        (runs.recentRuns || []).forEach(relabel);
+      }
     }
     analysis.userCorrectionsApplied = corrections.length;
     return analysis;
