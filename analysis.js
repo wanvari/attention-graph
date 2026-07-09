@@ -203,7 +203,12 @@ class TrustAuditDashboard {
           label: kind === 'topic' ? value : undefined,
           type: kind === 'transition' ? value : undefined
         });
-        event.currentTarget.querySelector('button').textContent = 'Saved';
+        const corrections = await AttentionAnalysis.TrustStore.getCorrections();
+        AttentionAnalysis.applyCorrections(this.analysis, corrections);
+        this.analysis.validationQueue = this.analysis.validationQueue.filter(entry =>
+          !(entry.kind === kind && entry.targetId === targetId)
+        );
+        this.render(this.analysis);
       });
     });
   }

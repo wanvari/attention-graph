@@ -251,6 +251,10 @@ class TopicMapVisualizer {
       visibleTopicIds.has(t.targetTopicId)
     );
     const limited = flowLimitValue === 'all' ? crossTopic : crossTopic.slice(0, Number(flowLimitValue));
+    // When both directions between two topics are visible (A->B and B->A),
+    // straight lines overlap almost exactly. Curve each one so both remain
+    // legible instead of looking like one line with an arrow on each end.
+    const limitedKeys = new Set(limited.map(t => `${t.sourceTopicId}->${t.targetTopicId}`));
     const transitionLinks = limited.map(transition => ({
       id: transition.id,
       type: 'transition',
@@ -258,7 +262,8 @@ class TopicMapVisualizer {
       target: transition.targetTopicId,
       transition,
       weight: transition.visitCount,
-      color: transition.color
+      color: transition.color,
+      hasReciprocal: limitedKeys.has(`${transition.targetTopicId}->${transition.sourceTopicId}`)
     }));
 
     return {
@@ -296,11 +301,12 @@ class TopicMapVisualizer {
     const flowWidth = d3.scaleSqrt()
       .domain([1, d3.max(data.links, link => link.type === 'transition' ? link.weight : 1) || 1])
       .range([1.5, 7]);
-    const transitions = transitionLayer.selectAll('line')
+    const transitions = transitionLayer.selectAll('path')
       .data(data.links.filter(link => link.type === 'transition'))
       .enter()
-      .append('line')
+      .append('path')
       .attr('class', 'flow-link')
+      .attr('fill', 'none')
       .attr('stroke', link => link.color)
       .attr('stroke-width', link => flowWidth(Math.max(1, link.weight)))
       .attr('stroke-opacity', link => Math.max(0.38, Math.min(0.85, link.transition.confidence)))
@@ -366,13 +372,11 @@ class TopicMapVisualizer {
         .attr('x2', d => d.target.x)
         .attr('y2', d => d.target.y);
 
-      transitions.each((d, i, lines) => {
-        const shortened = shortenLine(d.source, d.target, d.source.radius + 6, d.target.radius + 12);
-        d3.select(lines[i])
-          .attr('x1', shortened.x1)
-          .attr('y1', shortened.y1)
-          .attr('x2', shortened.x2)
-          .attr('y2', shortened.y2);
+      transitions.each((d, i, paths) => {
+        const bend = d.hasReciprocal
+          ? (d.transition.sourceTopicId < d.transition.targetTopicId ? 1 : -1)
+          : 0;
+        d3.select(paths[i]).attr('d', flowPath(d.source, d.target, d.source.radius + 6, d.target.radius + 12, bend));
       });
 
       node
@@ -517,21 +521,31 @@ class TopicMapVisualizer {
     const panel = document.getElementById('evidence-panel');
     const queueCount = analysis.validationQueue.length;
     const topTopic = analysis.metrics.topicTimeShare[0];
+    const collapsed = !!this.evidenceCollapsed;
     panel.innerHTML = `
       <div class="evidence-section">
-        <h2>Topic Map Evidence</h2>
-        <p>This map groups high-attention history pages into topics and connects topics that appeared in consecutive visits.</p>
-        <div class="metric-list">
-          <div><strong>Time range</strong><span>${formatDate(analysis.coverage.startTime)} - ${formatDate(analysis.coverage.endTime)}</span></div>
-          <div><strong>Graph sectors</strong><span>${this.visibleTopicCount || analysis.topics.length} of ${analysis.topics.length} topics shown</span></div>
-          <div><strong>Topic coverage</strong><span>${formatPercent(analysis.categorizedCoverage?.activeTimeCoverage || 1)} active time · ${formatPercent(analysis.categorizedCoverage?.visitCoverage || 1)} visits</span></div>
-          <div><strong>Top topic</strong><span>${topTopic ? `${escapeHtml(topTopic.label)} (${topTopic.estimatedDwellMinutes}m est.)` : 'None'}</span></div>
-          <div><strong>Needs review</strong><span>${queueCount} low-confidence items</span></div>
-          <div><strong>Analyzed</strong><span>${analysis.generatedAt ? `${formatDate(new Date(analysis.generatedAt).getTime())} (${timeAgo(analysis.generatedAt)})` : 'n/a'}</span></div>
-          <div><strong>Source</strong><span>${analysis.source}${analysis.fromCache ? ' (stored until re-run)' : ''}</span></div>
+        <div class="evidence-header">
+          <h2>Topic Map Evidence</h2>
+          <button type="button" id="evidence-collapse-toggle" class="collapse-toggle" title="${collapsed ? 'Expand' : 'Collapse'}" aria-expanded="${!collapsed}">${collapsed ? '+' : '−'}</button>
+        </div>
+        <div id="evidence-collapsible" class="evidence-collapsible" ${collapsed ? 'hidden' : ''}>
+          <p>This map groups high-attention history pages into topics and connects topics that appeared in consecutive visits.</p>
+          <div class="metric-list">
+            <div><strong>Time range</strong><span>${formatDate(analysis.coverage.startTime)} - ${formatDate(analysis.coverage.endTime)}</span></div>
+            <div><strong>Graph sectors</strong><span>${this.visibleTopicCount || analysis.topics.length} of ${analysis.topics.length} topics shown</span></div>
+            <div><strong>Topic coverage</strong><span>${formatPercent(analysis.categorizedCoverage?.activeTimeCoverage || 1)} active time · ${formatPercent(analysis.categorizedCoverage?.visitCoverage || 1)} visits</span></div>
+            <div><strong>Top topic</strong><span>${topTopic ? `${escapeHtml(topTopic.label)} (${topTopic.estimatedDwellMinutes}m est.)` : 'None'}</span></div>
+            <div><strong>Needs review</strong><span>${queueCount} low-confidence items</span></div>
+            <div><strong>Analyzed</strong><span>${analysis.generatedAt ? `${formatDate(new Date(analysis.generatedAt).getTime())} (${timeAgo(analysis.generatedAt)})` : 'n/a'}</span></div>
+            <div><strong>Source</strong><span>${analysis.source}${analysis.fromCache ? ' (stored until re-run)' : ''}</span></div>
+          </div>
         </div>
       </div>
     `;
+    document.getElementById('evidence-collapse-toggle').addEventListener('click', () => {
+      this.evidenceCollapsed = !this.evidenceCollapsed;
+      this.renderDefaultEvidence(analysis);
+    });
   }
 
   selectTopic(topic) {
@@ -772,16 +786,29 @@ class TopicMapVisualizer {
   }
 }
 
-function shortenLine(source, target, sourcePadding, targetPadding) {
+function flowPath(source, target, sourcePadding, targetPadding, bend) {
   const dx = target.x - source.x;
   const dy = target.y - source.y;
   const distance = Math.sqrt(dx * dx + dy * dy) || 1;
-  return {
-    x1: source.x + dx * (sourcePadding / distance),
-    y1: source.y + dy * (sourcePadding / distance),
-    x2: target.x - dx * (targetPadding / distance),
-    y2: target.y - dy * (targetPadding / distance)
-  };
+  const ux = dx / distance;
+  const uy = dy / distance;
+  const x1 = source.x + ux * sourcePadding;
+  const y1 = source.y + uy * sourcePadding;
+  const x2 = target.x - ux * targetPadding;
+  const y2 = target.y - uy * targetPadding;
+  if (!bend) return `M${x1},${y1} L${x2},${y2}`;
+  // The (ux, uy) unit vector negates when source/target swap, so combining it
+  // with a sign that also flips per-direction (bend) would cancel out and put
+  // both edges of a reciprocal pair on the same side. A position-based flip
+  // (independent of which node is "source" for this particular link) keeps
+  // the two directions bowing to opposite sides instead.
+  const canonicalFlip = (source.x > target.x || (source.x === target.x && source.y > target.y)) ? -1 : 1;
+  const midX = (x1 + x2) / 2;
+  const midY = (y1 + y2) / 2;
+  const offset = Math.min(38, distance * 0.18) * bend * canonicalFlip;
+  const cx = midX + -uy * offset;
+  const cy = midY + ux * offset;
+  return `M${x1},${y1} Q${cx},${cy} ${x2},${y2}`;
 }
 
 function confidenceBar(confidence) {
