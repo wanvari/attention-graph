@@ -14,13 +14,13 @@ The app answers:
 - Local Ollama at `http://localhost:11434`
 - Models:
   - `bge-m3:latest` for embeddings
-  - `gemma3:12b-32k` for topic and transition labels
+  - `gemma3:12b` for topic and transition labels (the stock tag; the extension requests a 16K context per call, so no custom Modelfile is needed)
 
 Install the models with:
 
 ```bash
 ollama pull bge-m3
-ollama pull gemma3:12b-32k
+ollama pull gemma3:12b
 ```
 
 The extension includes a local-only Chrome network rule that rewrites requests to `localhost:11434` so Ollama sees a normal localhost origin. No hosted API calls are made.
@@ -38,7 +38,7 @@ The extension includes a local-only Chrome network rule that rewrites requests t
 - Expands Chrome history with `chrome.history.getVisits` so repeated visits are preserved.
 - Estimates dwell time from time until next visit, capped at 30 minutes; visits that end a session count 1 minute instead of inheriting the away-from-browser gap.
 - Uses local Ollama only. No hosted API calls are made.
-- Builds topic clusters with `bge-m3` embeddings and labels them with `gemma3:12b-32k`.
+- Builds topic clusters with `bge-m3` embeddings and labels them with `gemma3:12b`.
 - Runs a capped second adjudication pass over the lowest-confidence topics: each is re-checked twice (page order reversed the second time) and the verdict only counts when both runs agree. Confirmed topics stay, mixed ones are split, and anything the model cannot label honestly moves to an explicit **Uncategorized** bucket instead of being forced into a topic or handed to the user to sort.
 - Verifies borderline transition labels with one extra pass; disagreement falls back to the similarity heuristic, marked uncertain.
 - Reports coverage honestly: topic metrics only count pages the analysis stands behind, and uncategorized time/visits are shown, not hidden.

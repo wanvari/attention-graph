@@ -32,7 +32,7 @@
     embedTimeoutMs: 60000,
     ollamaBaseUrl: 'http://localhost:11434',
     embeddingModel: 'bge-m3:latest',
-    chatModel: 'gemma3:12b-32k',
+    chatModel: 'gemma3:12b',
     // Second-pass adjudication of uncertain claims. Capped so a re-run adds at
     // most (maxTopicAdjudications * 2 + 1) extra small chat calls, run
     // sequentially, so the machine stays responsive on a normal laptop.
@@ -41,6 +41,10 @@
     adjudicationMaxPages: 24,
     maxTransitionVerifications: 12,
     stalenessCheckMaxResults: 100,
+    // Ollama defaults num_ctx to ~4k, which silently truncates the batched
+    // labeling prompts. Requesting it per call keeps the stock gemma3:12b
+    // usable instead of requiring a hand-built "-32k" Modelfile variant.
+    chatContextTokens: 16384,
     embeddingCacheMaxAgeMs: 45 * 24 * 60 * 60 * 1000
   };
 
@@ -405,7 +409,7 @@
       body: JSON.stringify({
         model: cfg.chatModel,
         stream: false,
-        options: { temperature: 0 },
+        options: { temperature: 0, num_ctx: cfg.chatContextTokens },
         messages: [
           {
             role: 'system',

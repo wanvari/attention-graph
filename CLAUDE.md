@@ -26,7 +26,7 @@ Load the extension through `chrome://extensions/` with Developer mode enabled.
 
 ## Product Constraints
 
-- Local-only AI: use `bge-m3:latest` through `/api/embed` and `gemma3:12b-32k` through `/api/chat` at `http://localhost:11434` (models are user-configurable in settings; the endpoint is not).
+- Local-only AI: use `bge-m3:latest` through `/api/embed` and `gemma3:12b` through `/api/chat` at `http://localhost:11434` (models are user-configurable in settings; the endpoint is not).
 - Do not silently fall back to old heuristic semantic claims for real browser history. If Ollama is unavailable, show setup guidance.
 - If Ollama returns `403 Forbidden` only from Chrome, check `rules_ollama.json` and the `declarativeNetRequest` permission. The extension rewrites only local Ollama request origins so Ollama sees `http://localhost` / `http://127.0.0.1`.
 - Dwell time is estimated from history gaps and capped at 30 minutes; session-ending visits get a 1-minute allowance instead of the away gap, so the last page of a session never earns phantom attention.

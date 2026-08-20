@@ -466,6 +466,32 @@ async function testSettingsOnlyPersistEditableKeys() {
   assert.strictEqual(loaded.days, 14);
 }
 
+async function testChatRequestsExplicitContextWindow() {
+  const originalFetch = global.fetch;
+  let body = null;
+  global.fetch = async (url, options) => {
+    body = JSON.parse(options.body);
+    return { ok: true, json: async () => ({ message: { content: '{"transitions":[]}' } }) };
+  };
+  try {
+    await AttentionAnalysis.verifyBorderlineTransitions([makeTransition({})], {});
+    // The default chat model must be a real public Ollama tag, and the context
+    // window must be requested per call -- the old default ("gemma3:12b-32k")
+    // was a hand-built Modelfile that does not exist in the Ollama library, so
+    // a fresh clone failed with "pull model manifest: file does not exist".
+    assert.ok(!/-32k$/.test(AttentionAnalysis.DEFAULTS.chatModel), 'default chat model must not depend on a custom -32k Modelfile');
+    assert.strictEqual(body.model, 'gemma3:12b');
+    assert.strictEqual(
+      body.options.num_ctx,
+      AttentionAnalysis.DEFAULTS.chatContextTokens,
+      'chat calls must request a context window large enough for batched labeling prompts'
+    );
+    assert.strictEqual(body.options.temperature, 0);
+  } finally {
+    global.fetch = originalFetch;
+  }
+}
+
 async function run() {
   await testRepeatedVisitsRemainEvents();
   await testSameDomainDoesNotForceSameTopic();
@@ -480,6 +506,7 @@ async function run() {
   await testAdjudicationRespectsComputeCap();
   await testTransitionVerificationAgreementBoostsConfidence();
   await testTransitionVerificationDisagreementFallsBackToHeuristic();
+  await testChatRequestsExplicitContextWindow();
   await testCheckForNewHistoryCountsFreshVisits();
   await testCorrectionsMatchTopicsByPageOverlapAcrossReruns();
   await testCorrectionsRefreshDerivedMetrics();
