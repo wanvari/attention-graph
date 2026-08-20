@@ -492,6 +492,50 @@ async function testChatRequestsExplicitContextWindow() {
   }
 }
 
+async function testAdjudicationGateSurvivesOptimisticLlmConfidence() {
+  const { pagesById } = buildForcedMergedTopic();
+  const { topics } = buildForcedMergedTopic();
+  // Simulate labelTopicsWithLlm overwriting the wary heuristic score with the
+  // ~0.95 that gemma3 reports for nearly everything. The audit must still fire,
+  // because the cluster genuinely blends unrelated domains.
+  const optimistic = topics.map(topic => ({ ...topic, confidence: 0.95 }));
+  assert.ok(optimistic[0].heuristicConfidence < 0.68, 'setup: heuristic score should still record the doubt');
+  const originalFetch = global.fetch;
+  mockChatResponses([
+    { verdict: 'uncategorized', confidence: 0.3, rationale: 'Unrelated.' },
+    { verdict: 'uncategorized', confidence: 0.3, rationale: 'Unrelated.' }
+  ]);
+  try {
+    const result = await AttentionAnalysis.adjudicateUncertainTopics(optimistic, pagesById, {});
+    assert.strictEqual(
+      result.adjudicationSummary.audited,
+      1,
+      'a blended cluster must be audited even when the LLM claims 0.95 confidence'
+    );
+    assert.strictEqual(result.uncategorizedPages.length, 4);
+  } finally {
+    global.fetch = originalFetch;
+  }
+}
+
+async function testCleanSmallTopicIsNotAudited() {
+  const { pagesById } = buildForcedMergedTopic();
+  const topic = {
+    id: 'topic-clean', pageIds: [...pagesById.keys()].slice(0, 2),
+    confidence: 0.95, heuristicConfidence: 0.72, dominantDomainShare: 1, pageCount: 2,
+    label: 'Clean topic', keywords: [], topPages: [], pageUrls: []
+  };
+  const originalFetch = global.fetch;
+  const calls = mockChatResponses([]);
+  try {
+    const result = await AttentionAnalysis.adjudicateUncertainTopics([topic], pagesById, {});
+    assert.strictEqual(calls.length, 0, 'a small, single-domain, confident topic must not spend audit budget');
+    assert.strictEqual(result.topics.length, 1);
+  } finally {
+    global.fetch = originalFetch;
+  }
+}
+
 async function run() {
   await testRepeatedVisitsRemainEvents();
   await testSameDomainDoesNotForceSameTopic();
@@ -504,6 +548,8 @@ async function run() {
   await testAdjudicationAgreedKeepRaisesConfidence();
   await testAdjudicationLlmErrorKeepsTopic();
   await testAdjudicationRespectsComputeCap();
+  await testAdjudicationGateSurvivesOptimisticLlmConfidence();
+  await testCleanSmallTopicIsNotAudited();
   await testTransitionVerificationAgreementBoostsConfidence();
   await testTransitionVerificationDisagreementFallsBackToHeuristic();
   await testChatRequestsExplicitContextWindow();

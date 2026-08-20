@@ -752,14 +752,21 @@
       : 0;
     const thinEvidencePenalty = cluster.pages.length < 3 ? 0.08 : 0;
     const keywords = keywordSummary(cluster.pages, 10);
+    const heuristicConfidence = clamp(
+      0.40 + cohesion * 0.42 + Math.min(cluster.pages.length, 8) * 0.015 - mixedDomainPenalty - thinEvidencePenalty,
+      0.25,
+      0.9
+    );
     return {
       id: `topic-${index + 1}`,
       label: labelFromKeywords(keywords, topDomains),
-      confidence: clamp(
-        0.40 + cohesion * 0.42 + Math.min(cluster.pages.length, 8) * 0.015 - mixedDomainPenalty - thinEvidencePenalty,
-        0.25,
-        0.9
-      ),
+      confidence: heuristicConfidence,
+      // Kept alongside the displayed confidence because the LLM overwrites
+      // that one with its own (uniformly optimistic) self-report. These are
+      // measured from the evidence, so they stay trustworthy as audit gates.
+      heuristicConfidence,
+      dominantDomainShare,
+      pageCount: cluster.pages.length,
       rationale: 'Initial local grouping based on page title, URL tokens, and embedding similarity.',
       keywords,
       topDomains,
@@ -914,9 +921,23 @@
   // bucket rather than presenting a shaky claim.
   async function adjudicateUncertainTopics(topics, pagesById, config) {
     const cfg = { ...DEFAULTS, ...(config || {}) };
+    // A cluster is worth re-checking when the *evidence* looks mixed, not when
+    // the labeling model happens to admit doubt: gemma3 reports ~0.95 for
+    // almost everything, so gating on that alone means never auditing at all.
+    // Small-but-clean topics are deliberately spared to protect the budget.
+    const needsAudit = topic => {
+      const multiPage = (topic.pageCount || topic.pageIds.length) >= 3;
+      const blended = multiPage && Number(topic.dominantDomainShare ?? 1) < 0.75;
+      const weakEvidence = multiPage &&
+        Number(topic.heuristicConfidence ?? topic.confidence) < cfg.adjudicationConfidenceThreshold;
+      const modelDoubts = topic.confidence < cfg.adjudicationConfidenceThreshold;
+      return blended || weakEvidence || modelDoubts;
+    };
+    const auditPriority = topic =>
+      Math.min(Number(topic.heuristicConfidence ?? topic.confidence), topic.confidence);
     const candidates = topics
-      .filter(topic => topic.confidence < cfg.adjudicationConfidenceThreshold)
-      .sort((a, b) => a.confidence - b.confidence)
+      .filter(needsAudit)
+      .sort((a, b) => auditPriority(a) - auditPriority(b))
       .slice(0, cfg.maxTopicAdjudications);
     const candidateIds = new Set(candidates.map(topic => topic.id));
     const keptTopics = topics.filter(topic => !candidateIds.has(topic.id));
