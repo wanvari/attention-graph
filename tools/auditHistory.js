@@ -189,7 +189,8 @@ function compactAnalysis(analysis) {
       rationale: transition.rationale
     })),
     metrics: analysis.metrics,
-    validationQueue: analysis.validationQueue.slice(0, 20)
+    uncategorized: analysis.uncategorized,
+    adjudicationSummary: analysis.adjudicationSummary
   };
 }
 

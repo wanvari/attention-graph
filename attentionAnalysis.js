@@ -5,7 +5,7 @@
 })(typeof globalThis !== 'undefined' ? globalThis : this, function() {
   'use strict';
 
-  const VERSION = 'topic-map-trust-audit-v2';
+  const VERSION = 'topic-map-trust-audit-v3';
   const LATEST_ANALYSIS_KEY = 'latest-analysis';
   const DEFAULTS = {
     days: 7,
@@ -15,6 +15,7 @@
     topPagesPerTopic: 8,
     sessionBreakMs: 30 * 60 * 1000,
     dwellCapMs: 30 * 60 * 1000,
+    sessionEndDwellMs: 60 * 1000,
     sameTopicThreshold: 0.72,
     topicClusterThreshold: 0.62,
     topicMergeThreshold: 0.66,
@@ -31,7 +32,16 @@
     embedTimeoutMs: 60000,
     ollamaBaseUrl: 'http://localhost:11434',
     embeddingModel: 'bge-m3:latest',
-    chatModel: 'gemma3:12b-32k'
+    chatModel: 'gemma3:12b-32k',
+    // Second-pass adjudication of uncertain claims. Capped so a re-run adds at
+    // most (maxTopicAdjudications * 2 + 1) extra small chat calls, run
+    // sequentially, so the machine stays responsive on a normal laptop.
+    adjudicationConfidenceThreshold: 0.68,
+    maxTopicAdjudications: 4,
+    adjudicationMaxPages: 24,
+    maxTransitionVerifications: 12,
+    stalenessCheckMaxResults: 100,
+    embeddingCacheMaxAgeMs: 45 * 24 * 60 * 60 * 1000
   };
 
   const TRANSITION_TYPES = {
@@ -456,6 +466,33 @@
     return buildVisitEventsFromHistoryItems(historyItems, visitMap, cfg);
   }
 
+  // One cheap history.search call to answer "has the user browsed since the
+  // stored analysis was generated?" — no hashing, no visit expansion.
+  async function checkForNewHistory(sinceTime, options) {
+    const cfg = { ...DEFAULTS, ...(options || {}) };
+    const chromeApi = cfg.chromeApi || (typeof chrome !== 'undefined' ? chrome : null);
+    const since = Number(sinceTime);
+    if (!chromeApi || !chromeApi.history || !Number.isFinite(since) || since <= 0) {
+      return { checked: false, newItemCount: 0, atLimit: false };
+    }
+    const items = await getHistoryData(chromeApi, {
+      text: '',
+      startTime: since,
+      maxResults: cfg.stalenessCheckMaxResults
+    });
+    const fresh = items.filter(item =>
+      item && item.url &&
+      !FILTERED_DOMAINS.has(extractDomain(item.url)) &&
+      Number(item.lastVisitTime) > since
+    );
+    return {
+      checked: true,
+      newItemCount: fresh.length,
+      atLimit: items.length >= cfg.stalenessCheckMaxResults,
+      since
+    };
+  }
+
   function buildVisitEventsFromHistoryItems(historyItems, visitMap, options) {
     const cfg = { ...DEFAULTS, ...(options || {}) };
     const events = [];
@@ -488,15 +525,23 @@
       const next = events[i + 1];
       current.sessionId = sessionId;
       if (!next) {
-        current.dwellMs = 0;
+        // The final visit has no next-visit gap to estimate from; credit the
+        // same small allowance a session-ending visit gets.
+        current.dwellMs = cfg.sessionEndDwellMs;
         current.nextGapMs = 0;
         current.endsSession = true;
         continue;
       }
       const gap = Math.max(0, next.visitTime - current.visitTime);
       current.nextGapMs = gap;
-      current.dwellMs = Math.min(gap, cfg.dwellCapMs);
       current.endsSession = gap > cfg.sessionBreakMs;
+      // A gap that crosses a session break mostly measures time away from the
+      // browser, not attention on this page. Crediting min(gap, 30m) would give
+      // every session's last page up to 30 phantom minutes, so session-ending
+      // visits get a small fixed allowance instead.
+      current.dwellMs = current.endsSession
+        ? Math.min(gap, cfg.sessionEndDwellMs)
+        : Math.min(gap, cfg.dwellCapMs);
       if (current.endsSession) sessionId++;
     }
     return {
@@ -523,7 +568,7 @@
       estimatedActiveMs,
       estimatedActiveMinutes: msToMinutes(estimatedActiveMs),
       sessionCount,
-      dwellMethod: 'estimated from time until next visit, capped at 30 minutes'
+      dwellMethod: 'estimated from time until next visit, capped at 30 minutes; visits that end a session count 1 minute'
     };
   }
 
@@ -795,6 +840,178 @@
     });
   }
 
+  function buildUncategorizedBucket(pages) {
+    const sorted = pages.slice().sort((a, b) => pageImportanceScore(b) - pageImportanceScore(a) || a.title.localeCompare(b.title));
+    const visitCount = sorted.reduce((sum, page) => sum + page.visitCount, 0);
+    const estimatedDwellMs = sorted.reduce((sum, page) => sum + page.estimatedDwellMs, 0);
+    return {
+      pageCount: sorted.length,
+      visitCount,
+      estimatedDwellMs,
+      estimatedDwellMinutes: msToMinutes(estimatedDwellMs),
+      pages: sorted.slice(0, 30).map(pageEvidence),
+      pageUrls: sorted.map(page => page.normalizedUrl)
+    };
+  }
+
+  function adjudicationPrompt(topic, pageRows) {
+    return [
+      'You are auditing one browser-history topic cluster whose label is low confidence.',
+      'Decide one verdict:',
+      '- "keep": these pages genuinely belong together as one topic.',
+      '- "split": the pages form 2-4 clearly distinct topics. Provide groups.',
+      '- "uncategorized": the pages are too mixed to support any honest topic label.',
+      'Return JSON only, shaped as {"verdict":"keep|split|uncategorized","label":"short topic label (keep only)","confidence":0.0-1.0,"rationale":"one sentence","groups":[{"label":"short topic label","page_indexes":[0,2]}]}.',
+      '"groups" is required only for split, and page_indexes reference the "i" field of the input pages.',
+      'Do not invent a theme to avoid saying uncategorized.',
+      JSON.stringify({
+        current_label: topic.label,
+        keywords: topic.keywords,
+        pages: pageRows
+      })
+    ].join('\n');
+  }
+
+  function normalizeVerdict(data) {
+    const verdict = String(data && data.verdict || '').toLowerCase().trim();
+    if (verdict === 'keep' || verdict === 'split' || verdict === 'uncategorized') return verdict;
+    return null;
+  }
+
+  function splitGroupsToClusters(groups, candidatePages, reversed) {
+    const clusters = [];
+    const used = new Set();
+    for (const group of Array.isArray(groups) ? groups : []) {
+      const indexes = Array.isArray(group && group.page_indexes) ? group.page_indexes : [];
+      const members = [];
+      for (const raw of indexes) {
+        let index = Number(raw);
+        if (!Number.isInteger(index)) continue;
+        if (reversed) index = candidatePages.length - 1 - index;
+        if (index < 0 || index >= candidatePages.length || used.has(index)) continue;
+        used.add(index);
+        members.push(candidatePages[index]);
+      }
+      if (members.length >= 2) {
+        clusters.push({ label: String(group.label || '').slice(0, 48), pages: members });
+      } else {
+        for (const member of members) used.delete(candidatePages.indexOf(member));
+      }
+    }
+    const leftovers = candidatePages.filter((_, index) => !used.has(index));
+    return { clusters, leftovers };
+  }
+
+  // Second pass over the lowest-confidence topics: instead of asking the user
+  // to sort uncertain clusters, spend a little extra local compute. Each
+  // candidate topic gets the same question twice (page order reversed the
+  // second time); the verdict only counts when both runs agree. Disagreement
+  // or an agreed "uncategorized" moves the pages into an honest uncategorized
+  // bucket rather than presenting a shaky claim.
+  async function adjudicateUncertainTopics(topics, pagesById, config) {
+    const cfg = { ...DEFAULTS, ...(config || {}) };
+    const candidates = topics
+      .filter(topic => topic.confidence < cfg.adjudicationConfidenceThreshold)
+      .sort((a, b) => a.confidence - b.confidence)
+      .slice(0, cfg.maxTopicAdjudications);
+    const candidateIds = new Set(candidates.map(topic => topic.id));
+    const keptTopics = topics.filter(topic => !candidateIds.has(topic.id));
+    const uncategorizedPages = [];
+    const summary = { audited: 0, kept: 0, split: 0, uncategorized: 0, disagreed: 0, errors: 0 };
+
+    let splitSequence = 0;
+    for (const topic of candidates) {
+      const candidatePages = topic.pageIds.map(id => pagesById.get(id)).filter(Boolean);
+      if (!candidatePages.length) continue;
+      if (cfg.onProgress) cfg.onProgress(`Auditing uncertain topic "${topic.label}" (${summary.audited + 1} of ${candidates.length})`);
+      const limited = candidatePages
+        .slice()
+        .sort((a, b) => pageImportanceScore(b) - pageImportanceScore(a))
+        .slice(0, cfg.adjudicationMaxPages);
+      const rows = limited.map((page, i) => ({ i, title: page.title, domain: page.domain }));
+      const reversedRows = limited.map((page, i) => ({ i, title: page.title, domain: page.domain })).reverse()
+        .map((row, i) => ({ ...row, i }));
+      let first;
+      let second;
+      try {
+        // Sequential on purpose: parallel chat calls would pin the local
+        // machine; two small extra prompts per uncertain topic is the budget.
+        first = await chatJson(adjudicationPrompt(topic, rows), cfg);
+        second = await chatJson(adjudicationPrompt(topic, reversedRows), cfg);
+      } catch (error) {
+        // Infrastructure failure is not evidence of a bad cluster; keep the
+        // topic with its existing low confidence.
+        summary.errors++;
+        keptTopics.push(topic);
+        continue;
+      }
+      summary.audited++;
+      const firstVerdict = normalizeVerdict(first);
+      const secondVerdict = normalizeVerdict(second);
+      if (!firstVerdict || !secondVerdict || firstVerdict !== secondVerdict) {
+        summary.disagreed++;
+        uncategorizedPages.push(...candidatePages);
+        continue;
+      }
+      if (firstVerdict === 'keep') {
+        summary.kept++;
+        const agreedConfidence = Math.min(
+          clamp(Number(first.confidence) || 0, 0, 1),
+          clamp(Number(second.confidence) || 0, 0, 1)
+        );
+        keptTopics.push({
+          ...topic,
+          label: String(first.label || topic.label).slice(0, 48),
+          confidence: clamp(Math.max(topic.confidence, agreedConfidence), 0, 0.95),
+          rationale: String(first.rationale || topic.rationale).slice(0, 500),
+          llmLabeled: true,
+          adjudication: 'kept'
+        });
+        continue;
+      }
+      if (firstVerdict === 'uncategorized') {
+        summary.uncategorized++;
+        uncategorizedPages.push(...candidatePages);
+        continue;
+      }
+      // Agreed split: apply the first run's grouping. The reversed run only
+      // has to agree on the verdict, not reproduce identical groups.
+      const { clusters, leftovers } = splitGroupsToClusters(first.groups, limited, false);
+      const beyondLimit = candidatePages.filter(page => !limited.includes(page));
+      if (clusters.length < 2) {
+        summary.disagreed++;
+        uncategorizedPages.push(...candidatePages);
+        continue;
+      }
+      summary.split++;
+      uncategorizedPages.push(...leftovers, ...beyondLimit);
+      for (const cluster of clusters) {
+        splitSequence++;
+        const skeleton = finalizeClusterSkeleton({
+          pages: cluster.pages,
+          centroid: averageVectors(cluster.pages.map(page => page.embedding)),
+          domains: new Set(cluster.pages.map(page => page.domain)),
+          keywords: keywordSummary(cluster.pages, 24),
+          cohesionSamples: []
+        }, 0);
+        keptTopics.push({
+          ...skeleton,
+          id: `${topic.id}-split-${splitSequence}`,
+          label: cluster.label || skeleton.label,
+          confidence: clamp(Number(first.confidence) || skeleton.confidence, 0, 0.9),
+          rationale: String(first.rationale || 'Split from a mixed cluster during local adjudication.').slice(0, 500),
+          llmLabeled: true,
+          adjudication: 'split'
+        });
+      }
+    }
+    return {
+      topics: keptTopics,
+      uncategorizedPages,
+      adjudicationSummary: summary
+    };
+  }
+
   function mapPagesToTopics(pages, topics) {
     const pageToTopic = new Map();
     for (const topic of topics) {
@@ -861,12 +1078,14 @@
           visitCount: 0,
           estimatedGapMsTotal: 0,
           representativeVisits: [],
+          hourCounts: new Array(24).fill(0),
           llmLabeled: false
         });
       }
       const transition = transitions.get(key);
       transition.visitCount++;
       transition.estimatedGapMsTotal += Math.max(0, to.visitTime - from.visitTime);
+      transition.hourCounts[new Date(to.visitTime).getHours()]++;
       if (transition.representativeVisits.length < 4) transition.representativeVisits.push(representativeVisit(from, to));
     }
     return Array.from(transitions.values()).map(transition => ({
@@ -946,6 +1165,73 @@
     });
   }
 
+  // Second-opinion pass over borderline cross-topic transitions. One extra
+  // chat call (payload reversed) re-asks only the transitions whose first
+  // label was low-confidence, near the similarity boundary, or contradicted
+  // the heuristic. Agreement keeps the LLM label; disagreement falls back to
+  // the similarity-based estimate marked as uncertain, so the user never has
+  // to arbitrate.
+  async function verifyBorderlineTransitions(transitions, config) {
+    const cfg = { ...DEFAULTS, ...(config || {}) };
+    const isBorderline = t => t.sourceTopicId !== t.targetTopicId && t.llmLabeled &&
+      (t.confidence < 0.7 || Math.abs(t.similarity - cfg.adjacentTopicThreshold) < 0.08);
+    const candidates = transitions.filter(isBorderline).slice(0, cfg.maxTransitionVerifications);
+    if (!candidates.length) return transitions;
+    if (cfg.onProgress) cfg.onProgress(`Double-checking ${candidates.length} borderline transitions`);
+    const payload = candidates.slice().reverse().map(transition => ({
+      id: transition.id,
+      source_topic: transition.sourceLabel,
+      target_topic: transition.targetLabel,
+      similarity: Number(transition.similarity.toFixed(3)),
+      visit_count: transition.visitCount,
+      examples: transition.representativeVisits.slice(0, 4).map(item => ({
+        from: item.from.title,
+        to: item.to.title,
+        gap_minutes: item.estimatedGapMinutes
+      }))
+    }));
+    let data;
+    try {
+      data = await chatJson([
+        'Re-classify these observed topic transitions from browser history.',
+        'Allowed type values: adjacent_topic_jump, topic_switch.',
+        'Return JSON shaped as {"transitions":[{"id":"transition-id","type":"adjacent_topic_jump|topic_switch","confidence":0.0-1.0}]}.',
+        'Copy every id exactly from the input.',
+        'Use adjacent_topic_jump only when the examples show the same task or research thread continuing across topics.',
+        JSON.stringify(payload)
+      ].join('\n\n'), cfg);
+    } catch (error) {
+      // Verification is best-effort; a failed call leaves first-pass labels.
+      return transitions;
+    }
+    const verdicts = new Map((Array.isArray(data.transitions) ? data.transitions : [])
+      .map(item => [String(item.id || ''), item]));
+    const candidateIds = new Set(candidates.map(t => t.id));
+    return transitions.map(transition => {
+      if (!candidateIds.has(transition.id)) return transition;
+      const verdict = verdicts.get(transition.id);
+      const verdictType = normalizeTransitionType(verdict && verdict.type);
+      if (verdictType && verdictType === transition.type) {
+        return {
+          ...transition,
+          confidence: clamp(Math.max(transition.confidence, Number(verdict.confidence) || 0), 0, 0.95),
+          verified: true
+        };
+      }
+      const fallbackType = classifyTransitionType(transition.sourceTopicId, transition.targetTopicId, transition.similarity, cfg);
+      return {
+        ...transition,
+        type: fallbackType,
+        label: TRANSITION_TYPES[fallbackType].label,
+        color: TRANSITION_TYPES[fallbackType].color,
+        confidence: Math.min(transition.confidence, 0.45),
+        rationale: 'Local labels disagreed between passes; showing the similarity-based estimate instead.',
+        llmLabeled: false,
+        uncertain: true
+      };
+    });
+  }
+
   function buildMetrics(events, topics, transitions, coverage) {
     const activeHours = Math.max(coverage.estimatedActiveMs / 3600000, 0.01);
     const sameTopicTransitions = transitions.filter(t => t.sourceTopicId === t.targetTopicId);
@@ -1017,6 +1303,7 @@
         crossTopicMovementCount: switchCount + adjacentJumpCount,
         activeHours: Number(activeHours.toFixed(2)),
         switchesPerActiveHour: Number(switchBurdenPerActiveHour.toFixed(2)),
+        switchesByHour: sumSwitchesByHour(topicSwitchTransitions),
         representativeTransitions: topicSwitchTransitions.slice(0, 5),
         adjacentExamples: adjacentTransitions.slice(0, 5)
       },
@@ -1029,6 +1316,15 @@
         recentRuns
       }
     };
+  }
+
+  function sumSwitchesByHour(topicSwitchTransitions) {
+    const byHour = new Array(24).fill(0);
+    for (const transition of topicSwitchTransitions) {
+      const counts = Array.isArray(transition.hourCounts) ? transition.hourCounts : [];
+      for (let hour = 0; hour < 24; hour++) byHour[hour] += Number(counts[hour]) || 0;
+    }
+    return byHour.map((count, hour) => ({ hour, count }));
   }
 
   function buildFocusedRuns(events, topics) {
@@ -1065,41 +1361,6 @@
       pages: run.pages.slice(0, 6),
       lastEvent: undefined
     }));
-  }
-
-  function buildValidationQueue(topics, transitions) {
-    const queue = [];
-    for (const topic of topics) {
-      if (topic.confidence < 0.68 || !topic.llmLabeled) {
-        queue.push({
-          id: `validate-${topic.id}`,
-          kind: 'topic',
-          targetId: topic.id,
-          title: topic.label,
-          confidence: topic.confidence,
-          reason: topic.llmLabeled ? 'Low topic confidence' : 'Topic did not receive an LLM label',
-          evidence: topic.topPages.slice(0, 4)
-        });
-      }
-    }
-    for (const transition of transitions) {
-      const borderline = transition.sourceTopicId !== transition.targetTopicId &&
-        (!transition.llmLabeled || transition.confidence < 0.7 || Math.abs(transition.similarity - DEFAULTS.adjacentTopicThreshold) < 0.08);
-      if (borderline) {
-        queue.push({
-          id: `validate-${transition.id}`,
-          kind: 'transition',
-          targetId: transition.id,
-          title: `${transition.sourceLabel} -> ${transition.targetLabel}`,
-          confidence: transition.confidence,
-          reason: transition.llmLabeled
-            ? 'Transition label is low confidence or near the boundary'
-            : 'Transition did not receive an LLM audit label',
-          evidence: transition.representativeVisits.slice(0, 3)
-        });
-      }
-    }
-    return queue.sort((a, b) => a.confidence - b.confidence).slice(0, 40);
   }
 
   function assignTopicVisuals(topics, coverage) {
@@ -1146,7 +1407,6 @@
     );
     const allPages = aggregatePages(events);
     const pagesForAi = allPages.slice(0, cfg.maxPagesForAi);
-    const categorizedCoverage = summarizeCategorizedCoverage(allPages, pagesForAi, events);
     const usingOllama = cfg.useOllama !== false;
     if (usingOllama) {
       const texts = pagesForAi.map(pageText);
@@ -1155,15 +1415,33 @@
       pagesForAi.forEach((page, index) => { page.embedding = embeddings[index]; });
     }
     const pages = pagesForAi.map(page => ({ ...page, embedding: page.embedding || fallbackPageVector(page) }));
+    const pagesById = new Map(pages.map(page => [page.id, page]));
     const clusterConfig = usingOllama ? cfg : { ...cfg, topicClusterThreshold: cfg.fallbackTopicClusterThreshold };
     let topics = buildInitialClusters(pages, clusterConfig);
-    if (usingOllama) topics = await labelTopicsWithLlm(topics, cfg);
+    let uncategorizedPages = [];
+    let adjudicationSummary = null;
+    if (usingOllama) {
+      topics = await labelTopicsWithLlm(topics, cfg);
+      const adjudicated = await adjudicateUncertainTopics(topics, pagesById, cfg);
+      topics = adjudicated.topics;
+      uncategorizedPages = adjudicated.uncategorizedPages;
+      adjudicationSummary = adjudicated.adjudicationSummary;
+    }
+    const uncategorized = buildUncategorizedBucket(uncategorizedPages);
+    // Coverage is computed against the pages that survived adjudication, so
+    // the reported numbers only count claims the analysis stands behind.
+    const categorizedPages = topics
+      .flatMap(topic => topic.pageIds)
+      .map(id => pagesById.get(id))
+      .filter(Boolean);
+    const categorizedCoverage = summarizeCategorizedCoverage(allPages, categorizedPages, events);
     topics = assignTopicVisuals(topics, coverage);
-    const transitions = usingOllama
-      ? await labelTransitionsWithLlm(buildTopicTransitions(events, pages, topics, cfg), topics, cfg)
-      : buildTopicTransitions(events, pages, topics, cfg);
+    let transitions = buildTopicTransitions(events, pages, topics, cfg);
+    if (usingOllama) {
+      transitions = await labelTransitionsWithLlm(transitions, topics, cfg);
+      transitions = await verifyBorderlineTransitions(transitions, cfg);
+    }
     const metrics = buildMetrics(events, topics, transitions, coverage);
-    const validationQueue = buildValidationQueue(topics, transitions);
     return {
       ok: true,
       version: VERSION,
@@ -1178,12 +1456,16 @@
       topics,
       transitions,
       pages: pages.map(pageEvidence),
+      uncategorized,
+      adjudicationSummary,
       metrics,
-      validationQueue,
       warnings: [
-        'Dwell time is estimated from browser history gaps and is capped at 30 minutes.',
+        'Dwell time is estimated from browser history gaps, capped at 30 minutes; session-ending visits count 1 minute.',
         categorizedCoverage.pagesAnalyzed < categorizedCoverage.pagesAvailable
-          ? `Topic metrics categorize the top ${categorizedCoverage.pagesAnalyzed} pages, covering ${Math.round(categorizedCoverage.activeTimeCoverage * 100)}% of estimated active time and ${Math.round(categorizedCoverage.visitCoverage * 100)}% of visits.`
+          ? `Topic metrics cover ${Math.round(categorizedCoverage.activeTimeCoverage * 100)}% of estimated active time and ${Math.round(categorizedCoverage.visitCoverage * 100)}% of visits.`
+          : null,
+        uncategorized.pageCount
+          ? `${uncategorized.pageCount} pages (${uncategorized.estimatedDwellMinutes}m estimated) were too ambiguous to label and are reported as uncategorized instead of being forced into a topic.`
           : null,
         usingOllama ? null : 'Synthetic/local fallback labels are for tests and demos only.'
       ].filter(Boolean)
@@ -1205,8 +1487,9 @@
       topics: [],
       transitions: [],
       pages: [],
+      uncategorized: buildUncategorizedBucket([]),
+      adjudicationSummary: null,
       metrics: buildMetrics([], [], [], coverage),
-      validationQueue: [],
       warnings: [message]
     };
   }
@@ -1223,7 +1506,8 @@
   }
 
   async function runAnalysis(options) {
-    const cfg = { ...DEFAULTS, ...(options || {}) };
+    const storedSettings = await TrustStore.getSettings();
+    const cfg = { ...DEFAULTS, ...storedSettings, ...(options || {}) };
     const onProgress = cfg.onProgress || function() {};
     // The stored analysis is served until the user explicitly re-runs, so opening
     // the map never triggers history expansion or Ollama work by itself.
@@ -1243,7 +1527,7 @@
         generatedAt: nowIso(),
         topics: [],
         transitions: [],
-        validationQueue: [],
+        uncategorized: buildUncategorizedBucket([]),
         warnings: [
           health.originRejected
             ? 'Ollama rejected the Chrome extension origin. Configure OLLAMA_ORIGINS for this extension before analyzing real browser history.'
@@ -1257,19 +1541,47 @@
     const analysis = await analyzeVisitEvents(loaded.events, { ...cfg, useOllama: true });
     analysis.coverage = loaded.coverage;
     analysis.health = health;
-    analysis.fingerprint = analysisFingerprint(loaded.events, cfg);
     applyCorrections(analysis, await TrustStore.getCorrections());
     await saveLatestAnalysis(analysis);
+    // Housekeeping, best-effort: drop embedding cache rows that have not been
+    // touched recently so the IndexedDB store cannot grow without bound.
+    TrustStore.pruneEmbeddings(cfg.embeddingCacheMaxAgeMs).catch(() => {});
     return analysis;
+  }
+
+  // Topic ids are not stable across re-runs, so a correction saved with a
+  // snapshot of its topic's page URLs can be re-attached to whichever new
+  // topic covers mostly the same pages.
+  function findTopicByPageOverlap(topics, pageUrls) {
+    if (!Array.isArray(pageUrls) || !pageUrls.length) return null;
+    const wanted = new Set(pageUrls);
+    let best = null;
+    let bestScore = 0;
+    for (const topic of topics || []) {
+      const urls = topic.pageUrls || [];
+      if (!urls.length) continue;
+      let overlap = 0;
+      for (const url of urls) if (wanted.has(url)) overlap++;
+      const score = overlap / Math.max(wanted.size, urls.length);
+      if (score > bestScore) {
+        bestScore = score;
+        best = topic;
+      }
+    }
+    return bestScore >= 0.5 ? best : null;
   }
 
   function applyCorrections(analysis, corrections) {
     if (!analysis || !Array.isArray(corrections) || !corrections.length) return analysis;
     const topicById = new Map((analysis.topics || []).map(topic => [topic.id, topic]));
     for (const correction of corrections) {
-      if (correction.kind === 'topic' && correction.label && topicById.has(correction.targetId)) {
-        topicById.get(correction.targetId).label = correction.label;
-        topicById.get(correction.targetId).userCorrected = true;
+      if (correction.kind === 'topic' && correction.label) {
+        const topic = topicById.get(correction.targetId) ||
+          findTopicByPageOverlap(analysis.topics, correction.pageUrls);
+        if (topic) {
+          topic.label = correction.label;
+          topic.userCorrected = true;
+        }
       }
       if (correction.kind === 'transition' && correction.type && TRANSITION_TYPES[correction.type]) {
         const transition = (analysis.transitions || []).find(item => item.id === correction.targetId);
@@ -1327,6 +1639,7 @@
         burden.sameTopicCount = sameTopicCount;
         burden.crossTopicMovementCount = switchCount + adjacentJumpCount;
         burden.switchesPerActiveHour = burden.activeHours ? Number((switchCount / burden.activeHours).toFixed(2)) : 0;
+        burden.switchesByHour = sumSwitchesByHour(crossTopic.filter(t => t.type === 'topic_switch'));
         burden.representativeTransitions = crossTopic.filter(t => t.type === 'topic_switch').slice(0, 5);
         burden.adjacentExamples = crossTopic.filter(t => t.type === 'adjacent_topic_jump').slice(0, 5);
       }
@@ -1343,27 +1656,28 @@
     return analysis;
   }
 
-  function analysisFingerprint(events, config) {
-    const eventText = events.map(event => `${event.normalizedUrl}|${event.visitTime}`).join('\n');
-    return hashString(`${VERSION}|${config.days}|${config.embeddingModel}|${config.chatModel}|${eventText}`);
-  }
-
   function openDb() {
     if (typeof indexedDB === 'undefined') return Promise.resolve(null);
     return new Promise((resolve, reject) => {
-      const request = indexedDB.open('attentionGraphTrustAudit', 2);
+      const request = indexedDB.open('attentionGraphTrustAudit', 3);
       request.onupgradeneeded = () => {
         const db = request.result;
         if (!db.objectStoreNames.contains('analyses')) db.createObjectStore('analyses', { keyPath: 'key' });
         if (!db.objectStoreNames.contains('corrections')) db.createObjectStore('corrections', { keyPath: 'key' });
         if (!db.objectStoreNames.contains('embeddings')) db.createObjectStore('embeddings', { keyPath: 'key' });
+        if (!db.objectStoreNames.contains('settings')) db.createObjectStore('settings', { keyPath: 'key' });
       };
       request.onsuccess = () => resolve(request.result);
       request.onerror = () => reject(request.error);
     });
   }
 
-  const memoryStore = { analyses: new Map(), corrections: new Map(), embeddings: new Map() };
+  const memoryStore = { analyses: new Map(), corrections: new Map(), embeddings: new Map(), settings: new Map() };
+
+  const SETTINGS_KEY = 'user-settings';
+  // Settings the options page may persist; anything else passed to
+  // saveSettings is dropped so stored config cannot shadow arbitrary DEFAULTS.
+  const EDITABLE_SETTINGS = ['days', 'maxPagesForAi', 'embeddingModel', 'chatModel'];
 
   const TrustStore = {
     async getAnalysis(key) {
@@ -1424,6 +1738,50 @@
         tx.oncomplete = () => resolve();
         tx.onerror = () => reject(tx.error);
       });
+    },
+    async pruneEmbeddings(maxAgeMs) {
+      const db = await openDb();
+      if (!db) return 0;
+      const cutoff = Date.now() - (Number(maxAgeMs) || DEFAULTS.embeddingCacheMaxAgeMs);
+      return new Promise((resolve, reject) => {
+        const tx = db.transaction('embeddings', 'readwrite');
+        const store = tx.objectStore('embeddings');
+        let removed = 0;
+        const request = store.openCursor();
+        request.onsuccess = () => {
+          const cursor = request.result;
+          if (!cursor) return;
+          const updatedAt = cursor.value && Number(cursor.value.updatedAt);
+          if (!updatedAt || updatedAt < cutoff) {
+            cursor.delete();
+            removed++;
+          }
+          cursor.continue();
+        };
+        tx.oncomplete = () => resolve(removed);
+        tx.onerror = () => reject(tx.error);
+      });
+    },
+    async getSettings() {
+      const db = await openDb();
+      if (!db) return memoryStore.settings.get(SETTINGS_KEY) || {};
+      const row = await txGet(db, 'settings', SETTINGS_KEY);
+      return row && row.value ? row.value : {};
+    },
+    async saveSettings(settings) {
+      const value = {};
+      for (const key of EDITABLE_SETTINGS) {
+        if (settings && settings[key] !== undefined && settings[key] !== null && settings[key] !== '') {
+          value[key] = settings[key];
+        }
+      }
+      const db = await openDb();
+      if (!db) {
+        memoryStore.settings.set(SETTINGS_KEY, value);
+        return value;
+      }
+      await txPut(db, 'settings', { key: SETTINGS_KEY, value, updatedAt: Date.now() });
+      return value;
     }
   };
 
@@ -1481,15 +1839,16 @@
     TOPIC_COLORS,
     ATTENTION_BANDS,
     TrustStore,
+    adjudicateUncertainTopics,
     aggregatePages,
     analyzeVisitEvents,
-    analysisFingerprint,
     applyCorrections,
     assignTopicVisuals,
     buildInitialClusters,
     buildTopicTransitions,
-    buildValidationQueue,
+    buildUncategorizedBucket,
     buildVisitEventsFromHistoryItems,
+    checkForNewHistory,
     checkOllamaHealth,
     cosine,
     createDemoAnalysis,
@@ -1505,6 +1864,7 @@
     parseOllamaJson,
     runAnalysis,
     saveLatestAnalysis,
-    tokenize
+    tokenize,
+    verifyBorderlineTransitions
   };
 });

@@ -134,6 +134,7 @@ class TopicMapVisualizer {
         : 'Fresh local analysis');
       this.renderAnalysis(analysis);
       this.setLoading(false);
+      this.checkStaleness(analysis);
     } catch (error) {
       console.error(error);
       this.renderUnavailable({
@@ -142,6 +143,38 @@ class TopicMapVisualizer {
         warnings: ['Analysis failed before the topic map could be built.']
       });
     }
+  }
+
+  // If the stored analysis is being shown but the user has browsed since it
+  // was generated, offer a re-run instead of silently serving stale claims.
+  async checkStaleness(analysis) {
+    if (!analysis.fromCache || typeof chrome === 'undefined' || !chrome.history) return;
+    const since = (analysis.coverage && analysis.coverage.endTime) || Date.parse(analysis.generatedAt);
+    try {
+      const staleness = await AttentionAnalysis.checkForNewHistory(since);
+      if (staleness.checked && staleness.newItemCount >= 10) this.showStalenessBanner(staleness);
+    } catch {
+      // Staleness detection is best-effort; never block the map on it.
+    }
+  }
+
+  showStalenessBanner(staleness) {
+    const banner = document.getElementById('staleness-banner');
+    if (!banner) return;
+    const count = staleness.atLimit ? `${staleness.newItemCount}+` : String(staleness.newItemCount);
+    banner.hidden = false;
+    banner.innerHTML = `
+      <span>${escapeHtml(count)} pages visited since this analysis was generated.</span>
+      <button type="button" id="staleness-rerun">Re-run analysis</button>
+      <button type="button" id="staleness-dismiss" class="banner-dismiss" title="Dismiss">×</button>
+    `;
+    document.getElementById('staleness-rerun').addEventListener('click', () => {
+      banner.hidden = true;
+      this.loadAnalysis(true);
+    });
+    document.getElementById('staleness-dismiss').addEventListener('click', () => {
+      banner.hidden = true;
+    });
   }
 
   renderUnavailable(result) {
@@ -519,7 +552,7 @@ class TopicMapVisualizer {
 
   renderDefaultEvidence(analysis) {
     const panel = document.getElementById('evidence-panel');
-    const queueCount = analysis.validationQueue.length;
+    const uncategorized = analysis.uncategorized || { pageCount: 0, estimatedDwellMinutes: 0 };
     const topTopic = analysis.metrics.topicTimeShare[0];
     const collapsed = !!this.evidenceCollapsed;
     panel.innerHTML = `
@@ -535,7 +568,7 @@ class TopicMapVisualizer {
             <div><strong>Graph sectors</strong><span>${this.visibleTopicCount || analysis.topics.length} of ${analysis.topics.length} topics shown</span></div>
             <div><strong>Topic coverage</strong><span>${formatPercent(analysis.categorizedCoverage?.activeTimeCoverage || 1)} active time · ${formatPercent(analysis.categorizedCoverage?.visitCoverage || 1)} visits</span></div>
             <div><strong>Top topic</strong><span>${topTopic ? `${escapeHtml(topTopic.label)} (${topTopic.estimatedDwellMinutes}m est.)` : 'None'}</span></div>
-            <div><strong>Needs review</strong><span>${queueCount} low-confidence items</span></div>
+            <div><strong>Uncategorized</strong><span>${uncategorized.pageCount ? `${uncategorized.pageCount} pages (${uncategorized.estimatedDwellMinutes}m est.) too ambiguous to label` : 'None'}</span></div>
             <div><strong>Analyzed</strong><span>${analysis.generatedAt ? `${formatDate(new Date(analysis.generatedAt).getTime())} (${timeAgo(analysis.generatedAt)})` : 'n/a'}</span></div>
             <div><strong>Source</strong><span>${analysis.source}${analysis.fromCache ? ' (stored until re-run)' : ''}</span></div>
           </div>
@@ -578,7 +611,14 @@ class TopicMapVisualizer {
       event.preventDefault();
       const label = new FormData(event.currentTarget).get('label').toString().trim();
       if (!label) return;
-      await AttentionAnalysis.TrustStore.saveCorrection({ kind: 'topic', targetId: topic.id, label });
+      // The pageUrls snapshot lets this correction re-attach to the matching
+      // topic after a re-run, when topic ids will have changed.
+      await AttentionAnalysis.TrustStore.saveCorrection({
+        kind: 'topic',
+        targetId: topic.id,
+        label,
+        pageUrls: (topic.pageUrls || []).slice(0, 100)
+      });
       topic.label = label;
       this.renderAnalysis(this.analysis);
       this.selectTopic(topic);
