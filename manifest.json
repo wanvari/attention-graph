@@ -1,8 +1,12 @@
 {
   "manifest_version": 3,
-  "name": "Browser History Topic Graph",
-  "version": "1.0",
-  "description": "Visualize your browser history as a topic-based graph",
+  "name": "Cognitive Trails",
+  "version": "3.0",
+  "description": "Local-first map of your browser history as auditable topic flows",
+  "options_ui": {
+    "page": "options.html",
+    "open_in_tab": true
+  },
   "permissions": [
     "history",
     "declarativeNetRequest"

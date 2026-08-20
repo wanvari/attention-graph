@@ -20,9 +20,11 @@
       <div class="controls">
         <div class="buttons">
           <a class="secondary-btn" href="popup.html">Graph</a>
+          <a class="secondary-btn" href="options.html" title="History window, page budget, and local model settings.">Settings</a>
           <button id="refresh-btn" title="Re-run the full local analysis. Otherwise the stored result is reused.">Re-run analysis</button>
         </div>
       </div>
+      <div id="staleness-banner" class="staleness-banner" hidden></div>
     </header>
     <main class="audit-grid">
       <section class="audit-panel" id="coverage-panel">
@@ -45,9 +47,9 @@
         <h2>Recent Topic Path <button class="info-dot" type="button" title="The most recent grouped topic runs in chronological order. This is the closest view to the browsing train of thought.">?</button></h2>
         <div id="path-content" class="audit-content"></div>
       </section>
-      <section class="audit-panel audit-panel-wide" id="validation-panel">
-        <h2>Review Queue <button class="info-dot" type="button" title="Low-confidence topic or flow labels that should be corrected before trusting the analysis.">?</button></h2>
-        <div id="validation-content" class="audit-content"></div>
+      <section class="audit-panel audit-panel-wide" id="uncategorized-panel">
+        <h2>Uncategorized <button class="info-dot" type="button" title="Pages the local analysis could not label with confidence, even after a second adjudication pass. They are excluded from topic claims and counted honestly here instead of being forced into a topic.">?</button></h2>
+        <div id="uncategorized-content" class="audit-content"></div>
       </section>
     </main>
     <div id="loading" class="loading">Loading audit...</div>

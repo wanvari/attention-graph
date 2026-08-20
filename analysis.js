@@ -35,6 +35,7 @@ class TrustAuditDashboard {
       this.setLoading(false);
       const when = analysis.generatedAt ? ` Analyzed ${new Date(analysis.generatedAt).toLocaleString()}.` : '';
       this.setStatus(`${analysis.coverage.visitsExpanded} visits expanded into ${analysis.topics.length} topics.${when}`);
+      this.checkStaleness(analysis);
     } catch (error) {
       console.error(error);
       this.renderUnavailable({ message: error.message || String(error), warnings: ['Audit failed before rendering.'] });
@@ -47,7 +48,37 @@ class TrustAuditDashboard {
     this.renderSwitchBurden(analysis);
     this.renderFocusedRuns(analysis);
     this.renderRecentPath(analysis);
-    this.renderValidationQueue(analysis);
+    this.renderUncategorized(analysis);
+  }
+
+  async checkStaleness(analysis) {
+    if (!analysis.fromCache || typeof chrome === 'undefined' || !chrome.history) return;
+    const since = (analysis.coverage && analysis.coverage.endTime) || Date.parse(analysis.generatedAt);
+    try {
+      const staleness = await AttentionAnalysis.checkForNewHistory(since);
+      if (staleness.checked && staleness.newItemCount >= 10) this.showStalenessBanner(staleness);
+    } catch {
+      // Staleness detection is best-effort; never block the dashboard on it.
+    }
+  }
+
+  showStalenessBanner(staleness) {
+    const banner = document.getElementById('staleness-banner');
+    if (!banner) return;
+    const count = staleness.atLimit ? `${staleness.newItemCount}+` : String(staleness.newItemCount);
+    banner.hidden = false;
+    banner.innerHTML = `
+      <span>${escapeHtml(count)} pages visited since this analysis was generated.</span>
+      <button type="button" id="staleness-rerun">Re-run analysis</button>
+      <button type="button" id="staleness-dismiss" class="banner-dismiss" title="Dismiss">×</button>
+    `;
+    document.getElementById('staleness-rerun').addEventListener('click', () => {
+      banner.hidden = true;
+      this.load(true);
+    });
+    document.getElementById('staleness-dismiss').addEventListener('click', () => {
+      banner.hidden = true;
+    });
   }
 
   renderUnavailable(result) {
@@ -61,7 +92,7 @@ class TrustAuditDashboard {
         <div>Required models: <code>bge-m3:latest</code> and <code>gemma3:12b-32k</code></div>
       </div>
     `;
-    for (const id of ['coverage-content', 'topic-share-content', 'switch-content', 'run-content', 'path-content', 'validation-content']) {
+    for (const id of ['coverage-content', 'topic-share-content', 'switch-content', 'run-content', 'path-content', 'uncategorized-content']) {
       document.getElementById(id).innerHTML = message;
     }
   }
@@ -136,6 +167,7 @@ class TrustAuditDashboard {
         ${metric('Switches / active hr', burden.switchesPerActiveHour, 'Context switches divided by estimated active browsing hours.')}
       </div>
       <div class="flow-mix">${mixRows}</div>
+      ${switchesByHourChart(burden.switchesByHour)}
       <h3>Largest context-switch routes</h3>
       <ul class="evidence-list">${contextExamples || '<li><strong>No context switches found.</strong><span>Consecutive mapped visits stayed within the same or related topics.</span></li>'}</ul>
       ${adjacentExamples ? `<h3>Related continuation routes</h3><ul class="evidence-list">${adjacentExamples}</ul>` : ''}
@@ -178,62 +210,31 @@ class TrustAuditDashboard {
     ` : '<p>No recent mapped topic path available.</p>';
   }
 
-  renderValidationQueue(analysis) {
-    const items = analysis.validationQueue;
-    if (!items.length) {
-      document.getElementById('validation-content').innerHTML = '<p>No low-confidence topics or transitions were flagged.</p>';
+  renderUncategorized(analysis) {
+    const bucket = analysis.uncategorized || { pageCount: 0, pages: [] };
+    const summary = analysis.adjudicationSummary;
+    const summaryLine = summary && summary.audited
+      ? `<p class="audit-note">Second-pass audit: ${summary.audited} uncertain topics re-checked locally — ${summary.kept} confirmed, ${summary.split} split, ${summary.uncategorized + summary.disagreed} moved here.</p>`
+      : '';
+    if (!bucket.pageCount) {
+      document.getElementById('uncategorized-content').innerHTML = `
+        <p>Every analyzed page was labeled with confidence. Nothing was excluded.</p>
+        ${summaryLine}
+      `;
       return;
     }
-    document.getElementById('validation-content').innerHTML = `
-      <div class="validation-list">
-        ${items.map(item => this.validationItem(item)).join('')}
-      </div>
-    `;
-    document.querySelectorAll('.validation-form').forEach(form => {
-      form.addEventListener('submit', async event => {
-        event.preventDefault();
-        const data = new FormData(event.currentTarget);
-        const kind = data.get('kind').toString();
-        const targetId = data.get('targetId').toString();
-        const value = data.get('value').toString().trim();
-        if (!value) return;
-        await AttentionAnalysis.TrustStore.saveCorrection({
-          kind,
-          targetId,
-          label: kind === 'topic' ? value : undefined,
-          type: kind === 'transition' ? value : undefined
-        });
-        const corrections = await AttentionAnalysis.TrustStore.getCorrections();
-        AttentionAnalysis.applyCorrections(this.analysis, corrections);
-        this.analysis.validationQueue = this.analysis.validationQueue.filter(entry =>
-          !(entry.kind === kind && entry.targetId === targetId)
-        );
-        this.render(this.analysis);
-      });
-    });
-  }
-
-  validationItem(item) {
-    const control = item.kind === 'topic'
-      ? `<input name="value" value="${escapeAttribute(item.title)}" />`
-      : `<select name="value">
-          ${Object.keys(AttentionAnalysis.TRANSITION_TYPES).map(type => `<option value="${type}">${AttentionAnalysis.TRANSITION_TYPES[type].label}</option>`).join('')}
-        </select>`;
-    return `
-      <article class="validation-card">
-        <div>
-          <div class="panel-kicker">${escapeHtml(item.kind)}</div>
-          <h3>${escapeHtml(item.title)}</h3>
-          <p>${escapeHtml(item.reason)} · ${Math.round(item.confidence * 100)}% confidence</p>
-          ${validationEvidence(item)}
-        </div>
-        <form class="validation-form">
-          <input type="hidden" name="kind" value="${escapeAttribute(item.kind)}" />
-          <input type="hidden" name="targetId" value="${escapeAttribute(item.targetId)}" />
-          ${control}
-          <button type="submit">Save correction</button>
-        </form>
-      </article>
+    const rows = (bucket.pages || []).slice(0, 12).map(page => `
+      <li>
+        <strong>${escapeHtml(page.title)}</strong>
+        <span>${escapeHtml(page.domain)} · ${page.visitCount} visits · ${page.estimatedDwellMinutes}m estimated</span>
+      </li>
+    `).join('');
+    document.getElementById('uncategorized-content').innerHTML = `
+      <p>${bucket.pageCount} pages (${bucket.estimatedDwellMinutes}m estimated, ${bucket.visitCount} visits) were too ambiguous to
+      label honestly. They are excluded from every topic metric above instead of being forced into a topic.</p>
+      ${summaryLine}
+      <ul class="evidence-list">${rows}</ul>
+      ${bucket.pageCount > 12 ? `<p class="audit-note">Showing the 12 highest-attention uncategorized pages of ${bucket.pageCount}.</p>` : ''}
     `;
   }
 
@@ -263,30 +264,20 @@ class TrustAuditDashboard {
   }
 }
 
-function validationEvidence(item) {
-  const evidence = item.evidence || [];
-  if (!evidence.length) return '';
-  if (item.kind === 'topic') {
-    return `
-      <ul class="evidence-list compact validation-evidence">
-        ${evidence.slice(0, 3).map(page => `
-          <li>
-            <strong>${escapeHtml(page.title)}</strong>
-            <span>${escapeHtml(page.domain)} · ${page.visitCount || 0} visits</span>
-          </li>
-        `).join('')}
-      </ul>
-    `;
-  }
+function switchesByHourChart(byHour) {
+  const entries = Array.isArray(byHour) ? byHour : [];
+  const total = entries.reduce((sum, entry) => sum + entry.count, 0);
+  if (!total) return '';
+  const max = Math.max(...entries.map(entry => entry.count), 1);
+  const columns = entries.map(entry => `
+    <div class="hour-col" title="${escapeAttribute(`${entry.count} context switch${entry.count === 1 ? '' : 'es'} between ${entry.hour}:00 and ${entry.hour}:59`)}">
+      <div class="hour-bar" style="height:${Math.max(entry.count ? 8 : 2, Math.round((entry.count / max) * 100))}%"></div>
+      <span>${entry.hour % 6 === 0 ? entry.hour : ''}</span>
+    </div>
+  `).join('');
   return `
-    <ul class="evidence-list compact validation-evidence">
-      ${evidence.slice(0, 3).map(item => `
-        <li>
-          <strong>${escapeHtml(item.from?.title || 'Previous visit')}</strong>
-          <span>to ${escapeHtml(item.to?.title || 'Next visit')} · ${item.estimatedGapMinutes || 0}m gap</span>
-        </li>
-      `).join('')}
-    </ul>
+    <h3>Context switches by hour of day</h3>
+    <div class="hour-chart">${columns}</div>
   `;
 }
 

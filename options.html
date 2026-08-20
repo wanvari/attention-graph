@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Cognitive Trails Settings</title>
+  <link rel="stylesheet" href="popup.css" />
+  <script src="attentionAnalysis.js"></script>
+</head>
+<body class="dashboard-body">
+  <div class="container options-container">
+    <header>
+      <div class="topbar">
+        <div>
+          <h1>Settings</h1>
+          <div id="status" class="status-line">Changes apply on the next re-run.</div>
+        </div>
+      </div>
+      <div class="controls">
+        <div class="buttons">
+          <a class="secondary-btn" href="popup.html">Graph</a>
+          <a class="secondary-btn" href="analysis.html">Dashboard</a>
+        </div>
+      </div>
+    </header>
+    <main class="options-main">
+      <form id="settings-form" class="options-form">
+        <label class="option-row">
+          <span>
+            <strong>History window</strong>
+            <small>How many days of browser history each analysis reads.</small>
+          </span>
+          <select name="days">
+            <option value="3">3 days</option>
+            <option value="7">7 days</option>
+            <option value="14">14 days</option>
+            <option value="30">30 days</option>
+          </select>
+        </label>
+        <label class="option-row">
+          <span>
+            <strong>Page budget</strong>
+            <small>How many of the highest-attention pages are embedded and labeled. Higher is slower and works the machine harder.</small>
+          </span>
+          <select name="maxPagesForAi">
+            <option value="200">200 pages (light)</option>
+            <option value="420">420 pages (default)</option>
+            <option value="800">800 pages (heavy)</option>
+          </select>
+        </label>
+        <label class="option-row">
+          <span>
+            <strong>Embedding model</strong>
+            <small>Ollama model used through /api/embed. Must be pulled locally.</small>
+          </span>
+          <input name="embeddingModel" placeholder="bge-m3:latest" />
+        </label>
+        <label class="option-row">
+          <span>
+            <strong>Chat model</strong>
+            <small>Ollama model used through /api/chat for topic and transition labels. Must be pulled locally.</small>
+          </span>
+          <input name="chatModel" placeholder="gemma3:12b" />
+        </label>
+        <div class="option-actions">
+          <button type="submit">Save settings</button>
+          <button type="button" id="reset-settings" class="secondary-btn">Reset to defaults</button>
+        </div>
+        <p class="audit-note">The analysis endpoint is fixed to local Ollama at <code>http://localhost:11434</code>; the extension never calls hosted APIs.</p>
+      </form>
+    </main>
+  </div>
+  <script src="options.js"></script>
+</body>
+</html>
