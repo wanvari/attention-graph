@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Cognitive Trails",
-  "version": "1.1",
+  "version": "3.0",
   "description": "Local-first map of your browser history as auditable topic flows",
   "options_ui": {
     "page": "options.html",

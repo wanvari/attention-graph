@@ -1,8 +1,8 @@
 {
   "name": "cognitive-trails",
-  "version": "1.1.0",
+  "version": "3.0.0",
   "private": true,
-  "description": "Local-first Chrome extension that maps browser history into auditable topic flows",
+  "description": "Cognitive Trails v3 - local-first Chrome extension that maps browser history into auditable topic flows",
   "scripts": {
     "test": "node tests/attentionAnalysis.test.js",
     "audit": "node tools/auditHistory.js --days=7 --max-results=2000"

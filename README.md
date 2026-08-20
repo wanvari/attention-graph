@@ -1,4 +1,4 @@
-# Cognitive Trails
+# Cognitive Trails v3
 
 A local-first Chrome extension that maps browser history into auditable topic flows.
 
@@ -7,6 +7,32 @@ The app answers:
 - What topics did my attention move through?
 - How often did I switch between topics?
 - What evidence supports each topic or flow label?
+
+## What v3 changes
+
+v3 is the generation where **the app resolves its own uncertainty instead of asking you to**.
+
+Earlier versions surfaced every low-confidence topic and flow in a manual review
+queue, which made the user the tie-breaker for the model's doubt. v3 removes that
+queue entirely:
+
+- Clusters that look mixed are re-audited locally, twice, with the page order
+  reversed the second time. A verdict counts only when both passes agree.
+- Agreeing on `keep` confirms the topic; agreeing on `split` separates it;
+  agreeing on `uncategorized` -- or disagreeing at all -- excludes the pages.
+- Excluded pages are reported honestly in an **Uncategorized** bucket and are
+  counted out of every topic metric, rather than being forced into a topic.
+- Borderline flow labels get one second-opinion pass; disagreement falls back to
+  the similarity estimate, marked uncertain.
+
+Corrections still exist, but only in context on the map -- rename a topic when it
+bothers you, not because a queue assigned you homework. v3 also fixes dwell-time
+inflation (visits that end a session no longer inherit the time you were away),
+adds a settings page, and reports context switches by hour of day.
+
+The audit budget is capped and sequential -- at most four topic audits (two calls
+each) plus one verification call per re-run -- so a re-analysis stays comfortable
+on an ordinary laptop.
 
 ## Requirements
 
