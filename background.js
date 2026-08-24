@@ -2,7 +2,7 @@
 
 chrome.action.onClicked.addListener((tab) => {
   // Create or focus the history graph tab
-  chrome.tabs.query({ url: chrome.runtime.getURL('popup.html') }, (existingTabs) => {
+  chrome.tabs.query({ url: chrome.runtime.getURL('ui/map.html') }, (existingTabs) => {
     if (existingTabs.length > 0) {
       // If tab already exists, focus it
       chrome.tabs.update(existingTabs[0].id, { active: true });
@@ -10,7 +10,7 @@ chrome.action.onClicked.addListener((tab) => {
     } else {
       // Create new tab
       chrome.tabs.create({
-        url: chrome.runtime.getURL('popup.html'),
+        url: chrome.runtime.getURL('ui/map.html'),
         active: true
       });
     }

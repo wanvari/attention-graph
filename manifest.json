@@ -4,7 +4,7 @@
   "version": "3.0",
   "description": "Local-first map of your browser history as auditable topic flows",
   "options_ui": {
-    "page": "options.html",
+    "page": "ui/options.html",
     "open_in_tab": true
   },
   "permissions": [

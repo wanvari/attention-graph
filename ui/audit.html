@@ -4,8 +4,8 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Cognitive Trails Audit</title>
-  <link rel="stylesheet" href="popup.css" />
-  <script src="attentionAnalysis.js"></script>
+  <link rel="stylesheet" href="map.css" />
+  <script src="../attentionAnalysis.js"></script>
 </head>
 <body class="dashboard-body">
   <div class="container dashboard-container">
@@ -19,7 +19,7 @@
       </div>
       <div class="controls">
         <div class="buttons">
-          <a class="secondary-btn" href="popup.html">Graph</a>
+          <a class="secondary-btn" href="map.html">Graph</a>
           <a class="secondary-btn" href="options.html" title="History window, page budget, and local model settings.">Settings</a>
           <button id="refresh-btn" title="Re-run the full local analysis. Otherwise the stored result is reused.">Re-run analysis</button>
         </div>
@@ -54,6 +54,6 @@
     </main>
     <div id="loading" class="loading">Loading audit...</div>
   </div>
-  <script src="analysis.js"></script>
+  <script src="audit.js"></script>
 </body>
 </html>

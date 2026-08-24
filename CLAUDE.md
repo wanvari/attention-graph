@@ -1,49 +1,41 @@
 # CLAUDE.md
 
-This repository is a Manifest V3 Chrome extension. There is no build system; development is vanilla JavaScript, HTML, CSS, D3, Chrome History APIs, IndexedDB, and local Ollama.
+This repository is **Cognitive Trails v4**: a Manifest V3 Chrome extension that keeps a passive, longitudinal, local-only record of where browsing attention went, surfaced on the new-tab page. There is no build system; development is vanilla JavaScript, HTML, CSS, D3, Chrome extension APIs, IndexedDB, and local Ollama. The authoritative build spec lives in the repo history; this file describes the current architecture and the rules that must not regress.
 
 ## Development Commands
 
 ```bash
-npm test
-node tools/auditHistory.js --days=7 --max-results=2000
-node tools/auditHistory.js --days=7 --max-results=2000 --with-ollama --max-pages=420
+npm test                      # unit + protocol + copy + ui tests (Node, no Ollama, no Chrome)
+node tools/validate.js        # accuracy/consistency validation on fixtures (needs live Ollama)
+node tools/bench.js           # per-stage timing budget (needs live Ollama)
+node tools/embedFixtures.js   # regenerate fixtures/embeddings.bin (needs live Ollama)
+node tools/recordGolden.js    # re-record fixtures/golden/ chat transcripts (needs live Ollama)
 ```
 
-Load the extension through `chrome://extensions/` with Developer mode enabled.
+Load the extension through `chrome://extensions/` with Developer mode enabled. Playwright e2e suites live in `tests/e2e/` and run manually on the development machine.
 
-## Current Architecture
+## Architecture (v4)
 
-- `attentionAnalysis.js` is the shared data and trust layer. It expands `chrome.history.search` results with `chrome.history.getVisits` (concurrently), estimates dwell time, calls local Ollama, clusters pages into topics, adjudicates uncertain clusters, builds topic transitions, caches analyses, and stores user corrections and settings.
-- Analyses run once and persist: `runAnalysis` serves the stored latest analysis from IndexedDB unless `forceRefresh` is set (the Re-run analysis button). Opening the map or dashboard never triggers Ollama work by itself; `checkForNewHistory` makes one cheap `history.search` call to show a staleness banner when new browsing happened since the stored analysis.
-- Uncertainty is resolved by the machine, not the user: `adjudicateUncertainTopics` re-checks the lowest-confidence topics twice (self-consistency; page order reversed on the second pass) with verdicts keep/split/uncategorized, and `verifyBorderlineTransitions` double-checks borderline flow labels. Disagreement between passes always lands in the uncategorized bucket or falls back to the similarity heuristic — never in a user-facing review queue.
-- Compute is capped for average hardware: at most `maxTopicAdjudications` (4) topics × 2 chat calls plus 1 transition-verification call per re-run, all sequential.
-- Per-page embeddings are cached in the IndexedDB `embeddings` store keyed by `model|hash(pageText)`, so re-runs only embed pages that are new or changed; rows unused for 45 days are pruned after each run.
-- `popup.js` renders the topic-sector map. Topic nodes are first-class; selecting a topic or flow opens the evidence panel, which is also where corrections happen in context. Topic-label corrections store a `pageUrls` snapshot so `applyCorrections` can re-attach them by page overlap after a re-run changes topic ids.
-- `analysis.js` renders the trust audit dashboard: coverage, topic time share, switch burden (with a context-switches-by-hour chart), focused runs, and the uncategorized bucket.
-- `options.html`/`options.js` edit the persisted settings (`days`, `maxPagesForAi`, model names) stored in the IndexedDB `settings` store; only keys in `EDITABLE_SETTINGS` persist.
-- `background.js` opens `popup.html` in a full browser tab.
+- **Sensor:** `content/capture.js` runs on every http(s) page, measures active time (visible + focused + input in last 60 s), extracts ≤ 8,000 chars of main-content text, and streams idempotent capture upserts to `background.js`. Denylisted domains/paths and paused intervals capture nothing.
+- **Service worker:** `background.js` only routes messages, buffers captures, manages `chrome.alarms` (`daily` hourly gate, `flush` every 2 min), and spins up the offscreen document. It never runs the pipeline.
+- **Pipeline:** `offscreen/analysis.js` hosts `lib/pipeline.js`, which orchestrates staged, transactional runs: ingest → embed → cluster → label → adjudicate → registry → transitions → metrics. Failed runs never move the watermark and never partially write `topics`.
+- **Registry:** `lib/registry.js` maintains persistent topic identity across runs (`topicId` stable forever), with lifecycle states active/dormant/retired and events (created, dormant, revived, merged-proposal, retired, relabeled). Every metric is computed over the registry, not per-run snapshots.
+- **Storage:** `lib/store.js` wraps IndexedDB `cognitive-trails` v4 (visits, captures, pages, embeddings, topics, memberships, topic_events, daily_metrics, baselines, runs, briefs, transitions, uncategorized, corrections, settings). Loadable in Node with fake-indexeddb.
+- **Surfaces:** `ui/newtab.html` (default new tab; rings + baseline card + daily brief + focused runs; renders < 100 ms from IndexedDB, never triggers Ollama), `ui/map.html` (topic-sector map over the registry), `ui/audit.html` (trust audit: runs, coverage, registry stats, uncategorized by reason, Run now, export, delete), `ui/options.html` (settings incl. denylist, pause, LLM-chat domains).
+- Every `lib/*.js` module uses the UMD wrapper pattern so it loads in the extension and in Node tests. No bundler.
 
-## Product Constraints
+## Product Constraints (do not regress)
 
-- Local-only AI: use `bge-m3:latest` through `/api/embed` and `gemma3:12b` through `/api/chat` at `http://localhost:11434` (models are user-configurable in settings; the endpoint is not).
-- Do not silently fall back to old heuristic semantic claims for real browser history. If Ollama is unavailable, show setup guidance.
-- If Ollama returns `403 Forbidden` only from Chrome, check `rules_ollama.json` and the `declarativeNetRequest` permission. The extension rewrites only local Ollama request origins so Ollama sees `http://localhost` / `http://127.0.0.1`.
-- Dwell time is estimated from history gaps and capped at 30 minutes; session-ending visits get a 1-minute allowance instead of the away gap, so the last page of a session never earns phantom attention.
-- Never show the user a claim the analysis is unsure of: uncertain topics are adjudicated locally, and irreducibly ambiguous pages are excluded and reported as uncategorized coverage. There is no manual validation queue.
-- The topic map defaults to the highest-attention pages and must report categorized visit/time coverage instead of implying every expanded visit has a semantic topic.
-- Every visible topic or transition claim should expose evidence: pages, domains, representative visits, confidence, and rationale.
-- User corrections are persisted in IndexedDB and reapplied to cached analyses (topics re-attach across re-runs via page-URL overlap).
-- Stay light on compute: adjudication and verification passes are capped and sequential; never add unbounded or parallel LLM work to a re-run.
+- **Local-only.** Models: `bge-m3:latest` via `/api/embed`, `gemma3:12b` via `/api/chat`, endpoint fixed at `http://localhost:11434`. The manifest CSP `connect-src` allows only self + localhost:11434 / 127.0.0.1:11434. Any change adding a remote host is wrong.
+- **No normative scores.** Every displayed number is descriptive or a deviation from the user's own 28-day baseline (z-band: "within your range" / "outside usual" / "unusual"). No green/red valence, no "focus score", no good/bad copy — enforced by `tests/copy.test.js` and the CSS hue test.
+- **No goal inference, no synthesis.** The system reports dormancy/revival/convergence facts; it never interprets, recommends, or claims topic X relates to topic Y.
+- **Uncertainty defaults to exclusion.** Self-consistency adjudication (two passes, order reversed, split-grouping Jaccard ≥ 0.60) decides keep/split/uncategorized; disagreement always lands pages in the uncategorized bucket with a reason. There is no manual review queue.
+- **Order-invariant clustering.** Average-linkage agglomerative over cosine distance; assignment to existing registry centroids first (threshold 0.78), remainder clustered at 0.70. Shuffling input must not change partitions.
+- **Compute caps.** Per run: ≤ 300 embeds, ≤ 2 label calls, ≤ 8 adjudication calls, ≤ 2 transition calls, all sequential. Embed model `keep_alive: '5m'` and unloaded before chat calls; both models never resident longer than needed. Idle-gated scheduling.
+- **Privacy.** Content capture never reads form fields; denylist covers banks/health/auth/mail plus sensitive paths; `extractedText` is deleted after 30 days; export contains no page text; delete-everything wipes IndexedDB and `chrome.storage.local`.
+- **Dwell honesty.** Gap-based dwell capped at 30 min; session-ending visits get a 1-minute allowance; capture-measured active time upgrades dwell via `min(activeMs, gap dwell)` and can only lower it.
+- **Coverage honesty.** Categorized share, uncovered transitions, and the uncategorized bucket (by reason) are always shown next to the claims they qualify.
 
 ## Testing Notes
 
-The synthetic tests intentionally protect against the old failure modes:
-
-- Repeated visits must remain separate visit events.
-- Session-ending visits must not inherit the away-from-browser gap as dwell.
-- Same-domain pages are not automatically related.
-- Gemma JSON wrapped in Markdown code fences must parse.
-- Adjudication: agreed keep/split verdicts apply; agreed uncategorized and pass disagreement move pages to the uncategorized bucket; LLM errors keep the topic; the per-run compute cap holds.
-- Transition verification: agreement boosts confidence, disagreement falls back to the similarity heuristic marked uncertain.
-- Corrections refresh derived metrics and re-attach to renamed topic ids by page overlap.
+`npm test` runs everything under `tests/` except `tests/e2e/`. Key invariants the suites protect: repeated visits stay separate events; session-ending visits never inherit away-gaps; same-domain pages are not automatically related; fenced JSON parses; adjudication agreement/disagreement/error semantics and the per-run cap; split-grouping Jaccard boundaries; registry match-score boundaries and lifecycle day-exact transitions; entropy/baseline/z-score math; brief priority order and forbidden-word list; migration from v3 preserves embeddings and drops the old snapshot analysis; watermark never moves on failed runs.
