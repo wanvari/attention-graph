@@ -154,7 +154,10 @@
         tr.appendChild(el('td', null, new Date(run.startedAt).toLocaleString()));
         tr.appendChild(el('td', `status-${run.status}`, run.status));
         tr.appendChild(el('td', null, run.status === 'ok' ? '—' : (run.stage || '—')));
-        tr.appendChild(el('td', null, run.finishedAt ? `${Math.round((run.finishedAt - run.startedAt) / 1000)}s` : '…'));
+        const durationMs = run.durationMs != null
+          ? run.durationMs
+          : (run.finishedAt ? run.finishedAt - run.startedAt : null);
+        tr.appendChild(el('td', null, durationMs != null ? `${Math.round(durationMs / 1000)}s` : '…'));
         tr.appendChild(el('td', null, run.counts ? run.counts.visitsIngested ?? '' : ''));
         tr.appendChild(el('td', null, run.counts ? `${run.counts.pagesEmbedded ?? 0} (+${run.counts.embeddingsCached ?? 0} cached)` : ''));
         tr.appendChild(el('td', null, run.counts ? run.counts.adjudicated ?? '' : ''));
