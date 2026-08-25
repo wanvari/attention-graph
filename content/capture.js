@@ -146,22 +146,27 @@
       delete payload.extractedText;
     }
     const message = { type: 'CAPTURE_UPDATE', capture: payload, final: !!final };
-    try {
-      chrome.runtime.sendMessage(message, () => {
-        if (chrome.runtime.lastError) {
-          // SW unreachable (extension reloading): retry once after 5 s, then drop.
-          setTimeout(() => {
-            try { chrome.runtime.sendMessage(message, () => chrome.runtime.lastError); } catch { /* drop */ }
-          }, 5000);
-        } else {
-          textSent = true;
-        }
-      });
-    } catch {
-      setTimeout(() => {
-        try { chrome.runtime.sendMessage(message, () => chrome.runtime.lastError); } catch { /* drop */ }
-      }, 5000);
-    }
+    // `textSent` is only set when the worker confirms the text reached
+    // IndexedDB. A bare delivery acknowledgement is not enough: the service
+    // worker can be torn down between receiving the message and writing it,
+    // and the text is the one field that is never resent on its own schedule.
+    const onReply = reply => {
+      if (chrome.runtime.lastError) return false;
+      if (reply && reply.textStored) textSent = true;
+      return true;
+    };
+    const trySend = (retriesLeft) => {
+      try {
+        chrome.runtime.sendMessage(message, reply => {
+          if (!onReply(reply) && retriesLeft > 0) {
+            setTimeout(() => trySend(retriesLeft - 1), 5000);
+          }
+        });
+      } catch {
+        if (retriesLeft > 0) setTimeout(() => trySend(retriesLeft - 1), 5000);
+      }
+    };
+    trySend(1);
     lastSentAt = Date.now();
   }
 

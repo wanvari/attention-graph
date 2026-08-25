@@ -23,8 +23,15 @@
   ],
   "content_scripts": [
     {
-      "matches": ["http://*/*", "https://*/*"],
-      "js": ["lib/text.js", "lib/privacy.js", "content/capture.js"],
+      "matches": [
+        "http://*/*",
+        "https://*/*"
+      ],
+      "js": [
+        "lib/text.js",
+        "lib/privacy.js",
+        "content/capture.js"
+      ],
       "run_at": "document_idle",
       "all_frames": false
     }
@@ -45,14 +52,5 @@
   },
   "content_security_policy": {
     "extension_pages": "script-src 'self'; object-src 'self'; connect-src 'self' http://localhost:11434 http://127.0.0.1:11434"
-  },
-  "declarative_net_request": {
-    "rule_resources": [
-      {
-        "id": "ollama_origin_rules",
-        "enabled": true,
-        "path": "rules_ollama.json"
-      }
-    ]
   }
 }

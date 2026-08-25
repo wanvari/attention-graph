@@ -163,6 +163,36 @@ async function main() {
       assert.strictEqual(webRow.source, 'web');
     });
 
+    // --- 1b. the Ollama origin rewrite is scoped to this extension -------
+    await check('origin rewrite applies only to this extension, not to web pages', async () => {
+      const outcome = await extPage.evaluate(async () => {
+        const rules = await chrome.declarativeNetRequest.getDynamicRules();
+        const probe = async initiator => {
+          const result = await chrome.declarativeNetRequest.testMatchOutcome({
+            url: 'http://localhost:11434/api/delete',
+            initiator,
+            type: 'xmlhttprequest',
+            method: 'post'
+          });
+          return result.matchedRules.length;
+        };
+        return {
+          ruleCount: rules.length,
+          allScoped: rules.every(r => Array.isArray(r.condition.initiatorDomains) && r.condition.initiatorDomains.length),
+          fromSelf: await probe(location.origin),
+          fromWebPage: await probe('https://evil.example.com'),
+          fromOtherExtension: await probe('chrome-extension://aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa')
+        };
+      });
+      assert.strictEqual(outcome.ruleCount, 2, 'both local-host rules are registered');
+      assert.strictEqual(outcome.allScoped, true, 'every rule carries an initiatorDomains scope');
+      assert.ok(outcome.fromSelf >= 1, 'the extension itself still gets the rewrite it needs');
+      // The security property: without this, any page could launder its Origin
+      // past Ollama's local-only check and reach side-effecting endpoints.
+      assert.strictEqual(outcome.fromWebPage, 0, 'a web page must never get the rewrite');
+      assert.strictEqual(outcome.fromOtherExtension, 0, 'nor another extension');
+    });
+
     // --- 2. denylist and sensitive paths ---------------------------------
     await check('denylisted domain and /login path capture nothing', async () => {
       const bank = await context.newPage();

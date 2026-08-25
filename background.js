@@ -1,7 +1,7 @@
 // Service worker: message routing, capture buffering, alarms, offscreen
 // lifecycle (spec §1.2-§1.3, §2.4). The pipeline NEVER runs here — the SW is
 // killed after ~30 s idle; all analysis happens in the offscreen document.
-importScripts('lib/text.js', 'lib/privacy.js', 'lib/store.js');
+importScripts('lib/text.js', 'lib/privacy.js', 'lib/store.js', 'lib/ollamaRules.js', 'lib/captureBuffer.js');
 
 const store = CTStore.createStore({});
 
@@ -14,46 +14,37 @@ const HEARTBEAT_FRESH_MS = 60 * 1000;
 const HEARTBEAT_ABANDONED_MS = 10 * 60 * 1000;
 const OLLAMA_BASE = 'http://localhost:11434';
 
-// ---- capture buffering (§2.4) -----------------------------------------
+// ---- scoped Ollama origin rewrite -------------------------------------
 
-const captureBuffer = new Map(); // captureId -> capture
-let bufferedUpdates = 0;
-
-async function flushCaptures() {
-  if (!captureBuffer.size) return;
-  const rows = [];
-  for (const capture of captureBuffer.values()) {
-    rows.push({ ...capture, dayKey: CTText.dayKeyFromMs(capture.startedAt) });
-  }
-  captureBuffer.clear();
-  bufferedUpdates = 0;
+// Registered dynamically so the rule can name this extension as the only
+// permitted initiator. A static rule cannot: the id is not known until load,
+// and an unscoped rule would let every page you visit launder its Origin past
+// Ollama's local-only check.
+async function installOllamaOriginRules() {
   try {
-    await store.open();
-    // Preserve previously stored text when an update legitimately omits it.
-    for (const row of rows) {
-      if (row.extractedText === undefined) {
-        const existing = await store.get('captures', row.captureId);
-        row.extractedText = existing ? existing.extractedText : '';
-      }
-    }
-    await store.bulkPut('captures', rows);
+    const rules = CTOllamaRules.buildRules(chrome.runtime.id);
+    await chrome.declarativeNetRequest.updateDynamicRules({
+      removeRuleIds: CTOllamaRules.RULE_IDS,
+      addRules: rules
+    });
   } catch (error) {
-    console.warn('capture flush failed', error);
+    console.error('failed to install scoped Ollama origin rules', error);
   }
 }
 
-function handleCaptureUpdate(message, sender) {
-  if (!message.capture || !message.capture.captureId) return;
+// ---- capture buffering (§2.4) -----------------------------------------
+
+// Durability rules and their rationale live in lib/captureBuffer.js, which is
+// unit-tested against a real (fake-indexeddb) store.
+const captures = CTCaptureBuffer.createCaptureBuffer({ store });
+
+const flushCaptures = () => captures.flush();
+
+async function handleCaptureUpdate(message, sender) {
   // Defense in depth: never store anything from incognito contexts.
-  if (sender.tab && sender.tab.incognito) return;
-  const incoming = message.capture;
-  const existing = captureBuffer.get(incoming.captureId);
-  if (existing && incoming.extractedText === undefined) {
-    incoming.extractedText = existing.extractedText;
-  }
-  captureBuffer.set(incoming.captureId, { ...existing, ...incoming });
-  bufferedUpdates++;
-  if (bufferedUpdates >= 50) flushCaptures();
+  if (sender && sender.tab && sender.tab.incognito) return { ok: false, textStored: false };
+  await store.open();
+  return captures.submit(message.capture);
 }
 
 // ---- pause switch (§2.7) ----------------------------------------------
@@ -260,12 +251,14 @@ function ensureAlarms() {
 }
 
 chrome.runtime.onInstalled.addListener(() => {
+  installOllamaOriginRules();
   ensureAlarms();
   markAbandonedRuns();
   mirrorSettingsForContentScripts();
 });
 
 chrome.runtime.onStartup.addListener(() => {
+  installOllamaOriginRules();
   ensureAlarms();
   markAbandonedRuns();
   mirrorSettingsForContentScripts();
@@ -279,9 +272,11 @@ chrome.alarms.onAlarm.addListener(alarm => {
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   switch (message && message.type) {
     case 'CAPTURE_UPDATE':
-      handleCaptureUpdate(message, sender);
-      sendResponse({ ok: true });
-      return false;
+      handleCaptureUpdate(message, sender).then(sendResponse, error => {
+        console.warn('capture update failed', error);
+        sendResponse({ ok: false, textStored: false });
+      });
+      return true;
     case 'RUN_PIPELINE_MANUAL':
       // Manual run bypasses freshness and idle gating, not the Ollama check.
       startPipeline('manual', true).then(sendResponse, error => sendResponse({ started: false, reason: String(error) }));
@@ -305,7 +300,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
           sendResponse({
             paused: intervals.some(i => i.end == null),
             ollama: healthy,
-            buffered: captureBuffer.size
+            buffered: captures.size
           });
         })
         .catch(error => sendResponse({ error: String(error) }));
