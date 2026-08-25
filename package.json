@@ -6,10 +6,12 @@
   "scripts": {
     "test": "node tools/runTests.js",
     "validate": "node tools/validate.js",
-    "bench": "node tools/bench.js"
+    "bench": "node tools/bench.js",
+    "e2e": "node tests/e2e/capture.e2e.mjs"
   },
   "devDependencies": {
     "fake-indexeddb": "^6.2.5",
-    "jsdom": "^30.0.1"
+    "jsdom": "^30.0.1",
+    "playwright": "^1.62.1"
   }
 }

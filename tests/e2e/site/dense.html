@@ -1,0 +1,17 @@
+<!DOCTYPE html>
+<html lang="en">
+<head><meta charset="utf-8"><title>Dense DOM extraction benchmark</title></head>
+<body>
+<main id="content"><h1>Dense DOM extraction benchmark</h1></main>
+<script>
+const root = document.getElementById('content');
+for (let i = 0; i < 2500; i++) {
+  const div = document.createElement('div');
+  const span = document.createElement('span');
+  span.textContent = 'node ' + i + ' filler text about kubernetes networking and conntrack tables';
+  div.appendChild(span);
+  root.appendChild(div);
+}
+</script>
+</body>
+</html>

@@ -1,22 +1,39 @@
 {
   "manifest_version": 3,
   "name": "Cognitive Trails",
-  "version": "3.0",
-  "description": "Local-first map of your browser history as auditable topic flows",
+  "version": "4.0",
+  "description": "Passive, local-only, longitudinal record of where your browsing attention went",
   "options_ui": {
     "page": "ui/options.html",
     "open_in_tab": true
   },
   "permissions": [
     "history",
-    "declarativeNetRequest"
+    "declarativeNetRequest",
+    "alarms",
+    "offscreen",
+    "idle",
+    "storage",
+    "notifications",
+    "tabs"
   ],
   "host_permissions": [
     "http://localhost:11434/*",
     "http://127.0.0.1:11434/*"
   ],
+  "content_scripts": [
+    {
+      "matches": ["http://*/*", "https://*/*"],
+      "js": ["lib/text.js", "lib/privacy.js", "content/capture.js"],
+      "run_at": "document_idle",
+      "all_frames": false
+    }
+  ],
+  "chrome_url_overrides": {
+    "newtab": "ui/newtab.html"
+  },
   "action": {
-    "default_title": "Open History Graph"
+    "default_title": "Open Cognitive Trails"
   },
   "background": {
     "service_worker": "background.js"

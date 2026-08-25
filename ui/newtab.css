@@ -1,0 +1,4 @@
+/* Placeholder; the full Whoop-style newtab styling lands in Phase 5. */
+body { background: #101014; color: #d8d8de; font-family: -apple-system, system-ui, sans-serif; }
+.newtab-column { max-width: 720px; margin: 0 auto; padding: 48px 16px; }
+.empty-state { opacity: 0.7; text-align: center; margin-top: 30vh; }
