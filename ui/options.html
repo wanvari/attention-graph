@@ -4,72 +4,123 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Cognitive Trails Settings</title>
-  <link rel="stylesheet" href="map.css" />
-  <script src="../attentionAnalysis.js"></script>
+  <link rel="stylesheet" href="shared.css" />
+  <link rel="stylesheet" href="audit.css" />
+  <link rel="stylesheet" href="options.css" />
 </head>
-<body class="dashboard-body">
-  <div class="container options-container">
-    <header>
-      <div class="topbar">
-        <div>
-          <h1>Settings</h1>
-          <div id="status" class="status-line">Changes apply on the next re-run.</div>
-        </div>
+<body>
+  <div class="audit-page">
+    <header class="audit-header">
+      <div>
+        <h1>Settings</h1>
+        <div id="status" class="audit-status">Changes apply to the next analysis run.</div>
       </div>
-      <div class="controls">
-        <div class="buttons">
-          <a class="secondary-btn" href="map.html">Graph</a>
-          <a class="secondary-btn" href="audit.html">Dashboard</a>
-        </div>
+      <div class="audit-actions">
+        <a class="btn" href="newtab.html">Home</a>
+        <a class="btn" href="map.html">Map</a>
+        <a class="btn" href="audit.html">Audit</a>
       </div>
     </header>
-    <main class="options-main">
-      <form id="settings-form" class="options-form">
-        <label class="option-row">
-          <span>
-            <strong>History window</strong>
-            <small>How many days of browser history each analysis reads.</small>
-          </span>
-          <select name="days">
-            <option value="3">3 days</option>
-            <option value="7">7 days</option>
-            <option value="14">14 days</option>
-            <option value="30">30 days</option>
-          </select>
-        </label>
-        <label class="option-row">
-          <span>
-            <strong>Page budget</strong>
-            <small>How many of the highest-attention pages are embedded and labeled. Higher is slower and works the machine harder.</small>
-          </span>
-          <select name="maxPagesForAi">
-            <option value="200">200 pages (light)</option>
-            <option value="420">420 pages (default)</option>
-            <option value="800">800 pages (heavy)</option>
-          </select>
-        </label>
-        <label class="option-row">
-          <span>
-            <strong>Embedding model</strong>
-            <small>Ollama model used through /api/embed. Must be pulled locally.</small>
-          </span>
-          <input name="embeddingModel" placeholder="bge-m3:latest" />
-        </label>
-        <label class="option-row">
-          <span>
-            <strong>Chat model</strong>
-            <small>Ollama model used through /api/chat for topic and transition labels. Must be pulled locally.</small>
-          </span>
-          <input name="chatModel" placeholder="gemma3:12b" />
-        </label>
+    <main>
+      <form id="settings-form">
+        <section class="panel">
+          <h2>Capture</h2>
+          <div class="option-row">
+            <div>
+              <strong>Pause capture</strong>
+              <small>While paused nothing is captured, and history from the paused interval is excluded from analysis.</small>
+            </div>
+            <button type="button" id="pause-toggle" class="btn">Pause capture</button>
+          </div>
+          <label class="option-row">
+            <div>
+              <strong>Excluded sites</strong>
+              <small>One pattern per line. <code>*.bank.com</code> matches subdomains; <code>login.*</code> matches the leftmost label. Pages matching these, or whose path contains /checkout, /payment, /billing, /login, /signin, /password, /reset, are never captured.</small>
+            </div>
+            <textarea name="denylist" rows="8" spellcheck="false"></textarea>
+          </label>
+          <label class="option-row">
+            <div>
+              <strong>LLM chat sites</strong>
+              <small>Pages on these domains are tagged as chat rather than web, which is what convergence reporting compares. One domain per line.</small>
+            </div>
+            <textarea name="llmChatDomains" rows="6" spellcheck="false"></textarea>
+          </label>
+        </section>
+
+        <section class="panel">
+          <h2>Analysis</h2>
+          <label class="option-row">
+            <div>
+              <strong>First-run history window</strong>
+              <small>How far back the very first analysis reads. Later runs are incremental from a watermark.</small>
+            </div>
+            <select name="days">
+              <option value="7">7 days</option>
+              <option value="14">14 days</option>
+              <option value="28">28 days</option>
+              <option value="60">60 days</option>
+            </select>
+          </label>
+          <label class="option-row">
+            <div>
+              <strong>Pages embedded per run</strong>
+              <small>Higher works the machine harder. Pages beyond the cap are deferred to the next run, never dropped.</small>
+            </div>
+            <select name="maxNewPagesPerRun">
+              <option value="150">150 (light)</option>
+              <option value="300">300 (default)</option>
+              <option value="600">600 (heavy)</option>
+            </select>
+          </label>
+          <label class="option-row">
+            <div>
+              <strong>Only run while the machine is idle</strong>
+              <small>On by default. Turning this off means a run of roughly one to four minutes of local GPU work can start while you are working.</small>
+            </div>
+            <input type="checkbox" name="idleGatingEnabled" />
+          </label>
+          <label class="option-row">
+            <div>
+              <strong>Daily notification</strong>
+              <small>Off by default. At most one per day, after a successful run, only when the brief has a revival, dormancy, or convergence item.</small>
+            </div>
+            <input type="checkbox" name="notificationsEnabled" />
+          </label>
+        </section>
+
+        <section class="panel">
+          <h2>Local models</h2>
+          <label class="option-row">
+            <div>
+              <strong>Embedding model</strong>
+              <small>Pulled locally and served through Ollama's /api/embed.</small>
+            </div>
+            <input name="embeddingModel" placeholder="bge-m3:latest" />
+          </label>
+          <label class="option-row">
+            <div>
+              <strong>Chat model</strong>
+              <small>Pulled locally and served through Ollama's /api/chat.</small>
+            </div>
+            <input name="chatModel" placeholder="gemma3:12b" />
+          </label>
+          <p class="stat-note">
+            The endpoint is fixed to <code>http://localhost:11434</code>. This extension never calls a hosted API, and its
+            content security policy allows no other host.
+          </p>
+        </section>
+
         <div class="option-actions">
-          <button type="submit">Save settings</button>
-          <button type="button" id="reset-settings" class="secondary-btn">Reset to defaults</button>
+          <button type="submit" class="btn primary">Save settings</button>
+          <button type="button" id="reset-settings" class="btn">Reset to defaults</button>
         </div>
-        <p class="audit-note">The analysis endpoint is fixed to local Ollama at <code>http://localhost:11434</code>; the extension never calls hosted APIs.</p>
       </form>
     </main>
   </div>
+  <script src="../lib/text.js"></script>
+  <script src="../lib/privacy.js"></script>
+  <script src="../lib/store.js"></script>
   <script src="options.js"></script>
 </body>
 </html>

@@ -3,10 +3,10 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Cognitive Trails</title>
+  <title>Cognitive Trails Map</title>
+  <link rel="stylesheet" href="shared.css">
   <link rel="stylesheet" href="map.css">
   <script src="../vendor/d3.min.js"></script>
-  <script src="../attentionAnalysis.js"></script>
 </head>
 <body>
   <div class="container">
@@ -14,16 +14,24 @@
       <div class="topbar">
         <div>
           <h1>Cognitive Trails</h1>
-          <div id="status-line" class="status-line">Preparing local topic map...</div>
+          <div id="status-line" class="status-line">Loading the topic registry...</div>
         </div>
-        <div id="health-pill" class="health-pill">Ollama</div>
+        <div id="health-pill" class="health-pill">Registry</div>
       </div>
       <div class="controls">
         <div class="buttons">
-          <button id="refresh-btn" title="Re-run the full local analysis. Otherwise the stored result is reused.">Re-run analysis</button>
-          <a id="dashboard-link" class="secondary-btn" href="audit.html">Dashboard</a>
-          <a class="secondary-btn" href="options.html" title="History window, page budget, and local model settings.">Settings</a>
+          <a class="secondary-btn" href="newtab.html">Home</a>
+          <a id="dashboard-link" class="secondary-btn" href="audit.html">Audit</a>
+          <a class="secondary-btn" href="options.html" title="Capture, window, and local model settings.">Settings</a>
         </div>
+        <label class="control-field">
+          <span>Window</span>
+          <select id="window-days">
+            <option value="7">7 days</option>
+            <option value="30" selected>30 days</option>
+            <option value="90">90 days</option>
+          </select>
+        </label>
         <label class="control-field">
           <span>Flow lines</span>
           <select id="flow-limit">
@@ -52,13 +60,17 @@
       <aside id="evidence-panel" class="evidence-panel">
         <div class="empty-state">
           <h2>Evidence</h2>
-          <p>Select a topic or flow to inspect the visits, confidence, and rationale behind it.</p>
+          <p>Select a topic or flow to inspect the visits, evidence strength, and rationale behind it.</p>
         </div>
       </aside>
     </div>
-    <div id="loading" class="loading">Loading history data...</div>
+    <div id="loading" class="loading">Loading the registry...</div>
     <div id="tooltip" class="tooltip"></div>
   </div>
+  <script src="../lib/text.js"></script>
+  <script src="../lib/privacy.js"></script>
+  <script src="../lib/store.js"></script>
+  <script src="mapData.js"></script>
   <script src="map.js"></script>
 </body>
 </html>

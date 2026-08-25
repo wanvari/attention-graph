@@ -4,56 +4,56 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Cognitive Trails Audit</title>
-  <link rel="stylesheet" href="map.css" />
-  <script src="../attentionAnalysis.js"></script>
+  <link rel="stylesheet" href="shared.css" />
+  <link rel="stylesheet" href="audit.css" />
 </head>
-<body class="dashboard-body">
-  <div class="container dashboard-container">
-    <header>
-      <div class="topbar">
-        <div>
-          <h1>Flow of Thought</h1>
-          <div id="status" class="status-line">Preparing audit dashboard...</div>
-        </div>
-        <div id="health-pill" class="health-pill">Ollama</div>
+<body>
+  <div class="audit-page">
+    <header class="audit-header">
+      <div>
+        <h1>Trust audit</h1>
+        <div id="status" class="audit-status">Loading the record…</div>
       </div>
-      <div class="controls">
-        <div class="buttons">
-          <a class="secondary-btn" href="map.html">Graph</a>
-          <a class="secondary-btn" href="options.html" title="History window, page budget, and local model settings.">Settings</a>
-          <button id="refresh-btn" title="Re-run the full local analysis. Otherwise the stored result is reused.">Re-run analysis</button>
-        </div>
+      <div class="audit-actions">
+        <a class="btn" href="newtab.html">Home</a>
+        <a class="btn" href="map.html">Map</a>
+        <a class="btn" href="options.html">Settings</a>
+        <button id="run-now" class="btn primary">Run now</button>
+        <button id="export-json" class="btn">Export JSON</button>
+        <button id="delete-everything" class="btn danger-outline">Delete everything</button>
       </div>
-      <div id="staleness-banner" class="staleness-banner" hidden></div>
     </header>
     <main class="audit-grid">
-      <section class="audit-panel" id="coverage-panel">
-        <h2>Scope & Reliability <button class="info-dot" type="button" title="How much history was read, how much was categorized into topics, and whether the analysis came from local Ollama or cache.">?</button></h2>
-        <div id="coverage-content" class="audit-content"></div>
+      <section class="panel" id="coverage-panel">
+        <h2>Coverage &amp; honesty</h2>
+        <div id="coverage-content"></div>
       </section>
-      <section class="audit-panel" id="topic-share-panel">
-        <h2>Attention Mix <button class="info-dot" type="button" title="Estimated active browsing time by topic. Time is estimated from gaps between Chrome visits and capped at 30 minutes.">?</button></h2>
-        <div id="topic-share-content" class="audit-content"></div>
+      <section class="panel" id="registry-panel">
+        <h2>Registry</h2>
+        <div id="registry-content"></div>
       </section>
-      <section class="audit-panel" id="switch-panel">
-        <h2>Thought Flow <button class="info-dot" type="button" title="How often consecutive visits stayed in one topic, continued into a related topic, or switched context.">?</button></h2>
-        <div id="switch-content" class="audit-content"></div>
+      <section class="panel" id="uncategorized-panel">
+        <h2>Uncategorized, by reason</h2>
+        <div id="uncategorized-content"></div>
       </section>
-      <section class="audit-panel" id="run-panel">
-        <h2>Focus Runs <button class="info-dot" type="button" title="Consecutive visits grouped under the same topic before a topic change or session break.">?</button></h2>
-        <div id="run-content" class="audit-content"></div>
+      <section class="panel" id="proposals-panel">
+        <h2>Proposals awaiting you</h2>
+        <div id="proposals-content"></div>
       </section>
-      <section class="audit-panel audit-panel-wide" id="path-panel">
-        <h2>Recent Topic Path <button class="info-dot" type="button" title="The most recent grouped topic runs in chronological order. This is the closest view to the browsing train of thought.">?</button></h2>
-        <div id="path-content" class="audit-content"></div>
+      <section class="panel wide" id="runs-panel">
+        <h2>Run history</h2>
+        <div id="runs-content"></div>
       </section>
-      <section class="audit-panel audit-panel-wide" id="uncategorized-panel">
-        <h2>Uncategorized <button class="info-dot" type="button" title="Pages the local analysis could not label with confidence, even after a second adjudication pass. They are excluded from topic claims and counted honestly here instead of being forced into a topic.">?</button></h2>
-        <div id="uncategorized-content" class="audit-content"></div>
+      <section class="panel wide" id="storage-panel">
+        <h2>Storage &amp; models</h2>
+        <div id="storage-content"></div>
       </section>
     </main>
-    <div id="loading" class="loading">Loading audit...</div>
   </div>
+  <script src="../lib/text.js"></script>
+  <script src="../lib/privacy.js"></script>
+  <script src="../lib/store.js"></script>
+  <script src="../lib/ollama.js"></script>
   <script src="audit.js"></script>
 </body>
 </html>

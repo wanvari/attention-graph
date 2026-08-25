@@ -1,4 +1,5 @@
-const FLOW_COLORS = AttentionAnalysis.TRANSITION_TYPES;
+const FLOW_COLORS = CTMapData.TRANSITION_TYPES;
+const store = CTStore.createStore({});
 
 class TopicMapVisualizer {
   constructor() {
@@ -72,7 +73,13 @@ class TopicMapVisualizer {
   }
 
   setupControls() {
-    document.getElementById('refresh-btn').addEventListener('click', () => this.loadAnalysis(true));
+    const windowSelect = document.getElementById('window-days');
+    if (windowSelect) {
+      windowSelect.addEventListener('change', () => {
+        this.windowDays = Number(windowSelect.value) || 30;
+        this.loadAnalysis(false);
+      });
+    }
     document.getElementById('flow-limit').addEventListener('change', () => {
       if (this.analysis && this.analysis.ok) this.renderAnalysis(this.analysis);
     });
@@ -114,24 +121,15 @@ class TopicMapVisualizer {
     this.setStatus(forceRefresh ? 'Re-running the full local analysis...' : 'Loading stored analysis...');
     this.setHealth('checking', forceRefresh ? 'Analyzing locally' : 'Loading');
     try {
-      let analysis;
-      if (typeof chrome === 'undefined' || !chrome.history) {
-        this.setStatus('Demo mode: Chrome history API is unavailable in this context.');
-        analysis = await AttentionAnalysis.createDemoAnalysis();
-      } else {
-        analysis = await AttentionAnalysis.runAnalysis({
-          forceRefresh,
-          onProgress: message => this.showProgress(message)
-        });
-      }
+      await store.open();
+      const analysis = await CTMapData.build(store, { windowDays: this.windowDays || 30 });
+      analysis.corrections = await store.getAll('corrections');
       if (!analysis.ok) {
         this.renderUnavailable(analysis);
         return;
       }
       this.analysis = analysis;
-      this.setHealth('ok', analysis.fromCache
-        ? `Stored analysis · ${timeAgo(analysis.generatedAt)}`
-        : 'Fresh local analysis');
+      this.setHealth('ok', `Registry · last run ${timeAgo(analysis.generatedAt)}`);
       this.renderAnalysis(analysis);
       this.setLoading(false);
       this.checkStaleness(analysis);
@@ -148,11 +146,16 @@ class TopicMapVisualizer {
   // If the stored analysis is being shown but the user has browsed since it
   // was generated, offer a re-run instead of silently serving stale claims.
   async checkStaleness(analysis) {
-    if (!analysis.fromCache || typeof chrome === 'undefined' || !chrome.history) return;
+    if (typeof chrome === 'undefined' || !chrome.history) return;
     const since = (analysis.coverage && analysis.coverage.endTime) || Date.parse(analysis.generatedAt);
     try {
-      const staleness = await AttentionAnalysis.checkForNewHistory(since);
-      if (staleness.checked && staleness.newItemCount >= 10) this.showStalenessBanner(staleness);
+      const items = await new Promise(resolve =>
+        chrome.history.search({ text: '', startTime: since, maxResults: 100 }, resolve));
+      const fresh = (items || []).filter(item =>
+        item && item.url && !CTPrivacy.isFilteredDomain(item.url) && Number(item.lastVisitTime) > since);
+      if (fresh.length >= 10) {
+        this.showStalenessBanner({ newItemCount: fresh.length, atLimit: (items || []).length >= 100 });
+      }
     } catch {
       // Staleness detection is best-effort; never block the map on it.
     }
@@ -181,7 +184,7 @@ class TopicMapVisualizer {
     this.analysis = result;
     this.g.selectAll('*').remove();
     this.setLoading(false);
-    this.setHealth('bad', 'Ollama unavailable');
+    this.setHealth('unavailable', 'Ollama unavailable');
     this.setStatus(result.message || 'Local analysis is unavailable.');
     const health = result.health || {};
     const extensionOrigin = health.origin || (location.origin && location.origin.startsWith('chrome-extension://') ? location.origin : '');
@@ -516,7 +519,7 @@ class TopicMapVisualizer {
       counts[band] = (counts[band] || 0) + 1;
       return counts;
     }, {});
-    const topicLegend = Object.entries(AttentionAnalysis.ATTENTION_BANDS).map(([key, item]) => `
+    const topicLegend = Object.entries(CTMapData.ATTENTION_BANDS).map(([key, item]) => `
       <div class="legend-item" title="${escapeAttribute(item.description)}">
         <div class="legend-dot" style="background:${item.color}"></div>
         <span>${escapeHtml(item.label)}</span>
@@ -611,14 +614,18 @@ class TopicMapVisualizer {
       event.preventDefault();
       const label = new FormData(event.currentTarget).get('label').toString().trim();
       if (!label) return;
-      // The pageUrls snapshot lets this correction re-attach to the matching
-      // topic after a re-run, when topic ids will have changed.
-      await AttentionAnalysis.TrustStore.saveCorrection({
-        kind: 'topic',
+      // Topic ids are stable across runs in v4, so the correction applies
+      // directly to the registry row instead of being re-matched by pages.
+      await store.put('corrections', {
+        correctionId: `topic_label:${topic.id}`,
+        kind: 'topic_label',
         targetId: topic.id,
-        label,
-        pageUrls: (topic.pageUrls || []).slice(0, 100)
+        value: label,
+        pageUrls: (topic.pageUrls || []).slice(0, 100),
+        createdAt: Date.now()
       });
+      const row = await store.get('topics', topic.id);
+      if (row) await store.put('topics', { ...row, label, labelSource: 'user', userCorrected: true });
       topic.label = label;
       this.renderAnalysis(this.analysis);
       this.selectTopic(topic);
@@ -638,11 +645,11 @@ class TopicMapVisualizer {
         <p>${escapeHtml(transition.rationale)}</p>
         <div class="metric-list">
           <div><strong>Observed transitions</strong><span>${transition.visitCount}</span></div>
-          <div><strong>Avg gap</strong><span>${transition.estimatedGapMinutes}m estimated</span></div>
-          <div><strong>Topic similarity</strong><span>${transition.similarity.toFixed(2)}</span></div>
+          <div><strong>Days observed</strong><span>${(transition.days || []).length}</span></div>
+          <div><strong>Topic similarity</strong><span>${(transition.similarity || 0).toFixed(2)}</span></div>
         </div>
-        <h3>Representative visits</h3>
-        ${transitionExamples(transition.representativeVisits)}
+        <h3>When these movements happened</h3>
+        ${hourHistogram(transition.hourCounts)}
         <form id="transition-correction" class="correction-form">
           <label>Correct flow label</label>
           <select name="type">
@@ -655,7 +662,18 @@ class TopicMapVisualizer {
     document.getElementById('transition-correction').addEventListener('submit', async event => {
       event.preventDefault();
       const type = new FormData(event.currentTarget).get('type').toString();
-      await AttentionAnalysis.TrustStore.saveCorrection({ kind: 'transition', targetId: transition.id, type });
+      await store.put('corrections', {
+        correctionId: `transition_type:${transition.sourceTopicId}->${transition.targetTopicId}`,
+        kind: 'transition_type',
+        targetId: `${transition.sourceTopicId}->${transition.targetTopicId}`,
+        value: type,
+        pageUrls: [],
+        createdAt: Date.now()
+      });
+      for (const day of transition.days || []) {
+        const row = await store.get('transitions', [day, transition.sourceTopicId, transition.targetTopicId]);
+        if (row) await store.put('transitions', { ...row, type, userCorrected: true });
+      }
       transition.type = type;
       transition.label = FLOW_COLORS[type].label;
       transition.color = FLOW_COLORS[type].color;
@@ -814,7 +832,7 @@ class TopicMapVisualizer {
   }
 
   topicTooltip(topic) {
-    return `<strong>${escapeHtml(topic.label)}</strong><br>#${topic.attentionRank || '?'} ${escapeHtml(topic.attentionBandLabel || 'topic')}<br>${topic.visitCount} visits · ${topic.estimatedDwellMinutes}m estimated<br>${formatPercent(topic.attentionShare || 0)} of mapped active time<br>Confidence ${Math.round(topic.confidence * 100)}%`;
+    return `<strong>${escapeHtml(topic.label)}</strong><br>#${topic.attentionRank || '?'} ${escapeHtml(topic.attentionBandLabel || 'topic')}<br>${topic.visitCount} visits · ${topic.estimatedDwellMinutes}m estimated<br>${formatPercent(topic.attentionShare || 0)} of mapped active time<br>${topic.pageCount} pages of evidence`;
   }
 
   pageTooltip(page) {
@@ -822,7 +840,7 @@ class TopicMapVisualizer {
   }
 
   transitionTooltip(transition) {
-    return `<strong>${escapeHtml(transition.sourceLabel)} -> ${escapeHtml(transition.targetLabel)}</strong><br>${escapeHtml(transition.label)}<br>${transition.visitCount} consecutive visits<br>Avg gap ${transition.estimatedGapMinutes}m<br>Confidence ${Math.round(transition.confidence * 100)}%`;
+    return `<strong>${escapeHtml(transition.sourceLabel)} -> ${escapeHtml(transition.targetLabel)}</strong><br>${escapeHtml(transition.label)}<br>${transition.visitCount} consecutive visits<br>on ${(transition.days || []).length} day(s)${transition.uncertain ? ' · label uncertain' : ''}`;
   }
 }
 
@@ -851,14 +869,27 @@ function flowPath(source, target, sourcePadding, targetPadding, bend) {
   return `M${x1},${y1} Q${cx},${cy} ${x2},${y2}`;
 }
 
+// Evidence strength renders as a bar with a coarse word, never a number:
+// the heuristic score ranks clusters for the audit gate, it is not a
+// probability the record can honestly display (spec D4).
 function confidenceBar(confidence) {
-  const pct = Math.round((confidence || 0) * 100);
+  const value = Math.max(0, Math.min(1, confidence || 0));
+  const strength = value >= 0.75 ? 'strong' : value >= 0.55 ? 'moderate' : 'limited';
   return `
     <div class="confidence">
-      <div class="confidence-meta"><span>Confidence</span><strong>${pct}%</strong></div>
-      <div class="confidence-track"><div style="width:${pct}%"></div></div>
+      <div class="confidence-meta"><span>Evidence</span><strong>${strength}</strong></div>
+      <div class="confidence-track"><div style="width:${Math.round(value * 100)}%"></div></div>
     </div>
   `;
+}
+
+function hourHistogram(hourCounts) {
+  const counts = Array.isArray(hourCounts) ? hourCounts : [];
+  const max = Math.max(1, ...counts);
+  if (!counts.some(Boolean)) return '<p>No hour-of-day detail recorded.</p>';
+  return `<div class="hour-histogram">${counts.map((count, hour) => `
+    <span title="${hour}:00 - ${count} movement(s)" style="height:${Math.round((count / max) * 100)}%"></span>
+  `).join('')}</div><div class="hour-axis"><span>00</span><span>06</span><span>12</span><span>18</span><span>23</span></div>`;
 }
 
 function pageList(pages) {
@@ -876,7 +907,7 @@ function transitionExamples(items) {
   return `<ul class="evidence-list">${items.map(item => `
     <li>
       <strong>${escapeHtml(item.from.title)}</strong>
-      <span>to ${escapeHtml(item.to.title)} · ${item.estimatedGapMinutes}m gap</span>
+      <span>to ${escapeHtml(item.to.title)}</span>
     </li>
   `).join('')}</ul>`;
 }

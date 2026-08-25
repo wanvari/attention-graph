@@ -1,341 +1,297 @@
-class TrustAuditDashboard {
-  constructor() {
-    this.analysis = null;
-    this.bindControls();
-    const params = new URLSearchParams(window.location.search);
-    this.load(params.get('refresh') === '1' || params.get('forceRefresh') === '1');
+// Trust audit dashboard (spec §5.2): run history, registry stats, coverage
+// honesty, uncategorized by reason, storage, Run now / Export / Delete.
+// Exposed as CTAudit so tests and the demo can drive it with injected data.
+(function(root, factory) {
+  const api = factory();
+  if (typeof module !== 'undefined' && module.exports) module.exports = api;
+  root.CTAudit = api;
+})(typeof globalThis !== 'undefined' ? globalThis : this, function() {
+  'use strict';
+
+  function el(tag, className, text) {
+    const node = document.createElement(tag);
+    if (className) node.className = className;
+    if (text !== undefined) node.textContent = text;
+    return node;
   }
 
-  bindControls() {
-    document.getElementById('refresh-btn').addEventListener('click', () => this.load(true));
+  function statRow(name, value) {
+    const row = el('div', 'stat-row');
+    row.appendChild(el('span', null, name));
+    row.appendChild(el('span', 'value', String(value)));
+    return row;
   }
 
-  async load(forceRefresh) {
-    this.setLoading(true, forceRefresh ? 'Re-running local analysis...' : 'Loading stored analysis...');
-    this.setStatus(forceRefresh ? 'Re-running the full local analysis...' : 'Loading stored analysis...');
-    this.setHealth('checking', forceRefresh ? 'Analyzing locally' : 'Loading');
-    try {
-      let analysis;
-      if (typeof chrome === 'undefined' || !chrome.history) {
-        this.setStatus('Demo mode: Chrome history API is unavailable in this context.');
-        analysis = await AttentionAnalysis.createDemoAnalysis();
-      } else {
-        analysis = await AttentionAnalysis.runAnalysis({
-          forceRefresh,
-          onProgress: message => this.showProgress(message)
-        });
+  function fmtMinutes(ms) {
+    const minutes = Math.round((ms || 0) / 60000);
+    return minutes >= 60 ? `${Math.floor(minutes / 60)}h ${minutes % 60}m` : `${minutes}m`;
+  }
+
+  function fmtPct(share) {
+    return `${Math.round((share || 0) * 100)}%`;
+  }
+
+  async function loadData(store) {
+    return {
+      runs: await store.getAll('runs'),
+      topics: await store.getAll('topics'),
+      events: await store.getAll('topic_events'),
+      metrics: await store.getAll('daily_metrics'),
+      uncategorized: await store.getAll('uncategorized'),
+      pages: await store.getAll('pages'),
+      corrections: await store.getAll('corrections'),
+      settings: await store.getSettingsMap()
+    };
+  }
+
+  function render(data, doc, hooks) {
+    const d = doc || document;
+    const byId = id => d.getElementById(id);
+
+    // ---- coverage & honesty ------------------------------------------
+    const coverage = byId('coverage-content');
+    coverage.textContent = '';
+    const recent = data.metrics.slice().sort((a, b) => b.day.localeCompare(a.day)).slice(0, 14);
+    if (recent.length) {
+      const activeMs = recent.reduce((sum, m) => sum + m.activeMs, 0);
+      const catShare = recent.reduce((sum, m) => sum + m.categorizedShare * m.activeMs, 0) / (activeMs || 1);
+      const uncovered = recent.reduce((sum, m) => sum + (m.uncoveredTransitions || 0), 0);
+      coverage.appendChild(statRow('Days on record', data.metrics.length));
+      coverage.appendChild(statRow('Active time (last 14 days)', fmtMinutes(activeMs)));
+      coverage.appendChild(statRow('Categorized share (dwell-weighted)', fmtPct(catShare)));
+      const bar = el('div', 'bar');
+      const fill = el('span');
+      fill.style.width = `${Math.round(catShare * 100)}%`;
+      bar.appendChild(fill);
+      coverage.appendChild(bar);
+      coverage.appendChild(statRow('Transitions touching uncategorized pages', uncovered));
+      const contentPages = data.pages.filter(p => p.embeddingVariant === 'content').length;
+      const embedded = data.pages.filter(p => p.embeddingVariant).length;
+      coverage.appendChild(statRow('Pages embedded from content (vs title only)',
+        embedded ? `${fmtPct(contentPages / embedded)} of ${embedded}` : '0'));
+      coverage.appendChild(el('div', 'stat-note',
+        'Dwell is estimated from history gaps (capped 30 min; session enders get 1 min) and lowered — never raised — by measured active time.'));
+    } else {
+      coverage.appendChild(el('div', 'stat-note', 'No analyzed days yet.'));
+    }
+
+    // ---- registry -----------------------------------------------------
+    const registry = byId('registry-content');
+    registry.textContent = '';
+    const byState = { active: 0, dormant: 0, retired: 0 };
+    for (const topic of data.topics) byState[topic.state] = (byState[topic.state] || 0) + 1;
+    registry.appendChild(statRow('Active topics', byState.active || 0));
+    registry.appendChild(statRow('Dormant topics', byState.dormant || 0));
+    registry.appendChild(statRow('Retired topics', byState.retired || 0));
+    registry.appendChild(statRow('User-corrected labels', data.topics.filter(t => t.userCorrected).length));
+    const nearMisses = data.events.filter(e => e.type === 'created' && e.detail && e.detail.nearMiss);
+    registry.appendChild(statRow('Near-miss creations (0.65–0.80)', nearMisses.length));
+    const lifecycleCounts = {};
+    for (const event of data.events) lifecycleCounts[event.type] = (lifecycleCounts[event.type] || 0) + 1;
+    registry.appendChild(el('div', 'stat-note',
+      `Lifecycle events: ${Object.entries(lifecycleCounts).map(([k, v]) => `${k} ${v}`).join(', ') || 'none yet'}.`));
+
+    // ---- uncategorized by reason -------------------------------------
+    const uncategorized = byId('uncategorized-content');
+    uncategorized.textContent = '';
+    const byReason = new Map();
+    for (const row of data.uncategorized) {
+      const entry = byReason.get(row.reason) || { count: 0, dwellMs: 0 };
+      entry.count++;
+      entry.dwellMs += row.dwellMs || 0;
+      byReason.set(row.reason, entry);
+    }
+    if (byReason.size) {
+      for (const [reason, entry] of [...byReason.entries()].sort((a, b) => b[1].count - a[1].count)) {
+        uncategorized.appendChild(statRow(reason.replace(/_/g, ' '), `${entry.count} pages · ${fmtMinutes(entry.dwellMs)}`));
       }
-      if (!analysis.ok) {
-        this.renderUnavailable(analysis);
-        return;
+      uncategorized.appendChild(el('div', 'stat-note',
+        'These pages are excluded from every topic claim instead of being forced into one.'));
+    } else {
+      uncategorized.appendChild(el('div', 'stat-note', 'Nothing excluded yet.'));
+    }
+
+    // ---- merge proposals ---------------------------------------------
+    const proposals = byId('proposals-content');
+    proposals.textContent = '';
+    const topicById = new Map(data.topics.map(t => [t.topicId, t]));
+    const executed = new Set(data.corrections.filter(c => c.kind === 'merge_topics').map(c => c.targetId));
+    const pending = data.events.filter(e =>
+      e.type === 'merged' && e.detail && e.detail.proposal &&
+      !executed.has(`${e.detail.topicA}|${e.detail.topicB}`)
+    );
+    if (pending.length) {
+      for (const event of pending) {
+        const a = topicById.get(event.detail.topicA);
+        const b = topicById.get(event.detail.topicB);
+        if (!a || !b) continue;
+        const card = el('div', 'proposal');
+        card.appendChild(el('div', null,
+          `“${a.label}” and “${b.label}” both matched the same new pages (scores ${event.detail.scoreA.toFixed(2)} / ${event.detail.scoreB.toFixed(2)}). Merge them?`));
+        const btn = el('button', 'btn', 'Merge these topics');
+        btn.addEventListener('click', () => hooks && hooks.onMergeTopics && hooks.onMergeTopics(event.detail, btn));
+        card.appendChild(btn);
+        proposals.appendChild(card);
       }
-      this.analysis = analysis;
-      this.setHealth('ok', analysis.fromCache ? 'Stored analysis' : 'Fresh local analysis');
-      this.render(analysis);
-      this.setLoading(false);
-      const when = analysis.generatedAt ? ` Analyzed ${new Date(analysis.generatedAt).toLocaleString()}.` : '';
-      this.setStatus(`${analysis.coverage.visitsExpanded} visits expanded into ${analysis.topics.length} topics.${when}`);
-      this.checkStaleness(analysis);
-    } catch (error) {
-      console.error(error);
-      this.renderUnavailable({ message: error.message || String(error), warnings: ['Audit failed before rendering.'] });
+    } else {
+      proposals.appendChild(el('div', 'stat-note',
+        'None. Topic merges are never automatic — proposals appear here and wait for you.'));
+    }
+
+    // ---- run history --------------------------------------------------
+    const runsPanel = byId('runs-content');
+    runsPanel.textContent = '';
+    const runs = data.runs.slice().sort((a, b) => b.startedAt - a.startedAt).slice(0, 20);
+    if (runs.length) {
+      const table = el('table', 'audit-table');
+      const head = el('tr');
+      for (const h of ['Started', 'Status', 'Stage', 'Duration', 'Visits', 'Embedded', 'Audited', 'Excluded', 'Warnings']) {
+        head.appendChild(el('th', null, h));
+      }
+      table.appendChild(head);
+      for (const run of runs) {
+        const tr = el('tr');
+        tr.appendChild(el('td', null, new Date(run.startedAt).toLocaleString()));
+        tr.appendChild(el('td', `status-${run.status}`, run.status));
+        tr.appendChild(el('td', null, run.status === 'ok' ? '—' : (run.stage || '—')));
+        tr.appendChild(el('td', null, run.finishedAt ? `${Math.round((run.finishedAt - run.startedAt) / 1000)}s` : '…'));
+        tr.appendChild(el('td', null, run.counts ? run.counts.visitsIngested ?? '' : ''));
+        tr.appendChild(el('td', null, run.counts ? `${run.counts.pagesEmbedded ?? 0} (+${run.counts.embeddingsCached ?? 0} cached)` : ''));
+        tr.appendChild(el('td', null, run.counts ? run.counts.adjudicated ?? '' : ''));
+        tr.appendChild(el('td', null, run.counts ? run.counts.uncategorized ?? '' : ''));
+        tr.appendChild(el('td', null, (run.warnings || []).join('; ') || (run.error || '')));
+        table.appendChild(tr);
+      }
+      runsPanel.appendChild(table);
+    } else {
+      runsPanel.appendChild(el('div', 'stat-note', 'No runs yet. Press "Run now" (needs local Ollama).'));
+    }
+
+    // ---- storage & models --------------------------------------------
+    const storagePanel = byId('storage-content');
+    storagePanel.textContent = '';
+    storagePanel.appendChild(statRow('Pages on record', data.pages.length));
+    storagePanel.appendChild(statRow('Uncategorized rows', data.uncategorized.length));
+    storagePanel.appendChild(statRow('Topics', data.topics.length));
+    const models = `${data.settings.embeddingModel || 'bge-m3:latest'} · ${data.settings.chatModel || 'gemma3:12b'}`;
+    storagePanel.appendChild(statRow('Models (local Ollama only)', models));
+    if (hooks && hooks.storageEstimate) {
+      Promise.resolve(hooks.storageEstimate()).then(estimate => {
+        if (!estimate) return;
+        storagePanel.appendChild(statRow('IndexedDB usage',
+          `${Math.round(estimate.usage / 1048576)} MB of ${Math.round(estimate.quota / 1048576)} MB quota`));
+        if (estimate.usage / estimate.quota > 0.8) {
+          storagePanel.appendChild(el('div', 'stat-note', 'Storage above 80% of quota — the pipeline is warning about this, never silently dropping data.'));
+        }
+      }).catch(() => {});
+    }
+    if (hooks && hooks.runningModels) {
+      Promise.resolve(hooks.runningModels()).then(list => {
+        if (!list) return;
+        storagePanel.appendChild(statRow('Resident in Ollama now',
+          list.length ? list.map(m => m.name).join(', ') : 'nothing'));
+      }).catch(() => {});
     }
   }
 
-  render(analysis) {
-    this.renderCoverage(analysis);
-    this.renderTopicShare(analysis);
-    this.renderSwitchBurden(analysis);
-    this.renderFocusedRuns(analysis);
-    this.renderRecentPath(analysis);
-    this.renderUncategorized(analysis);
-  }
-
-  async checkStaleness(analysis) {
-    if (!analysis.fromCache || typeof chrome === 'undefined' || !chrome.history) return;
-    const since = (analysis.coverage && analysis.coverage.endTime) || Date.parse(analysis.generatedAt);
-    try {
-      const staleness = await AttentionAnalysis.checkForNewHistory(since);
-      if (staleness.checked && staleness.newItemCount >= 10) this.showStalenessBanner(staleness);
-    } catch {
-      // Staleness detection is best-effort; never block the dashboard on it.
-    }
-  }
-
-  showStalenessBanner(staleness) {
-    const banner = document.getElementById('staleness-banner');
-    if (!banner) return;
-    const count = staleness.atLimit ? `${staleness.newItemCount}+` : String(staleness.newItemCount);
-    banner.hidden = false;
-    banner.innerHTML = `
-      <span>${escapeHtml(count)} pages visited since this analysis was generated.</span>
-      <button type="button" id="staleness-rerun">Re-run analysis</button>
-      <button type="button" id="staleness-dismiss" class="banner-dismiss" title="Dismiss">×</button>
-    `;
-    document.getElementById('staleness-rerun').addEventListener('click', () => {
-      banner.hidden = true;
-      this.load(true);
-    });
-    document.getElementById('staleness-dismiss').addEventListener('click', () => {
-      banner.hidden = true;
-    });
-  }
-
-  renderUnavailable(result) {
-    this.setLoading(false);
-    this.setHealth('bad', 'Ollama unavailable');
-    this.setStatus(result.message || 'Local audit is unavailable.');
-    const message = `
-      <div class="setup-box">
-        <div>${escapeHtml(result.message || 'Could not run the local trust audit.')}</div>
-        <div>Expected local endpoint: <code>http://localhost:11434</code></div>
-        <div>Required models: <code>bge-m3:latest</code> and <code>gemma3:12b-32k</code></div>
-      </div>
-    `;
-    for (const id of ['coverage-content', 'topic-share-content', 'switch-content', 'run-content', 'path-content', 'uncategorized-content']) {
-      document.getElementById(id).innerHTML = message;
-    }
-  }
-
-  renderCoverage(analysis) {
-    const c = analysis.coverage;
-    const mapped = analysis.categorizedCoverage || {};
-    const models = analysis.models || {};
-    document.getElementById('coverage-content').innerHTML = `
-      <div class="audit-metrics">
-        ${metric('Visits read', c.visitsExpanded, 'Individual Chrome visit records expanded from the History API. Repeated visits are separate records.')}
-        ${metric('Visits mapped', `${mapped.visitsCategorized || 0} (${formatPercent(mapped.visitCoverage || 0)})`, 'Mapped visits are visits whose page was included in the topic analysis set.')}
-        ${metric('Mapped active time', `${mapped.estimatedActiveMinutes || 0}m (${formatPercent(mapped.activeTimeCoverage || 0)})`, 'Estimated active time represented by categorized pages.')}
-        ${metric('History sessions', c.sessionCount, 'A new session starts after a gap longer than 30 minutes.')}
-        ${metric('Source', analysis.source + (analysis.fromCache ? ' cache' : ''), 'local-ollama means embeddings and labels came from local Ollama. local-test means demo/test fallback data.')}
-        ${metric('Models', `${models.embedding || 'n/a'} / ${models.chat || 'n/a'}`, 'Embedding model and chat model used for semantic grouping and labels.')}
-      </div>
-      <div class="audit-note-grid">
-        <p class="audit-note"><strong>Range:</strong> ${formatDate(c.startTime)} to ${formatDate(c.endTime)}</p>
-        <p class="audit-note"><strong>Dwell method:</strong> ${escapeHtml(c.dwellMethod)}.</p>
-      </div>
-      ${analysis.fromCache ? '<p class="audit-note">Loaded from the stored analysis. Use Re-run analysis to compute a fresh one.</p>' : ''}
-    `;
-  }
-
-  renderTopicShare(analysis) {
-    const rows = analysis.metrics.topicTimeShare.slice(0, 12).map(item => {
-      const pct = Math.round((item.share || 0) * 100);
-      const domains = (item.topDomains || []).slice(0, 3).map(domain => domain.domain).join(', ');
-      return `
-        <div class="bar-row" title="${escapeAttribute(`${item.label}: ${pct}% of estimated active time, ${item.visitCount} visits, ${Math.round(item.confidence * 100)}% label confidence.`)}">
-          <div class="bar-row-label">
-            <strong><span class="topic-swatch" style="background:${escapeAttribute(item.color || '#64748b')}"></span>${escapeHtml(item.label)}</strong>
-            <span>${pct}% active time · ${item.estimatedDwellMinutes}m · ${item.visitCount} visits</span>
-          </div>
-          <div class="bar-track"><div style="width:${Math.max(3, pct)}%; background:${escapeAttribute(item.color || '#4285f4')}"></div></div>
-          <div class="bar-meta">${escapeHtml(item.bandLabel || 'Topic')} · ${Math.round(item.confidence * 100)}% label confidence${domains ? ` · ${escapeHtml(domains)}` : ''}</div>
-        </div>
-      `;
-    }).join('');
-    document.getElementById('topic-share-content').innerHTML = rows || '<p>No topics available.</p>';
-  }
-
-  renderSwitchBurden(analysis) {
-    const burden = analysis.metrics.switchBurden;
-    const mix = analysis.metrics.transitionMix?.items || [];
-    const mixRows = mix.map(item => `
-      <div class="flow-mix-card" title="${escapeAttribute(item.description)}">
-        <span class="flow-mix-dot" style="background:${escapeAttribute(item.color)}"></span>
-        <strong>${escapeHtml(item.label)}</strong>
-        <b>${item.count}</b>
-        <small>${formatPercent(item.share)} of observed transitions</small>
-      </div>
-    `).join('');
-    const contextExamples = burden.representativeTransitions.map(t => `
-      <li>
-        <strong>${escapeHtml(t.sourceLabel)} -> ${escapeHtml(t.targetLabel)}</strong>
-        <span>${t.visitCount} consecutive visits · ${Math.round(t.confidence * 100)}% confidence · ${escapeHtml(t.rationale)}</span>
-      </li>
-    `).join('');
-    const adjacentExamples = (burden.adjacentExamples || []).map(t => `
-      <li>
-        <strong>${escapeHtml(t.sourceLabel)} -> ${escapeHtml(t.targetLabel)}</strong>
-        <span>${t.visitCount} consecutive visits · ${Math.round(t.confidence * 100)}% confidence · ${escapeHtml(t.rationale)}</span>
-      </li>
-    `).join('');
-    document.getElementById('switch-content').innerHTML = `
-      <div class="audit-metrics">
-        ${metric('Same-topic continuations', burden.sameTopicCount || 0, 'Consecutive visits that stayed inside the same topic cluster.')}
-        ${metric('Related continuations', burden.adjacentJumpCount || 0, 'Consecutive visits that moved to a related topic.')}
-        ${metric('Context switches', burden.switchCount, 'Consecutive visits that moved to a less-related topic or different task.')}
-        ${metric('Switches / active hr', burden.switchesPerActiveHour, 'Context switches divided by estimated active browsing hours.')}
-      </div>
-      <div class="flow-mix">${mixRows}</div>
-      ${switchesByHourChart(burden.switchesByHour)}
-      <h3>Largest context-switch routes</h3>
-      <ul class="evidence-list">${contextExamples || '<li><strong>No context switches found.</strong><span>Consecutive mapped visits stayed within the same or related topics.</span></li>'}</ul>
-      ${adjacentExamples ? `<h3>Related continuation routes</h3><ul class="evidence-list">${adjacentExamples}</ul>` : ''}
-    `;
-  }
-
-  renderFocusedRuns(analysis) {
-    const runs = analysis.metrics.focusedRuns;
-    const longest = runs.longestRun;
-    const topRuns = runs.topRuns || (longest ? [longest] : []);
-    document.getElementById('run-content').innerHTML = `
-      <div class="audit-metrics">
-        ${metric('Focus runs', runs.runCount, 'A focus run is consecutive mapped visits in the same topic before a topic change or session break.')}
-        ${metric('Median run', `${runs.medianEstimatedDwellMinutes}m est.`, 'The middle focus-run duration after sorting all focus runs by estimated dwell time.')}
-        ${metric('Longest run', longest ? `${longest.estimatedDwellMinutes}m est.` : 'n/a', 'The single longest same-topic run in the selected history window.')}
-        ${metric('Longest topic', longest ? longest.label : 'n/a', 'The topic attached to the longest focus run.')}
-      </div>
-      <h3>Longest focus runs</h3>
-      <div class="run-list">
-        ${topRuns.map((run, index) => focusRunCard(run, index + 1)).join('') || '<p>No focus runs available.</p>'}
-      </div>
-    `;
-  }
-
-  renderRecentPath(analysis) {
-    const recentRuns = (analysis.metrics.focusedRuns.recentRuns || []).slice().reverse();
-    document.getElementById('path-content').innerHTML = recentRuns.length ? `
-      <div class="path-list">
-        ${recentRuns.map((run, index) => `
-          <article class="path-run" title="${escapeAttribute(`${run.label}: ${run.estimatedDwellMinutes} minutes estimated across ${run.visitCount} visits.`)}">
-            <div class="path-index">${index + 1}</div>
-            <div>
-              <h3>${escapeHtml(run.label)}</h3>
-              <p>${formatTime(run.startTime)} - ${formatTime(run.endTime)} · ${run.estimatedDwellMinutes}m est. · ${run.visitCount} visits</p>
-              <span>${run.pages.slice(0, 2).map(page => escapeHtml(page.title)).join(' / ')}</span>
-            </div>
-          </article>
-        `).join('')}
-      </div>
-    ` : '<p>No recent mapped topic path available.</p>';
-  }
-
-  renderUncategorized(analysis) {
-    const bucket = analysis.uncategorized || { pageCount: 0, pages: [] };
-    const summary = analysis.adjudicationSummary;
-    const summaryLine = summary && summary.audited
-      ? `<p class="audit-note">Second-pass audit: ${summary.audited} uncertain topics re-checked locally — ${summary.kept} confirmed, ${summary.split} split, ${summary.uncategorized + summary.disagreed} moved here.</p>`
-      : '';
-    if (!bucket.pageCount) {
-      document.getElementById('uncategorized-content').innerHTML = `
-        <p>Every analyzed page was labeled with confidence. Nothing was excluded.</p>
-        ${summaryLine}
-      `;
-      return;
-    }
-    const rows = (bucket.pages || []).slice(0, 12).map(page => `
-      <li>
-        <strong>${escapeHtml(page.title)}</strong>
-        <span>${escapeHtml(page.domain)} · ${page.visitCount} visits · ${page.estimatedDwellMinutes}m estimated</span>
-      </li>
-    `).join('');
-    document.getElementById('uncategorized-content').innerHTML = `
-      <p>${bucket.pageCount} pages (${bucket.estimatedDwellMinutes}m estimated, ${bucket.visitCount} visits) were too ambiguous to
-      label honestly. They are excluded from every topic metric above instead of being forced into a topic.</p>
-      ${summaryLine}
-      <ul class="evidence-list">${rows}</ul>
-      ${bucket.pageCount > 12 ? `<p class="audit-note">Showing the 12 highest-attention uncategorized pages of ${bucket.pageCount}.</p>` : ''}
-    `;
-  }
-
-  setLoading(visible, message) {
-    const loading = document.getElementById('loading');
-    loading.style.display = visible ? 'block' : 'none';
-    if (message) loading.textContent = message;
-  }
-
-  showProgress(message) {
-    this.setLoading(true, message);
-    this.setStatus(message);
-    if (/ollama/i.test(message)) this.setHealth('checking', 'Checking Ollama');
-    else if (/embedding|labeling|auditing|analyzing/i.test(message)) this.setHealth('checking', 'Analyzing locally');
-    else if (/history|visits/i.test(message)) this.setHealth('checking', 'Reading history');
-  }
-
-  setStatus(message) {
-    document.getElementById('status').textContent = message;
-    document.title = `Cognitive Trails Audit - ${String(message || '').slice(0, 70)}`;
-  }
-
-  setHealth(state, label) {
-    const pill = document.getElementById('health-pill');
-    pill.textContent = label;
-    pill.className = `health-pill ${state}`;
-  }
-}
-
-function switchesByHourChart(byHour) {
-  const entries = Array.isArray(byHour) ? byHour : [];
-  const total = entries.reduce((sum, entry) => sum + entry.count, 0);
-  if (!total) return '';
-  const max = Math.max(...entries.map(entry => entry.count), 1);
-  const columns = entries.map(entry => `
-    <div class="hour-col" title="${escapeAttribute(`${entry.count} context switch${entry.count === 1 ? '' : 'es'} between ${entry.hour}:00 and ${entry.hour}:59`)}">
-      <div class="hour-bar" style="height:${Math.max(entry.count ? 8 : 2, Math.round((entry.count / max) * 100))}%"></div>
-      <span>${entry.hour % 6 === 0 ? entry.hour : ''}</span>
-    </div>
-  `).join('');
-  return `
-    <h3>Context switches by hour of day</h3>
-    <div class="hour-chart">${columns}</div>
-  `;
-}
-
-function metric(label, value, help) {
-  return `
-    <div title="${escapeAttribute(help || label)}">
-      <strong>${escapeHtml(label)}</strong>
-      <span>${escapeHtml(value)}</span>
-    </div>
-  `;
-}
-
-function focusRunCard(run, rank) {
-  const pages = (run.pages || []).slice(0, 3).map(page => `
-    <li>
-      <strong>${escapeHtml(page.title)}</strong>
-      <span>${escapeHtml(page.domain)}</span>
-    </li>
-  `).join('');
-  return `
-    <article class="run-card" title="${escapeAttribute(`${run.label}: ${run.estimatedDwellMinutes} minutes estimated across ${run.visitCount} visits.`)}">
-      <div class="run-rank">${rank}</div>
-      <div class="run-card-body">
-        <h3>${escapeHtml(run.label)}</h3>
-        <p>${formatDate(run.startTime)} - ${formatDate(run.endTime)} · ${run.estimatedDwellMinutes}m est. · ${run.visitCount} visits</p>
-        <ul class="evidence-list compact">${pages}</ul>
-      </div>
-    </article>
-  `;
-}
-
-function formatDate(ms) {
-  if (!ms) return 'n/a';
-  return new Date(ms).toLocaleString();
-}
-
-function formatTime(ms) {
-  if (!ms) return 'n/a';
-  return new Date(ms).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
-}
-
-function formatPercent(value) {
-  return `${Math.round((Number(value) || 0) * 100)}%`;
-}
-
-function escapeHtml(value) {
-  return String(value == null ? '' : value)
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&#039;');
-}
-
-function escapeAttribute(value) {
-  return escapeHtml(value).replace(/`/g, '&#096;');
-}
-
-document.addEventListener('DOMContentLoaded', () => {
-  new TrustAuditDashboard();
+  return { loadData, render };
 });
+
+// ---- extension-page boot -------------------------------------------------
+if (typeof chrome !== 'undefined' && chrome.runtime && chrome.runtime.id && typeof document !== 'undefined') {
+  document.addEventListener('DOMContentLoaded', async () => {
+    const store = CTStore.createStore({});
+    await store.open();
+    const status = document.getElementById('status');
+    const refresh = async () => {
+      const data = await CTAudit.loadData(store);
+      CTAudit.render(data, document, {
+        storageEstimate: () => navigator.storage && navigator.storage.estimate ? navigator.storage.estimate() : null,
+        runningModels: () => CTOllama.createClient({}).runningModels(),
+        onMergeTopics: async (detail, button) => {
+          button.disabled = true;
+          // A user-confirmed merge: fold topicB into topicA.
+          const [a, b] = [await store.get('topics', detail.topicA), await store.get('topics', detail.topicB)];
+          if (!a || !b) return;
+          const memberships = await store.byIndex('memberships', 'byTopic', detail.topicB);
+          const moved = memberships.map(m => ({ ...m, topicId: detail.topicA }));
+          await store.registryCommit({
+            topics: [
+              { ...a, userCorrected: true, totalDwellMs: (a.totalDwellMs || 0) + (b.totalDwellMs || 0) },
+              { ...b, state: 'retired' }
+            ],
+            memberships: moved,
+            events: [{
+              topicId: detail.topicA, day: CTText.dayKeyFromMs(Date.now()), runId: 'user',
+              type: 'merged', detail: { proposal: false, executedBy: 'user', absorbed: detail.topicB }
+            }]
+          });
+          await store.put('corrections', {
+            correctionId: `merge:${detail.topicA}|${detail.topicB}`,
+            kind: 'merge_topics',
+            targetId: `${detail.topicA}|${detail.topicB}`,
+            value: detail.topicA,
+            pageUrls: [],
+            createdAt: Date.now()
+          });
+          refresh();
+        }
+      });
+      const lastOk = (data.runs || []).filter(r => r.status === 'ok').sort((a, b) => b.startedAt - a.startedAt)[0];
+      status.textContent = lastOk
+        ? `Last successful run ${new Date(lastOk.startedAt).toLocaleString()}.`
+        : 'No successful run yet.';
+    };
+    await refresh();
+
+    document.getElementById('run-now').addEventListener('click', () => {
+      status.textContent = 'Starting a run… (bypasses idle gating, still requires Ollama)';
+      chrome.runtime.sendMessage({ type: 'RUN_PIPELINE_MANUAL' }, response => {
+        if (chrome.runtime.lastError || !response || response.started === false) {
+          status.textContent = `Run not started: ${response ? response.reason : chrome.runtime.lastError.message}. ` +
+            (response && response.reason === 'ollama-unavailable'
+              ? 'Start Ollama (ollama serve) and pull bge-m3 + gemma3:12b.'
+              : '');
+          return;
+        }
+        status.textContent = 'Run in progress — this page refreshes every few seconds.';
+        const poll = setInterval(async () => {
+          await refresh();
+          const runs = await store.getAll('runs');
+          const latest = runs.sort((a, b) => b.startedAt - a.startedAt)[0];
+          if (latest && latest.status !== 'running') {
+            clearInterval(poll);
+            status.textContent = latest.status === 'ok'
+              ? `Run finished ${new Date().toLocaleTimeString()}.`
+              : `Run ${latest.status} at stage ${latest.stage}: ${latest.error || ''}`;
+          }
+        }, 4000);
+      });
+    });
+
+    document.getElementById('export-json').addEventListener('click', async () => {
+      // Full DB minus extractedText (spec §7.9: exports carry no page text).
+      const dump = {};
+      for (const name of ['visits', 'pages', 'topics', 'memberships', 'topic_events', 'daily_metrics', 'baselines', 'runs', 'briefs', 'transitions', 'uncategorized', 'corrections', 'settings']) {
+        dump[name] = await store.getAll(name);
+      }
+      dump.captures = (await store.getAll('captures')).map(({ extractedText, ...rest }) => rest);
+      dump.topics = dump.topics.map(({ centroid, ...rest }) => rest);
+      const blob = new Blob([JSON.stringify(dump, null, 1)], { type: 'application/json' });
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = `cognitive-trails-export-${CTText.dayKeyFromMs(Date.now())}.json`;
+      a.click();
+      URL.revokeObjectURL(a.href);
+    });
+
+    document.getElementById('delete-everything').addEventListener('click', async () => {
+      if (!confirm('Delete the entire local record? This wipes every topic, metric, capture, and setting.')) return;
+      if (!confirm('Really delete everything? There is no undo.')) return;
+      await store.wipe();
+      await new Promise(resolve => chrome.storage.local.clear(resolve));
+      status.textContent = 'Everything deleted.';
+      refresh();
+    });
+  });
+}

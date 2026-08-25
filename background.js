@@ -308,6 +308,14 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     case 'FLUSH_CAPTURES':
       flushCaptures().then(() => sendResponse({ ok: true }));
       return true;
+    case 'HISTORY_SEARCH':
+      // History proxy for the offscreen document (it cannot call
+      // chrome.history itself); each message also keeps this SW alive.
+      chrome.history.search(message.query || { text: '' }, items => sendResponse({ items: items || [] }));
+      return true;
+    case 'HISTORY_GET_VISITS':
+      chrome.history.getVisits({ url: message.url }, visits => sendResponse({ visits: visits || [] }));
+      return true;
     case 'TEST_FIRE_ALARM': {
       // Exposed only in test mode for the e2e suite (§7.7).
       store.open()
@@ -323,7 +331,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     case 'TEST_SET_SETTING': {
       // Test-only escape hatch, gated the same way (used to enable testMode
       // itself via an explicit key allowlist).
-      const allowed = ['testMode', 'watermark', 'notificationsEnabled'];
+      const allowed = ['testMode', 'watermark', 'notificationsEnabled', 'idleGatingEnabled'];
       if (!allowed.includes(message.key)) {
         sendResponse({ ok: false, reason: 'key not allowed' });
         return false;

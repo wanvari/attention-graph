@@ -59,15 +59,15 @@ header h1 {
 }
 
 .health-pill.ok {
-  border-color: #b8dfc2;
-  color: #136c2e;
-  background: #eef9f1;
+  border-color: #aab4ef;
+  color: #4356d6;
+  background: #e3e6fb;
 }
 
-.health-pill.bad {
-  border-color: #f1b6af;
-  color: #9d1c12;
-  background: #fff1ef;
+.health-pill.unavailable {
+  border-color: #9aa3b8;
+  color: #48506a;
+  background: #eceef4;
 }
 
 .health-pill.checking {
@@ -316,10 +316,6 @@ header h1 {
   border: 1px solid rgba(0,0,0,0.1);
 }
 
-.legend-color.programming { background-color: #ff6b6b; }
-.legend-color.social { background-color: #4ecdc4; }
-.legend-color.shopping { background-color: #45b7d1; }
-.legend-color.news { background-color: #96ceb4; }
 .legend-color.entertainment { background-color: #ffeaa7; }
 .legend-color.other { background-color: #dda0dd; }
 
@@ -555,10 +551,10 @@ header h1 {
 .setup-box {
   display: grid;
   gap: 8px;
-  border: 1px solid #f1c5bd;
+  border: 1px solid #c3c9e8;
   border-radius: 8px;
-  background: #fff7f5;
-  color: #5f2b24;
+  background: #f2f4fc;
+  color: #33395c;
   padding: 12px;
   font-size: 12px;
   line-height: 1.4;

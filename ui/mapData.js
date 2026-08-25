@@ -1,0 +1,283 @@
+// Registry -> map view-model adapter (spec §5.2). The v4 map keeps the v3
+// D3 rendering but reads the persistent registry instead of a snapshot
+// analysis: nodes are active topics with dwell in the selected window, edges
+// are aggregated transitions, and topic ids are stable so corrections attach
+// directly instead of being re-matched by page overlap.
+(function(root, factory) {
+  const api = factory();
+  if (typeof module !== 'undefined' && module.exports) module.exports = api;
+  root.CTMapData = api;
+})(typeof globalThis !== 'undefined' ? globalThis : this, function() {
+  'use strict';
+
+  const TRANSITION_TYPES = {
+    same_topic_flow: {
+      label: 'Same-topic continuation',
+      color: '#8d94c7',
+      description: 'Consecutive visits stayed inside one topic.'
+    },
+    adjacent_topic_jump: {
+      label: 'Related continuation',
+      color: '#7c8fe0',
+      description: 'Movement to a related topic that may be part of the same task.'
+    },
+    topic_switch: {
+      label: 'Context switch',
+      color: '#a9a2c9',
+      description: 'Movement to a less-related topic or different task context.'
+    }
+  };
+
+  const ATTENTION_BANDS = {
+    primary: {
+      label: 'Primary attention',
+      color: '#4356d6',
+      description: 'One of the highest-time topics in the selected window.'
+    },
+    secondary: {
+      label: 'Secondary attention',
+      color: '#7c8fe0',
+      description: 'A meaningful topic, but not one of the dominant attention areas.'
+    },
+    long_tail: {
+      label: 'Long-tail topic',
+      color: '#9aa3b8',
+      description: 'A smaller topic with limited estimated time or visit evidence.'
+    }
+  };
+
+  const BAND_PALETTES = {
+    primary: ['#4356d6', '#5b6ee0', '#3b49b8'],
+    secondary: ['#7c8fe0', '#8f9fe8', '#6a7ed0'],
+    long_tail: ['#9aa3b8', '#a8b0c2', '#8a93a8']
+  };
+
+  function msToMinutes(ms) {
+    return Math.round((ms || 0) / 60000);
+  }
+
+  // windowDays: 7 | 30 | 90. Returns the analysis-shaped object map.js renders.
+  async function build(store, options) {
+    const opts = options || {};
+    const windowDays = Number(opts.windowDays) || 30;
+    const now = opts.now || Date.now();
+    const today = CTText.dayKeyFromMs(now);
+    const fromDay = CTText.addDays(today, -(windowDays - 1));
+
+    const [topicRows, memberships, transitionRows, pageRows, metricRows, uncategorizedRows, runRows] = await Promise.all([
+      store.getAll('topics'),
+      store.getAll('memberships'),
+      store.getAll('transitions'),
+      store.getAll('pages'),
+      store.getAll('daily_metrics'),
+      store.getAll('uncategorized'),
+      store.getAll('runs')
+    ]);
+
+    const pageByUrl = new Map(pageRows.map(p => [p.normalizedUrl, p]));
+    const inWindow = m => m.lastDay >= fromDay;
+    const windowMemberships = memberships.filter(inWindow);
+
+    // Aggregate per-topic evidence over the window.
+    const evidenceByTopic = new Map();
+    for (const membership of windowMemberships) {
+      const entry = evidenceByTopic.get(membership.topicId) ||
+        { dwellMs: 0, visitCount: 0, pages: [], domains: new Map() };
+      entry.dwellMs += membership.dwellMs || 0;
+      entry.visitCount += membership.visitCount || 0;
+      const page = pageByUrl.get(membership.normalizedUrl);
+      if (page) {
+        entry.pages.push({
+          id: page.normalizedUrl,
+          title: page.title,
+          url: page.url,
+          domain: page.domain,
+          source: page.source,
+          visitCount: membership.visitCount || 0,
+          estimatedDwellMs: membership.dwellMs || 0,
+          estimatedDwellMinutes: msToMinutes(membership.dwellMs),
+          firstVisitTime: page.firstSeen,
+          lastVisitTime: page.lastSeen
+        });
+        const domainEntry = entry.domains.get(page.domain) || { domain: page.domain, visitCount: 0, estimatedDwellMs: 0 };
+        domainEntry.visitCount += membership.visitCount || 0;
+        domainEntry.estimatedDwellMs += membership.dwellMs || 0;
+        entry.domains.set(page.domain, domainEntry);
+      }
+      evidenceByTopic.set(membership.topicId, entry);
+    }
+
+    const visibleTopics = topicRows
+      .filter(topic => topic.state !== 'retired' && evidenceByTopic.has(topic.topicId))
+      .map(topic => {
+        const evidence = evidenceByTopic.get(topic.topicId);
+        evidence.pages.sort((a, b) =>
+          (b.visitCount * 3 + msToMinutes(b.estimatedDwellMs)) - (a.visitCount * 3 + msToMinutes(a.estimatedDwellMs)));
+        return {
+          id: topic.topicId,
+          label: topic.label,
+          state: topic.state,
+          confidence: topic.confidence,
+          heuristicConfidence: topic.heuristicConfidence,
+          adjudication: topic.adjudication,
+          userCorrected: !!topic.userCorrected,
+          rationale: topic.rationale,
+          keywords: topic.keywords || [],
+          lastActiveDay: topic.lastActiveDay,
+          createdAt: topic.createdAt,
+          pageCount: evidence.pages.length,
+          visitCount: evidence.visitCount,
+          estimatedDwellMs: evidence.dwellMs,
+          estimatedDwellMinutes: msToMinutes(evidence.dwellMs),
+          topPages: evidence.pages.slice(0, 8),
+          pageUrls: evidence.pages.map(p => p.id),
+          pageIds: evidence.pages.map(p => p.id),
+          topDomains: Array.from(evidence.domains.values())
+            .sort((a, b) => b.visitCount - a.visitCount)
+            .slice(0, 5),
+          dominantDomainShare: (() => {
+            const top = Array.from(evidence.domains.values()).sort((a, b) => b.visitCount - a.visitCount)[0];
+            return evidence.visitCount && top ? top.visitCount / evidence.visitCount : 0;
+          })(),
+          llmLabeled: topic.labelSource === 'llm'
+        };
+      })
+      .filter(topic => topic.estimatedDwellMs > 0 || topic.visitCount > 0);
+
+    // Attention bands over the window.
+    const totalDwell = Math.max(visibleTopics.reduce((sum, t) => sum + t.estimatedDwellMs, 0), 1);
+    const ranked = visibleTopics.slice().sort((a, b) =>
+      b.estimatedDwellMs - a.estimatedDwellMs || b.visitCount - a.visitCount || a.label.localeCompare(b.label));
+    ranked.forEach((topic, index) => {
+      const rank = index + 1;
+      const share = topic.estimatedDwellMs / totalDwell;
+      const band = rank <= 3 ? 'primary' : (rank <= 10 || share >= 0.035) ? 'secondary' : 'long_tail';
+      topic.attentionRank = rank;
+      topic.attentionShare = share;
+      topic.attentionBand = band;
+      topic.attentionBandLabel = ATTENTION_BANDS[band].label;
+      topic.color = BAND_PALETTES[band][(rank - 1) % BAND_PALETTES[band].length];
+    });
+
+    // Aggregate the window's per-day transition rows into edges.
+    const topicById = new Map(visibleTopics.map(t => [t.id, t]));
+    const edges = new Map();
+    for (const row of transitionRows) {
+      if (row.day < fromDay) continue;
+      if (!topicById.has(row.sourceTopicId) || !topicById.has(row.targetTopicId)) continue;
+      const key = `${row.sourceTopicId}->${row.targetTopicId}`;
+      const existing = edges.get(key);
+      if (!existing) {
+        edges.set(key, {
+          id: `transition-${CTText.hashString(key)}`,
+          sourceTopicId: row.sourceTopicId,
+          targetTopicId: row.targetTopicId,
+          sourceLabel: topicById.get(row.sourceTopicId).label,
+          targetLabel: topicById.get(row.targetTopicId).label,
+          similarity: row.similarity ?? 0,
+          type: row.type,
+          label: (TRANSITION_TYPES[row.type] || TRANSITION_TYPES.topic_switch).label,
+          color: (TRANSITION_TYPES[row.type] || TRANSITION_TYPES.topic_switch).color,
+          confidence: row.confidence,
+          rationale: row.uncertain
+            ? 'Local labels disagreed between passes; showing the similarity-based estimate instead.'
+            : 'Observed consecutive visits between these topics.',
+          visitCount: row.visitCount || 0,
+          verified: !!row.verified,
+          uncertain: !!row.uncertain,
+          llmLabeled: !!row.llmLabeled,
+          hourCounts: (row.hourCounts || new Array(24).fill(0)).slice(),
+          representativeVisits: [],
+          days: [row.day]
+        });
+        continue;
+      }
+      existing.visitCount += row.visitCount || 0;
+      existing.days.push(row.day);
+      for (let hour = 0; hour < 24; hour++) {
+        existing.hourCounts[hour] += (row.hourCounts || [])[hour] || 0;
+      }
+      // A day marked uncertain keeps the aggregate honest.
+      if (row.uncertain) existing.uncertain = true;
+      if (row.verified) existing.verified = true;
+    }
+    const transitions = Array.from(edges.values())
+      .sort((a, b) => b.visitCount - a.visitCount || b.confidence - a.confidence);
+
+    // Coverage over the window, from the stored daily metrics.
+    const windowMetrics = metricRows.filter(m => m.day >= fromDay);
+    const activeMs = windowMetrics.reduce((sum, m) => sum + (m.activeMs || 0), 0);
+    const categorizedMs = windowMetrics.reduce((sum, m) => sum + (m.activeMs || 0) * (m.categorizedShare || 0), 0);
+    const visitCount = windowMetrics.reduce((sum, m) => sum + (m.visitCount || 0), 0);
+    const uncoveredTransitions = windowMetrics.reduce((sum, m) => sum + (m.uncoveredTransitions || 0), 0);
+    const windowUncategorized = uncategorizedRows.filter(u => u.day >= fromDay);
+    const lastOkRun = runRows.filter(r => r.status === 'ok').sort((a, b) => b.startedAt - a.startedAt)[0] || null;
+
+    const uncategorizedPages = windowUncategorized.map(row => {
+      const page = pageByUrl.get(row.normalizedUrl);
+      return {
+        id: row.normalizedUrl,
+        title: page ? page.title : row.normalizedUrl,
+        url: page ? page.url : row.normalizedUrl,
+        domain: page ? page.domain : '',
+        reason: row.reason,
+        visitCount: page ? page.visitCount : 0,
+        estimatedDwellMs: row.dwellMs || 0,
+        estimatedDwellMinutes: msToMinutes(row.dwellMs)
+      };
+    });
+
+    return {
+      ok: visibleTopics.length > 0,
+      version: 'cognitive-trails-v4',
+      generatedAt: lastOkRun ? new Date(lastOkRun.startedAt).toISOString() : new Date(now).toISOString(),
+      fromCache: true,
+      windowDays,
+      models: { embedding: 'bge-m3:latest', chat: 'gemma3:12b' },
+      topics: ranked,
+      transitions,
+      coverage: {
+        days: windowDays,
+        visitsExpanded: visitCount,
+        estimatedActiveMs: activeMs,
+        estimatedActiveMinutes: msToMinutes(activeMs),
+        startTime: windowMetrics.length ? CTText.dayKeyToNoonMs(windowMetrics[0].day) : null,
+        endTime: lastOkRun ? lastOkRun.startedAt : now,
+        dwellMethod: 'estimated from gaps between visits (capped at 30 minutes; session-ending visits count 1 minute), lowered by measured active time when a capture matches'
+      },
+      categorizedCoverage: {
+        pagesAvailable: pageRows.length,
+        pagesAnalyzed: new Set(windowMemberships.map(m => m.normalizedUrl)).size,
+        visitsCategorized: visitCount,
+        estimatedActiveMs: categorizedMs,
+        estimatedActiveMinutes: msToMinutes(categorizedMs),
+        activeTimeCoverage: activeMs ? categorizedMs / activeMs : 0,
+        visitCoverage: activeMs ? categorizedMs / activeMs : 0
+      },
+      uncoveredTransitions,
+      uncategorized: {
+        pageCount: uncategorizedPages.length,
+        visitCount: uncategorizedPages.reduce((sum, p) => sum + p.visitCount, 0),
+        estimatedDwellMs: uncategorizedPages.reduce((sum, p) => sum + p.estimatedDwellMs, 0),
+        estimatedDwellMinutes: msToMinutes(uncategorizedPages.reduce((sum, p) => sum + p.estimatedDwellMs, 0)),
+        pages: uncategorizedPages.slice(0, 30),
+        pageUrls: uncategorizedPages.map(p => p.id),
+        byReason: uncategorizedPages.reduce((acc, page) => {
+          acc[page.reason] = (acc[page.reason] || 0) + 1;
+          return acc;
+        }, {})
+      },
+      warnings: [
+        `Topic claims cover ${Math.round((activeMs ? categorizedMs / activeMs : 0) * 100)}% of estimated active time in this window.`,
+        uncoveredTransitions
+          ? `${uncoveredTransitions} transitions touched a page with no topic and are excluded from the flow counts.`
+          : null,
+        uncategorizedPages.length
+          ? `${uncategorizedPages.length} pages were too ambiguous to label and are reported as uncategorized instead of being forced into a topic.`
+          : null
+      ].filter(Boolean)
+    };
+  }
+
+  return { ATTENTION_BANDS, TRANSITION_TYPES, build };
+});

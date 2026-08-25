@@ -1,0 +1,252 @@
+{
+ "recordedAt": "2026-08-25T00:40:37.561Z",
+ "chatModel": "gemma3:12b",
+ "runDays": [
+  7,
+  14,
+  21,
+  25,
+  28
+ ],
+ "runSummaries": [
+  {
+   "day": 7,
+   "runId": "run-mmh97800-9svg",
+   "counts": {
+    "visitsIngested": 136,
+    "pagesEmbedded": 0,
+    "embeddingsCached": 105,
+    "pagesDeferred": 0,
+    "topicsCreated": 17,
+    "topicsMatched": 0,
+    "adjudicated": 0,
+    "kept": 0,
+    "split": 0,
+    "uncategorized": 3,
+    "disagreed": 0,
+    "errors": 0
+   }
+  },
+  {
+   "day": 14,
+   "runId": "run-mmr750w0-c4m9",
+   "counts": {
+    "visitsIngested": 117,
+    "pagesEmbedded": 0,
+    "embeddingsCached": 94,
+    "pagesDeferred": 0,
+    "topicsCreated": 2,
+    "topicsMatched": 13,
+    "adjudicated": 0,
+    "kept": 0,
+    "split": 0,
+    "uncategorized": 6,
+    "disagreed": 0,
+    "errors": 0
+   }
+  },
+  {
+   "day": 21,
+   "runId": "run-mn177zk0-7aqp",
+   "counts": {
+    "visitsIngested": 48,
+    "pagesEmbedded": 0,
+    "embeddingsCached": 42,
+    "pagesDeferred": 0,
+    "topicsCreated": 1,
+    "topicsMatched": 8,
+    "adjudicated": 0,
+    "kept": 0,
+    "split": 0,
+    "uncategorized": 2,
+    "disagreed": 0,
+    "errors": 0
+   }
+  },
+  {
+   "day": 25,
+   "runId": "run-mn6wze80-26o2",
+   "counts": {
+    "visitsIngested": 55,
+    "pagesEmbedded": 0,
+    "embeddingsCached": 51,
+    "pagesDeferred": 0,
+    "topicsCreated": 2,
+    "topicsMatched": 10,
+    "adjudicated": 0,
+    "kept": 0,
+    "split": 0,
+    "uncategorized": 2,
+    "disagreed": 0,
+    "errors": 0
+   }
+  },
+  {
+   "day": 28,
+   "runId": "run-mnb7ay80-bwxt",
+   "counts": {
+    "visitsIngested": 54,
+    "pagesEmbedded": 0,
+    "embeddingsCached": 49,
+    "pagesDeferred": 0,
+    "topicsCreated": 0,
+    "topicsMatched": 11,
+    "adjudicated": 0,
+    "kept": 0,
+    "split": 0,
+    "uncategorized": 2,
+    "disagreed": 0,
+    "errors": 0
+   }
+  }
+ ],
+ "calls": [
+  {
+   "kind": "label_topics",
+   "promptHash": "scohza",
+   "prompt": "Label these browser-history topic clusters.\n\nReturn JSON shaped as {\"topics\":[{\"id\":\"c0\",\"label\":\"short noun phrase\",\"confidence\":0.0-1.0,\"rationale\":\"one sentence explaining why these pages belong together\"}]}.\n\nUse specific labels. If the pages share no honest theme, label it 'MIXED' — a later step will handle it.\n\n[{\"id\":\"c0\",\"keywords\":[\"part\",\"async\",\"tokio\",\"rust\",\"docs\",\"lang\",\"boats\",\"for\",\"without\",\"backends\"],\"top_domains\":[\"docs.rs\",\"fasterthanli.me\",\"rust-lang.org\",\"tokio.rs\",\"without.boats\"],\"estimated_minutes\":91,\"pages\":[{\"title\":\"Async drop and linear types debate\",\"url\":\"docs.rs/async-drop-and-linear-types-debate\",\"text\":\"Async trait methods box their returned futures unless you use return position impl trait, which adds an allocation per call on hot paths. The Tokio multi-thread runtime uses a work-stealing scheduler \"},{\"title\":\"Pin and Unpin explained for async Rust\",\"url\":\"docs.rs/pin-and-unpin-explained-for-async-rust\",\"text\":\"Cancellation safety means a future can be dropped at an await point without losing data, which many channel recv implementations guarantee. The Waker is how a leaf future tells the executor its task i\"},{\"title\":\"Pin and Unpin explained for async Rust part 2\",\"url\":\"docs.rs/pin-and-unpin-explained-for-async-rust-part-2\",\"text\":\"The io_uring backend batches syscalls through a shared ring buffer, cutting per-operation overhead for high-throughput file and socket work. Task budgets in Tokio force a yield after 128 consecutive p\"},{\"title\":\"Waker contracts and manual Future impls\",\"url\":\"docs.rs/waker-contracts-and-manual-future-impls\",\"text\":\"An async function compiles into a state machine enum whose variants hold the local variables alive across each await point. Cancellation safety means a future can be dropped at an await point without \"},{\"title\":\"Waker contracts and manual Future impls part 2\",\"url\":\"docs.rs/waker-contracts-and-manual-future-impls-part-2\",\"text\":\"A future in Rust does nothing until it is polled, so drop",
+   "response": {
+    "model": "gemma3:12b",
+    "created_at": "2026-08-25T00:39:20.021227Z",
+    "message": {
+     "role": "assistant",
+     "content": "```json\n{\"topics\": [\n  {\"id\": \"c0\", \"label\": \"Async Rust Programming\", \"confidence\": 0.95, \"rationale\": \"All pages discuss aspects of asynchronous programming in Rust, including Tokio, futures, wakers, and related concepts like pinning and cancellation safety.\"},\n  {\"id\": \"c1\", \"label\": \"Sourdough Bread Baking Techniques\", \"confidence\": 0.98, \"rationale\": \"These pages focus on various aspects of sourdough bread baking, covering topics like autolyse, Dutch ovens, rye flour, scoring, and troubleshooting crumb density.\"},\n  {\"id\": \"c2\", \"label\": \"Attention and Task Switching Research\", \"confidence\": 0.92, \"rationale\": \"The pages explore research on attention, task switching, interruptions, and their impact on productivity and cognitive load, primarily using Claude's chat interface.\"},\n  {\"id\": \"c3\", \"label\": \"Index Fund Investing and Fees\", \"confidence\": 0.90, \"rationale\": \"These pages discuss index fund investing, focusing on expense ratios, zero-fee funds, asset location, and tax loss harvesting.\"},\n  {\"id\": \"c4\", \"label\": \"Victorian Era Literature and Serialization\", \"confidence\": 0.88, \"rationale\": \"The pages examine Victorian novels, their serialization history, and their cultural context, including topics like periodical culture and the condition of England.\"},\n  {\"id\": \"c5\", \"label\": \"Kubernetes Networking and CNI\", \"confidence\": 0.85, \"rationale\": \"These pages cover Kubernetes networking concepts, including egress gateways, NAT behavior, topology-aware routing, and the Cilium CNI plugin.\"},\n  {\"id\": \"c6\", \"label\": \"Houseplant Care and Troubleshooting\", \"confidence\": 0.93, \"rationale\": \"The pages provide information and advice on houseplant care, including topics like Monstera care, repotting, pest control, and humidity.\"},\n  {\"id\": \"c7\", \"label\": \"Marathon Training and Running Performance\", \"confidence\": 0.89, \"rationale\": \"These pages discuss marathon training techniques, including building mileage, recovery weeks, shoe selection, and pacing strategies.\"},\n  {\"id\": \"c8\", \"label\": \"Large Language Model Inference and Memory\", \"confidence\": 0.87, \"rationale\": \"The pages explore topics related to large language model inference, including KV cache memory scaling, model file parameters, and quantization techniques.\"},\n  {\"id\": \"c9\", \"label\": \"Mechanical Keyboard Customization\", \"confidence\": 0.91, \"rationale\": \"These pages cover mechanical keyboard customization topics, including hot-swap sockets, keycap materials, switch modifications, and sound profiles.\"},\n  {\"id\": \"c10\", \"label\": \"Grid-Scale Energy Storage\", \"confidence\": 0.83, \"rationale\": \"The pages discuss grid-scale energy storage solutions, focusing on lithium-ion batteries, hybrid systems, and interconnection challenges.\"},\n  {\"id\": \"c11\", \"label\": \"Mars Sample Return Mission\", \"confidence\": 0.86, \"rationale\": \"These pages focus on the Mars Sample Return mission, including regolith sampling, planetary protection, and sample retrieval challenges.\"},\n  {\"id\": \"c12\", \"label\": \"Weekly Link Roundups\", \"confidence\": 0.75, \"rationale\": \"These pages are weekly link roundups, containing a collection of diverse articles and resources. The topics are mixed and not easily categorized.\"},\n  {\"id\": \"c13\", \"label\": \"Weekly Link Roundups (Reddit)\", \"confidence\": 0.70, \"rationale\": \"Similar to c12, these are Reddit-based weekly link roundups with mixed content and no clear unifying theme.\"}\n]}\n```"
+    },
+    "done": true,
+    "done_reason": "stop",
+    "total_duration": 100613650084,
+    "load_duration": 8238167,
+    "prompt_eval_count": 6517,
+    "prompt_eval_duration": 43535056000,
+    "eval_count": 841,
+    "eval_duration": 56523588000
+   }
+  },
+  {
+   "kind": "label_topics",
+   "promptHash": "cvu53q",
+   "prompt": "Label these browser-history topic clusters.\n\nReturn JSON shaped as {\"topics\":[{\"id\":\"c0\",\"label\":\"short noun phrase\",\"confidence\":0.0-1.0,\"rationale\":\"one sentence explaining why these pages belong together\"}]}.\n\nUse specific labels. If the pages share no honest theme, label it 'MIXED' — a later step will handle it.\n\n[{\"id\":\"c14\",\"keywords\":[\"medium\",\"bag\",\"friday\",\"grab\",\"links\",\"mixed\",\"roundup\"],\"top_domains\":[\"medium.com\"],\"estimated_minutes\":3,\"pages\":[{\"title\":\"Friday grab bag #36\",\"url\":\"medium.com/mixed/35-links-roundup\",\"text\":\"Several readers shared loosely related personal anecdotes. Fund domicile decides dividend withholding treatment, which can cost an international index tracker thirty basis points annually. The page ag\"}]},{\"id\":\"c15\",\"keywords\":[\"browser\",\"example\",\"start\",\"newtab\",\"tab\"],\"top_domains\":[\"start.example-browser.org\"],\"estimated_minutes\":3,\"pages\":[{\"title\":\"New tab\",\"url\":\"start.example-browser.org/newtab\",\"text\":\"\"}]},{\"id\":\"c16\",\"keywords\":[\"corp\",\"example\",\"expired\",\"portal\",\"session\"],\"top_domains\":[\"portal.example-corp.com\"],\"estimated_minutes\":3,\"pages\":[{\"title\":\"Session expired\",\"url\":\"portal.example-corp.com/session/expired\",\"text\":\"Your session has expired. Please sign in again.\"}]}]",
+   "response": {
+    "model": "gemma3:12b",
+    "created_at": "2026-08-25T00:39:43.557365Z",
+    "message": {
+     "role": "assistant",
+     "content": "```json\n{\n  \"topics\": [\n    {\n      \"id\": \"c14\",\n      \"label\": \"Medium Link Roundups\",\n      \"confidence\": 0.95,\n      \"rationale\": \"The keywords 'medium', 'grab', 'links', and 'roundup' combined with the domain 'medium.com' strongly indicate a collection of curated links published on Medium.\"\n    },\n    {\n      \"id\": \"c15\",\n      \"label\": \"Browser New Tab Page\",\n      \"confidence\": 0.98,\n      \"rationale\": \"The keywords 'browser', 'newtab', and 'tab' along with the domain 'start.example-browser.org' clearly point to the default or custom new tab page of a web browser.\"\n    },\n    {\n      \"id\": \"c16\",\n      \"label\": \"Corporate Portal Session Expiration\",\n      \"confidence\": 0.97,\n      \"rationale\": \"The keywords 'corp', 'portal', 'session', and 'expired' combined with the domain 'portal.example-corp.com' indicate a page related to a corporate portal and a user's session expiring.\"\n    }\n  ]\n}\n```"
+    },
+    "done": true,
+    "done_reason": "stop",
+    "total_duration": 23479354834,
+    "load_duration": 10465959,
+    "prompt_eval_count": 348,
+    "prompt_eval_duration": 2311010000,
+    "eval_count": 275,
+    "eval_duration": 17650621000
+   }
+  },
+  {
+   "kind": "label_topics",
+   "promptHash": "gs9h0b",
+   "prompt": "Label these browser-history topic clusters.\n\nReturn JSON shaped as {\"topics\":[{\"id\":\"c0\",\"label\":\"short noun phrase\",\"confidence\":0.0-1.0,\"rationale\":\"one sentence explaining why these pages belong together\"}]}.\n\nUse specific labels. If the pages share no honest theme, label it 'MIXED' — a later step will handle it.\n\n[{\"id\":\"c0\",\"keywords\":[\"links\",\"miscellany\",\"mixed\",\"news\",\"reddit\",\"roundup\",\"ycombinator\"],\"top_domains\":[\"news.ycombinator.com\",\"reddit.com\"],\"estimated_minutes\":6,\"pages\":[{\"title\":\"Miscellany #34\",\"url\":\"news.ycombinator.com/mixed/33-links-roundup\",\"text\":\"VXLAN encapsulation costs about fifty bytes of overhead per packet and complicates MTU tuning, which is why native routing is preferred when the underlay allows it. The page aggregates snippets from m\"},{\"title\":\"Miscellany #22\",\"url\":\"reddit.com/mixed/21-links-roundup\",\"text\":\"Conntrack exhaustion silently drops new flows once the table fills, and high-churn services with short-lived connections get there fast. The Orbiting Sample container is a football-sized sphere that t\"}]},{\"id\":\"c1\",\"keywords\":[\"reddit\",\"links\",\"mixed\",\"month\",\"read\",\"roundup\"],\"top_domains\":[\"reddit.com\"],\"estimated_minutes\":3,\"pages\":[{\"title\":\"What I read this month #30\",\"url\":\"reddit.com/mixed/29-links-roundup\",\"text\":\"A chunky aroid mix of bark, perlite, and coco coir drains in seconds, giving roots the oxygen that dense potting soil suffocates. Concurrent requests share weights but not KV cache, so parallelism is \"}]}]",
+   "response": {
+    "model": "gemma3:12b",
+    "created_at": "2026-08-25T00:40:00.38668Z",
+    "message": {
+     "role": "assistant",
+     "content": "```json\n{\n  \"topics\": [\n    {\n      \"id\": \"c0\",\n      \"label\": \"Tech News Aggregates\",\n      \"confidence\": 0.95,\n      \"rationale\": \"Both pages are 'links roundups' from Hacker News (Y Combinator) and Reddit, aggregating diverse tech-related news and articles.\"\n    },\n    {\n      \"id\": \"c1\",\n      \"label\": \"Monthly Reading Lists\",\n      \"confidence\": 0.9,\n      \"rationale\": \"These Reddit posts are explicitly titled 'What I read this month,' indicating a curated list of articles and content consumed during a specific period.\"\n    }\n  ]\n}\n```"
+    },
+    "done": true,
+    "done_reason": "stop",
+    "total_duration": 14706098584,
+    "load_duration": 9017959,
+    "prompt_eval_count": 415,
+    "prompt_eval_duration": 2685903000,
+    "eval_count": 160,
+    "eval_duration": 10693911000
+   }
+  },
+  {
+   "kind": "label_topics",
+   "promptHash": "1jvq4aj",
+   "prompt": "Label these browser-history topic clusters.\n\nReturn JSON shaped as {\"topics\":[{\"id\":\"c0\",\"label\":\"short noun phrase\",\"confidence\":0.0-1.0,\"rationale\":\"one sentence explaining why these pages belong together\"}]}.\n\nUse specific labels. If the pages share no honest theme, label it 'MIXED' — a later step will handle it.\n\n[{\"id\":\"c0\",\"keywords\":[\"links\",\"news\",\"roundup\",\"ycombinator\",\"mixed\",\"weekly\"],\"top_domains\":[\"news.ycombinator.com\"],\"estimated_minutes\":3,\"pages\":[{\"title\":\"Weekly links roundup #4\",\"url\":\"news.ycombinator.com/mixed/3-links-roundup\",\"text\":\"Several readers shared loosely related personal anecdotes. The thread wandered between three unrelated questions from different posters. The circulating libraries enforced the expensive three volume f\"}]}]",
+   "response": {
+    "model": "gemma3:12b",
+    "created_at": "2026-08-25T00:40:09.151805Z",
+    "message": {
+     "role": "assistant",
+     "content": "```json\n{\"topics\":[{\"id\":\"c0\",\"label\":\"Hacker News Weekly Roundups\",\"confidence\":0.95,\"rationale\":\"The keywords 'links', 'news', 'roundup', and 'ycombinator' combined with the domain 'news.ycombinator.com' strongly indicate a collection of weekly link roundups from Hacker News.\"}]}\n```"
+    },
+    "done": true,
+    "done_reason": "stop",
+    "total_duration": 6693591583,
+    "load_duration": 5173208,
+    "prompt_eval_count": 218,
+    "prompt_eval_duration": 1490232000,
+    "eval_count": 78,
+    "eval_duration": 5023093000
+   }
+  },
+  {
+   "kind": "label_topics",
+   "promptHash": "ymfzet",
+   "prompt": "Label these browser-history topic clusters.\n\nReturn JSON shaped as {\"topics\":[{\"id\":\"c0\",\"label\":\"short noun phrase\",\"confidence\":0.0-1.0,\"rationale\":\"one sentence explaining why these pages belong together\"}]}.\n\nUse specific labels. If the pages share no honest theme, label it 'MIXED' — a later step will handle it.\n\n[{\"id\":\"c0\",\"keywords\":[\"medium\",\"bag\",\"friday\",\"grab\",\"links\",\"mixed\",\"roundup\"],\"top_domains\":[\"medium.com\"],\"estimated_minutes\":3,\"pages\":[{\"title\":\"Friday grab bag #23\",\"url\":\"medium.com/mixed/22-links-roundup\",\"text\":\"Calatheas crisp at the edges below fifty percent humidity, and a pebble tray raises local humidity a few points at best. Task switch costs appear even with predictable switches, suggesting reconfigura\"}]},{\"id\":\"c1\",\"keywords\":[\"medium\",\"links\",\"mixed\",\"month\",\"read\",\"roundup\"],\"top_domains\":[\"medium.com\"],\"estimated_minutes\":3,\"pages\":[{\"title\":\"What I read this month #33\",\"url\":\"medium.com/mixed/32-links-roundup\",\"text\":\"Spawned tasks must be Send because the work-stealing scheduler may move them between worker threads at any await point. Sensation novels of the 1860s moved crime from distant castles into respectable \"}]}]",
+   "response": {
+    "model": "gemma3:12b",
+    "created_at": "2026-08-25T00:40:23.605992Z",
+    "message": {
+     "role": "assistant",
+     "content": "```json\n{\n  \"topics\": [\n    {\n      \"id\": \"c0\",\n      \"label\": \"Weekly Link Roundups\",\n      \"confidence\": 0.95,\n      \"rationale\": \"Both pages are 'Friday grab bag' and 'What I read this month' roundups from Medium, indicating a recurring collection of links.\"\n    },\n    {\n      \"id\": \"c1\",\n      \"label\": \"Monthly Reading Lists\",\n      \"confidence\": 0.9,\n      \"rationale\": \"This cluster contains pages titled 'What I read this month' and includes keywords like 'read' and 'month', clearly indicating a collection of reading lists.\"\n    }\n  ]\n}\n```"
+    },
+    "done": true,
+    "done_reason": "stop",
+    "total_duration": 12649341708,
+    "load_duration": 6386083,
+    "prompt_eval_count": 332,
+    "prompt_eval_duration": 2256972000,
+    "eval_count": 163,
+    "eval_duration": 10330465000
+   }
+  },
+  {
+   "kind": "label_transitions",
+   "promptHash": "139s8ga",
+   "prompt": "Classify these observed topic transitions from browser history.\n\nAllowed type values: adjacent_topic_jump, topic_switch.\n\nReturn JSON shaped as {\"transitions\":[{\"id\":\"copied id\",\"type\":\"adjacent_topic_jump|topic_switch\",\"confidence\":0.0-1.0,\"rationale\":\"one sentence\"}]}.\n\nCopy every id exactly from the input. Do not invent or shorten ids.\n\nUse adjacent_topic_jump only when the examples show the same task, project, venue, event, or research thread continuing across topics.\n\nUse topic_switch when the examples look like a real task/context change.\n\n[{\"id\":\"t-020->t-014\",\"source_topic\":\"Hacker News Weekly Roundups\",\"target_topic\":\"Weekly Link Roundups (Reddit)\",\"visit_count\":1,\"examples\":[{\"from\":\"Weekly links roundup #4\",\"to\":\"Friday grab bag #20\"}]}]",
+   "response": {
+    "model": "gemma3:12b",
+    "created_at": "2026-08-25T00:40:33.553977Z",
+    "message": {
+     "role": "assistant",
+     "content": "```json\n{\"transitions\":[{\"id\":\"t-020->t-014\",\"type\":\"topic_switch\",\"confidence\":0.9,\"rationale\":\"The shift from Hacker News Weekly Roundups to Weekly Link Roundups (Reddit) indicates a change in platform and likely a broader search for similar content.\"}]}\n```"
+    },
+    "done": true,
+    "done_reason": "stop",
+    "total_duration": 7809408709,
+    "load_duration": 3609042,
+    "prompt_eval_count": 232,
+    "prompt_eval_duration": 1702743000,
+    "eval_count": 69,
+    "eval_duration": 4321765000
+   }
+  },
+  {
+   "kind": "verify_transitions",
+   "promptHash": "1i2uqnr",
+   "prompt": "Re-classify these observed topic transitions from browser history.\n\nAllowed type values: adjacent_topic_jump, topic_switch.\n\nReturn JSON shaped as {\"transitions\":[{\"id\":\"copied id\",\"type\":\"adjacent_topic_jump|topic_switch\",\"confidence\":0.0-1.0}]}.\n\nCopy every id exactly from the input.\n\nUse adjacent_topic_jump only when the examples show the same task or research thread continuing across topics.\n\n[{\"id\":\"t-020->t-014\",\"source_topic\":\"Hacker News Weekly Roundups\",\"target_topic\":\"Weekly Link Roundups (Reddit)\",\"visit_count\":1,\"examples\":[{\"from\":\"Weekly links roundup #4\",\"to\":\"Friday grab bag #20\"}]}]",
+   "response": {
+    "model": "gemma3:12b",
+    "created_at": "2026-08-25T00:40:37.514968Z",
+    "message": {
+     "role": "assistant",
+     "content": "```json\n{\"transitions\":[{\"id\":\"t-020->t-014\",\"type\":\"topic_switch\",\"confidence\":0.9}]}\n```"
+    },
+    "done": true,
+    "done_reason": "stop",
+    "total_duration": 3924395708,
+    "load_duration": 2056958,
+    "prompt_eval_count": 195,
+    "prompt_eval_duration": 1304425000,
+    "eval_count": 35,
+    "eval_duration": 2145415000
+   }
+  }
+ ]
+}
