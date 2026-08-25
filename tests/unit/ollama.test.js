@@ -139,3 +139,69 @@ const CTOllama = require('../../lib/ollama.js');
 
   console.log('ollama tests passed');
 })().catch(error => { console.error(error); process.exit(1); });
+
+// --- duty-cycle pacing -------------------------------------------------
+(async () => {
+  const sleeps = [];
+  const makePaced = duty => CTOllama.createClient({
+    dutyCycle: duty,
+    sleep: ms => { sleeps.push(ms); return Promise.resolve(); },
+    transport: async (url, options) => {
+      // Simulate a call that takes 100 ms of model time.
+      const started = Date.now();
+      while (Date.now() - started < 100) { /* busy wait, deterministic */ }
+      if (url.endsWith('/api/chat')) return { message: { content: '{"ok":true}' } };
+      const body = JSON.parse(options.body);
+      return { embeddings: body.input.map(() => [1, 0]) };
+    }
+  });
+
+  // Full speed never rests.
+  sleeps.length = 0;
+  await makePaced(1).chatJson('p', 'label_topics');
+  assert.deepStrictEqual(sleeps, [], 'a duty cycle of 1 inserts no pauses');
+
+  // 75% duty: rest one third of the busy time (busy 3, rest 1 => 75% busy).
+  sleeps.length = 0;
+  await makePaced(0.75).chatJson('p', 'label_topics');
+  assert.strictEqual(sleeps.length, 1, 'a paced call rests once');
+  const rest75 = sleeps[0];
+  assert.ok(rest75 >= 25 && rest75 <= 60, `~1/3 of a 100 ms call (got ${rest75} ms)`);
+
+  // 50% duty rests about as long as it worked.
+  sleeps.length = 0;
+  await makePaced(0.5).chatJson('p', 'label_topics');
+  assert.ok(sleeps[0] >= 80 && sleeps[0] <= 140, `~equal to a 100 ms call (got ${sleeps[0]} ms)`);
+
+  // Pacing applies to embedding batches too, and is reported.
+  sleeps.length = 0;
+  const client = makePaced(0.5);
+  await client.embed(['a', 'b']);
+  assert.strictEqual(sleeps.length, 1, 'each embed batch is paced');
+  assert.ok(client.stats.pacedMs > 0, 'time spent resting is recorded');
+
+  // num_thread is only sent when configured.
+  let sentBody = null;
+  const withThreads = CTOllama.createClient({
+    numThread: 8,
+    transport: async (url, options) => {
+      sentBody = JSON.parse(options.body);
+      return { message: { content: '{}' } };
+    }
+  });
+  await withThreads.chatJson('p', 'label_topics');
+  assert.strictEqual(sentBody.options.num_thread, 8);
+
+  let defaultBody = null;
+  const withoutThreads = CTOllama.createClient({
+    transport: async (url, options) => {
+      defaultBody = JSON.parse(options.body);
+      return { message: { content: '{}' } };
+    }
+  });
+  await withoutThreads.chatJson('p', 'label_topics');
+  assert.strictEqual(defaultBody.options.num_thread, undefined,
+    'thread count is left to Ollama unless the user asked otherwise');
+
+  console.log('ollama pacing tests passed');
+})().catch(error => { console.error(error); process.exit(1); });

@@ -4,6 +4,7 @@
 const DEFAULTS = {
   days: 28,
   maxNewPagesPerRun: 300,
+  dutyCycle: 1,
   embeddingModel: 'bge-m3:latest',
   chatModel: 'gemma3:12b',
   idleGatingEnabled: true,
@@ -26,6 +27,7 @@ function linesToList(value) {
 function fillForm(form, settings) {
   form.elements.days.value = String(settings.days || DEFAULTS.days);
   form.elements.maxNewPagesPerRun.value = String(settings.maxNewPagesPerRun || DEFAULTS.maxNewPagesPerRun);
+  form.elements.dutyCycle.value = String(settings.dutyCycle || DEFAULTS.dutyCycle);
   form.elements.embeddingModel.value = settings.embeddingModel || DEFAULTS.embeddingModel;
   form.elements.chatModel.value = settings.chatModel || DEFAULTS.chatModel;
   form.elements.idleGatingEnabled.checked = settings.idleGatingEnabled !== false;
@@ -68,6 +70,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     await store.saveEditableSettings({
       days: Number(data.get('days')) || DEFAULTS.days,
       maxNewPagesPerRun: Number(data.get('maxNewPagesPerRun')) || DEFAULTS.maxNewPagesPerRun,
+      dutyCycle: Number(data.get('dutyCycle')) || DEFAULTS.dutyCycle,
       embeddingModel: String(data.get('embeddingModel') || '').trim() || DEFAULTS.embeddingModel,
       chatModel: String(data.get('chatModel') || '').trim() || DEFAULTS.chatModel,
       denylist: linesToList(data.get('denylist')),

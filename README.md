@@ -70,6 +70,13 @@ Then open `http://localhost:8912/ui/demo.html`. This replays a real recorded `ge
    ollama pull gemma3:12b
    ```
    Roughly 11 GB resident when both are loaded; the pipeline unloads the embedding model before chat work so they overlap only briefly.
+
+   On Apple silicon these models run entirely on the GPU, which has no
+   utilisation cap. If you want the machine to stay cool, Settings →
+   **Local model intensity** rests between model calls instead: at 75% the
+   GPU works three seconds for every one it idles. The run takes
+   proportionally longer, which costs nothing when it happens while you are
+   away.
 2. **The extension**: open `chrome://extensions/`, enable Developer mode, choose *Load unpacked*, and select this directory.
 3. Chrome will warn that the extension can read data on all sites. It can — that is how the content sensor works. Nothing leaves your machine; see `PRIVACY.md`.
 4. Browse normally. The first analysis runs on its own when the machine is idle (or between 02:00 and 05:00). To run it immediately, open the extension's **Audit** page and press **Run now**.

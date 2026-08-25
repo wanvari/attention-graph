@@ -75,6 +75,18 @@
           </label>
           <label class="option-row">
             <div>
+              <strong>Local model intensity</strong>
+              <small>These models run entirely on the GPU, which has no utilisation limit, so a gentler setting rests between model calls rather than slowing them down. The work takes proportionally longer and the machine stays cooler — which costs nothing for a run that happens while you are away.</small>
+            </div>
+            <select name="dutyCycle">
+              <option value="1">Full speed</option>
+              <option value="0.75">Gentle — busy 75% of the time</option>
+              <option value="0.5">Very gentle — busy 50% of the time</option>
+              <option value="0.25">Background — busy 25% of the time</option>
+            </select>
+          </label>
+          <label class="option-row">
+            <div>
               <strong>Only run while the machine is idle</strong>
               <small>On by default. Turning this off means a run of roughly one to four minutes of local GPU work can start while you are working.</small>
             </div>

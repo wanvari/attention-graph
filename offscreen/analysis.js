@@ -37,7 +37,10 @@
       const settings = await store.getSettingsMap();
       const ollama = CTOllama.createClient({
         embeddingModel: settings.embeddingModel || 'bge-m3:latest',
-        chatModel: settings.chatModel || 'gemma3:12b'
+        chatModel: settings.chatModel || 'gemma3:12b',
+        // How hard the local model is allowed to work (see lib/ollama.js).
+        dutyCycle: Number(settings.dutyCycle) || 1,
+        numThread: settings.numThread || null
       });
       const pipeline = CTPipeline.createPipeline({
         store,
