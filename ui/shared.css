@@ -10,9 +10,19 @@
   --accent: #5b6ee0;          /* hue ~231 */
   --accent-soft: #aab4ef;
   --accent-faint: #e3e6fb;
-  --band-within: #9aa3b8;     /* neutral, low intensity */
+  /* Band badges carry a background AND a text colour so both themes reach
+     WCAG AA. Painting light text on the low-intensity swatches gave 2.3:1.
+     Intensity is conveyed by saturation within one neutral hue, never by
+     valence. */
+  --band-within: #9aa3b8;     /* neutral, low intensity  (charts, rings) */
   --band-outside: #7c8fe0;    /* same family, mid intensity */
   --band-unusual: #4356d6;    /* same family, high intensity */
+  --band-within-bg: #e4e6ec;
+  --band-within-fg: #3d4457;
+  --band-outside-bg: #dde3fb;
+  --band-outside-fg: #2f3f96;
+  --band-unusual-bg: #4356d6;
+  --band-unusual-fg: #ffffff;
   --ring-track: #dcdce8;
 }
 
@@ -30,6 +40,12 @@
     --band-within: #6a7288;
     --band-outside: #7c8fe0;
     --band-unusual: #98a8f5;
+    --band-within-bg: #2b3040;
+    --band-within-fg: #aab2c6;
+    --band-outside-bg: #2c3566;
+    --band-outside-fg: #a9b8f2;
+    --band-unusual-bg: #98a8f5;
+    --band-unusual-fg: #101014;
     --ring-track: #26262f;
   }
 }

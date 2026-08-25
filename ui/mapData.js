@@ -64,27 +64,44 @@
     const today = CTText.dayKeyFromMs(now);
     const fromDay = CTText.addDays(today, -(windowDays - 1));
 
-    const [topicRows, memberships, transitionRows, pageRows, metricRows, uncategorizedRows, runRows] = await Promise.all([
+    const [topicRows, memberships, transitionRows, pageRows, metricRows, uncategorizedRows, runRows, visitRows] = await Promise.all([
       store.getAll('topics'),
       store.getAll('memberships'),
       store.getAll('transitions'),
       store.getAll('pages'),
       store.getAll('daily_metrics'),
       store.getAll('uncategorized'),
-      store.getAll('runs')
+      store.getAll('runs'),
+      store.byIndex('visits', 'byDay', store.range(fromDay, today))
     ]);
 
+    // A membership row carries the page's LIFETIME dwell and visit totals, so
+    // summing those for a 7-day window reported months of attention as if it
+    // happened this week. Window figures come from the visits actually inside
+    // the window instead; memberships only say which topic a page belongs to.
+    const windowStatsByUrl = new Map();
+    for (const visit of visitRows) {
+      const entry = windowStatsByUrl.get(visit.normalizedUrl) ||
+        { dwellMs: 0, visitCount: 0, firstSeen: visit.visitTime, lastSeen: visit.visitTime };
+      entry.dwellMs += visit.dwellMs || 0;
+      entry.visitCount++;
+      entry.firstSeen = Math.min(entry.firstSeen, visit.visitTime);
+      entry.lastSeen = Math.max(entry.lastSeen, visit.visitTime);
+      windowStatsByUrl.set(visit.normalizedUrl, entry);
+    }
+
     const pageByUrl = new Map(pageRows.map(p => [p.normalizedUrl, p]));
-    const inWindow = m => m.lastDay >= fromDay;
-    const windowMemberships = memberships.filter(inWindow);
+    // Only memberships whose page was actually visited inside the window.
+    const windowMemberships = memberships.filter(m => windowStatsByUrl.has(m.normalizedUrl));
 
     // Aggregate per-topic evidence over the window.
     const evidenceByTopic = new Map();
     for (const membership of windowMemberships) {
+      const stats = windowStatsByUrl.get(membership.normalizedUrl);
       const entry = evidenceByTopic.get(membership.topicId) ||
         { dwellMs: 0, visitCount: 0, pages: [], domains: new Map() };
-      entry.dwellMs += membership.dwellMs || 0;
-      entry.visitCount += membership.visitCount || 0;
+      entry.dwellMs += stats.dwellMs;
+      entry.visitCount += stats.visitCount;
       const page = pageByUrl.get(membership.normalizedUrl);
       if (page) {
         entry.pages.push({
@@ -93,15 +110,15 @@
           url: page.url,
           domain: page.domain,
           source: page.source,
-          visitCount: membership.visitCount || 0,
-          estimatedDwellMs: membership.dwellMs || 0,
-          estimatedDwellMinutes: msToMinutes(membership.dwellMs),
-          firstVisitTime: page.firstSeen,
-          lastVisitTime: page.lastSeen
+          visitCount: stats.visitCount,
+          estimatedDwellMs: stats.dwellMs,
+          estimatedDwellMinutes: msToMinutes(stats.dwellMs),
+          firstVisitTime: stats.firstSeen,
+          lastVisitTime: stats.lastSeen
         });
         const domainEntry = entry.domains.get(page.domain) || { domain: page.domain, visitCount: 0, estimatedDwellMs: 0 };
-        domainEntry.visitCount += membership.visitCount || 0;
-        domainEntry.estimatedDwellMs += membership.dwellMs || 0;
+        domainEntry.visitCount += stats.visitCount;
+        domainEntry.estimatedDwellMs += stats.dwellMs;
         entry.domains.set(page.domain, domainEntry);
       }
       evidenceByTopic.set(membership.topicId, entry);
@@ -245,15 +262,22 @@
         endTime: lastOkRun ? lastOkRun.startedAt : now,
         dwellMethod: 'estimated from gaps between visits (capped at 30 minutes; session-ending visits count 1 minute), lowered by measured active time when a capture matches'
       },
-      categorizedCoverage: {
-        pagesAvailable: pageRows.length,
-        pagesAnalyzed: new Set(windowMemberships.map(m => m.normalizedUrl)).size,
-        visitsCategorized: visitCount,
-        estimatedActiveMs: categorizedMs,
-        estimatedActiveMinutes: msToMinutes(categorizedMs),
-        activeTimeCoverage: activeMs ? categorizedMs / activeMs : 0,
-        visitCoverage: activeMs ? categorizedMs / activeMs : 0
-      },
+      categorizedCoverage: (() => {
+        // Two genuinely different ratios. Reporting the time figure under both
+        // names made the visit coverage look identical to it by construction.
+        const categorizedUrls = new Set(windowMemberships.map(m => m.normalizedUrl));
+        const categorizedVisits = visitRows.filter(v => categorizedUrls.has(v.normalizedUrl)).length;
+        return {
+          pagesAvailable: pageRows.length,
+          pagesAnalyzed: categorizedUrls.size,
+          visitsCategorized: categorizedVisits,
+          visitsInWindow: visitRows.length,
+          estimatedActiveMs: categorizedMs,
+          estimatedActiveMinutes: msToMinutes(categorizedMs),
+          activeTimeCoverage: activeMs ? categorizedMs / activeMs : 0,
+          visitCoverage: visitRows.length ? categorizedVisits / visitRows.length : 0
+        };
+      })(),
       uncoveredTransitions,
       uncategorized: {
         pageCount: uncategorizedPages.length,

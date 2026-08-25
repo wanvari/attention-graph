@@ -220,8 +220,12 @@ if (typeof chrome !== 'undefined' && chrome.runtime && chrome.runtime.id &&
           const [a, b] = [await store.get('topics', detail.topicA), await store.get('topics', detail.topicB)];
           if (!a || !b) return;
           const memberships = await store.byIndex('memberships', 'byTopic', detail.topicB);
+          // Move, not copy: leaving the absorbed topic's rows behind would
+          // membership every page twice and double-count its dwell.
           const moved = memberships.map(m => ({ ...m, topicId: detail.topicA }));
+          const removed = memberships.map(m => [detail.topicB, m.normalizedUrl]);
           await store.registryCommit({
+            removeMemberships: removed,
             topics: [
               { ...a, userCorrected: true, totalDwellMs: (a.totalDwellMs || 0) + (b.totalDwellMs || 0) },
               { ...b, state: 'retired' }

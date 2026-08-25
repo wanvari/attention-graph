@@ -124,7 +124,11 @@ function recordingTransport(recordings) {
 function goldenTransport(golden) {
   const CTText2 = require('../../lib/text.js');
   const byHash = new Map(golden.calls.map(call => [call.promptHash, call]));
-  return async (url, options) => {
+  // Transition labelling treats a failed call as best-effort and swallows it,
+  // which is correct in production but would let a drifted prompt slip past
+  // the replay unnoticed. Misses are recorded so the test can assert none.
+  const misses = [];
+  const transport = async (url, options) => {
     if (url.endsWith('/api/tags')) {
       return { models: [{ name: 'bge-m3:latest' }, { name: 'gemma3:12b' }] };
     }
@@ -136,6 +140,7 @@ function goldenTransport(golden) {
       const hash = CTText2.hashString(prompt);
       const call = byHash.get(hash);
       if (!call) {
+        misses.push({ kind, hash });
         const error = new Error(`prompt hash ${hash} (${kind}) not in golden index — re-record with tools/recordGolden.js`);
         error.code = 'golden-miss';
         throw error;
@@ -144,6 +149,8 @@ function goldenTransport(golden) {
     }
     throw new Error(`golden transport: unexpected URL ${url}`);
   };
+  transport.misses = misses;
+  return transport;
 }
 
 async function makeEnv(options) {

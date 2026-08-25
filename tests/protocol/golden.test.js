@@ -15,14 +15,21 @@ const goldenPath = path.join(__dirname, '..', '..', 'fixtures', 'golden', 'calls
     return;
   }
   const golden = JSON.parse(fs.readFileSync(goldenPath, 'utf8'));
+  const transport = goldenTransport(golden);
   const env = await makeEnv({
-    transport: goldenTransport(golden),
+    transport,
     settings: { maxNewPagesPerRun: 400 }
   });
   for (const day of golden.runDays) {
     const result = await env.runThroughDay(day);
     assert.strictEqual(result.ok, true, `replay run through day ${day} failed at ${result.stage}: ${result.error}`);
   }
+
+  // Some stages treat a failed model call as best-effort, so an unmatched
+  // prompt would otherwise be swallowed rather than failing the replay.
+  assert.deepStrictEqual(transport.misses, [],
+    `every prompt must be in the golden index; re-record with tools/recordGolden.js:\n` +
+    transport.misses.map(m => `  ${m.kind} ${m.hash}`).join('\n'));
 
   const topics = await env.store.getAll('topics');
   assert.ok(topics.length >= 10, `real-model replay produces a full registry (got ${topics.length})`);

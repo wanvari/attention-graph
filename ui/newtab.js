@@ -268,11 +268,29 @@
       row.appendChild(el('span', `nt-band ${info.band}`, info.bandText));
       const sparkRow = el('div', 'nt-sparkline-row');
       sparkRow.hidden = true;
-      row.addEventListener('click', () => {
+      // The row is a real control, so it needs real control semantics:
+      // reachable by keyboard, announced as a button, and operable with
+      // Enter/Space rather than click alone.
+      const sparkId = `spark-${def.metric}`;
+      sparkRow.id = sparkId;
+      row.setAttribute('role', 'button');
+      row.setAttribute('tabindex', '0');
+      row.setAttribute('aria-expanded', 'false');
+      row.setAttribute('aria-controls', sparkId);
+      row.setAttribute('aria-label', `${def.name}: ${def.format(latest[def.metric] || 0)}, ${info.bandText}. Show 28-day history.`);
+      const toggle = () => {
         if (sparkRow.hidden && !sparkRow.childNodes.length) {
           sparkRow.appendChild(sparklineSvg(history, def.metric, baselineByMetric.get(def.metric)));
         }
         sparkRow.hidden = !sparkRow.hidden;
+        row.setAttribute('aria-expanded', String(!sparkRow.hidden));
+      };
+      row.addEventListener('click', toggle);
+      row.addEventListener('keydown', event => {
+        if (event.key === 'Enter' || event.key === ' ' || event.key === 'Spacebar') {
+          event.preventDefault();
+          toggle();
+        }
       });
       rangeCard.appendChild(row);
       rangeCard.appendChild(sparkRow);

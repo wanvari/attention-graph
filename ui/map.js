@@ -167,14 +167,10 @@ class TopicMapVisualizer {
     const count = staleness.atLimit ? `${staleness.newItemCount}+` : String(staleness.newItemCount);
     banner.hidden = false;
     banner.innerHTML = `
-      <span>${escapeHtml(count)} pages visited since this analysis was generated.</span>
-      <button type="button" id="staleness-rerun">Re-run analysis</button>
+      <span>${escapeHtml(count)} pages visited since the last analysis run, so they are not on this map yet.</span>
+      <a class="banner-link" href="audit.html">Open Audit to run one</a>
       <button type="button" id="staleness-dismiss" class="banner-dismiss" title="Dismiss">×</button>
     `;
-    document.getElementById('staleness-rerun').addEventListener('click', () => {
-      banner.hidden = true;
-      this.loadAnalysis(true);
-    });
     document.getElementById('staleness-dismiss').addEventListener('click', () => {
       banner.hidden = true;
     });

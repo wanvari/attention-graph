@@ -91,6 +91,53 @@ assert.deepStrictEqual(hueViolations, [],
   assert.deepStrictEqual(jsViolations, [], `valence hues in map palettes:\n${jsViolations.join('\n')}`);
 }
 
+// ------------------------------------------------------ contrast (WCAG AA)
+function relativeLuminance(hex) {
+  const value = hex.replace('#', '');
+  const channels = [0, 2, 4]
+    .map(i => parseInt(value.slice(i, i + 2), 16) / 255)
+    .map(c => (c <= 0.03928 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4)));
+  return 0.2126 * channels[0] + 0.7152 * channels[1] + 0.0722 * channels[2];
+}
+
+function contrastRatio(a, b) {
+  const l1 = relativeLuminance(a);
+  const l2 = relativeLuminance(b);
+  return (Math.max(l1, l2) + 0.05) / (Math.min(l1, l2) + 0.05);
+}
+
+{
+  // The band badges are small text, so AA is 4.5:1. Painting the light
+  // `--bg` colour on the low-intensity swatches gave 2.3:1 in light mode.
+  const shared = fs.readFileSync(path.join(uiDir, 'shared.css'), 'utf8');
+  const tokens = {};
+  for (const match of shared.matchAll(/(--band-\w+(?:-\w+)?)\s*:\s*(#[0-9a-fA-F]{6})/g)) {
+    // Later definitions are the dark-mode block; keep both under a scheme key.
+    const key = match[1];
+    if (!tokens[key]) tokens[key] = [];
+    tokens[key].push(match[2]);
+  }
+  const failures = [];
+  for (const band of ['within', 'outside', 'unusual']) {
+    const backgrounds = tokens[`--band-${band}-bg`] || [];
+    const foregrounds = tokens[`--band-${band}-fg`] || [];
+    assert.ok(backgrounds.length >= 1 && foregrounds.length >= 1,
+      `band "${band}" defines an explicit background and text colour`);
+    // index 0 = light mode, index 1 = dark mode (if present)
+    for (let scheme = 0; scheme < Math.min(backgrounds.length, foregrounds.length); scheme++) {
+      const ratio = contrastRatio(foregrounds[scheme], backgrounds[scheme]);
+      if (ratio < 4.5) {
+        failures.push(`${band} (${scheme === 0 ? 'light' : 'dark'}): ${foregrounds[scheme]} on ${backgrounds[scheme]} = ${ratio.toFixed(2)}:1`);
+      }
+      // And the badge must still be free of valence hues.
+      assert.ok(!isValenceHue(parseHex(backgrounds[scheme])),
+        `band "${band}" background stays out of the red/green bands`);
+    }
+  }
+  assert.deepStrictEqual(failures, [],
+    `band badges must meet WCAG AA (4.5:1) in both themes:\n${failures.join('\n')}`);
+}
+
 // ------------------------------------------------- newtab render in jsdom
 async function renderNewtab(seed) {
   const dom = new JSDOM('<!DOCTYPE html><html><body><main id="app"></main></body></html>', {
@@ -206,6 +253,26 @@ async function renderNewtab(seed) {
     const firstRow = doc.querySelector('.nt-metric-row');
     firstRow.dispatchEvent(new window.Event('click', { bubbles: true }));
     assert.ok(doc.querySelector('.nt-sparkline-row svg'), 'clicking a metric row expands a sparkline');
+
+    // An interactive row must be operable without a mouse.
+    for (const metricRow of doc.querySelectorAll('.nt-metric-row')) {
+      assert.strictEqual(metricRow.getAttribute('role'), 'button', 'metric rows announce themselves as buttons');
+      assert.strictEqual(metricRow.getAttribute('tabindex'), '0', 'and are reachable by keyboard');
+      assert.ok(metricRow.hasAttribute('aria-expanded'), 'and report their expanded state');
+      assert.ok(metricRow.getAttribute('aria-controls'), 'and name the region they toggle');
+      assert.ok(metricRow.getAttribute('aria-label'), 'and carry a readable label');
+    }
+    const keyboardRow = doc.querySelectorAll('.nt-metric-row')[1];
+    const target = doc.getElementById(keyboardRow.getAttribute('aria-controls'));
+    assert.strictEqual(target.hidden, true, 'starts collapsed');
+    const enter = new window.KeyboardEvent('keydown', { key: 'Enter', bubbles: true });
+    keyboardRow.dispatchEvent(enter);
+    assert.strictEqual(target.hidden, false, 'Enter expands the sparkline');
+    assert.strictEqual(keyboardRow.getAttribute('aria-expanded'), 'true');
+    const space = new window.KeyboardEvent('keydown', { key: ' ', bubbles: true });
+    keyboardRow.dispatchEvent(space);
+    assert.strictEqual(target.hidden, true, 'Space collapses it again');
+    assert.strictEqual(keyboardRow.getAttribute('aria-expanded'), 'false');
   }
 
   // --- a day with no run today falls back to the most recent day
