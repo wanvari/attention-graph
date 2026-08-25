@@ -172,8 +172,36 @@
 
   function finalizeAndRestart(isSpaNavigation) {
     send(true);
+    // The destination gets the same scrutiny a fresh page load would get: an
+    // SPA can route from an allowed view straight to /login or /payment.
+    if (!capturable(location.href)) {
+      capture = null;
+      return;
+    }
     capture = newCapture(isSpaNavigation);
     send(false); // the successor announces itself right away (carries its text)
+  }
+
+  function capturable(url) {
+    return !settings.paused &&
+      !CTPrivacy.isExcluded(url, settings.denylist) &&
+      !CTPrivacy.isFilteredDomain(url);
+  }
+
+  // Pause and denylist edits must reach tabs that are already open, in both
+  // directions: stop an in-flight capture, and let a tab that loaded while
+  // paused start once capture resumes.
+  function applySettingsChange() {
+    if (capture && !capturable(capture.url)) {
+      send(true);
+      capture = null;
+      return;
+    }
+    if (!capture && capturable(location.href)) {
+      capture = newCapture(false);
+      lastInputAt = Date.now();
+      send(false);
+    }
   }
 
   // ---- active-time tick (§2.3) ----------------------------------------
@@ -188,6 +216,11 @@
         return;
       }
       capture.url = location.href;
+      if (!capturable(capture.url)) {
+        send(true);
+        capture = null;
+        return;
+      }
     }
     const active =
       document.visibilityState === 'visible' &&
@@ -208,12 +241,29 @@
   // ---- bootstrap -------------------------------------------------------
 
   function start() {
-    if (settings.paused) return;
-    if (CTPrivacy.isExcluded(location.href, settings.denylist)) return;
-    if (CTPrivacy.isFilteredDomain(location.href)) return;
+    // The tab listens for setting changes even when it is not capturing, so
+    // unpausing reaches tabs that were open at the time.
+    chrome.storage.onChanged.addListener((changes, area) => {
+      if (area !== 'local') return;
+      if ('ctPaused' in changes) settings.paused = !!changes.ctPaused.newValue;
+      if ('ctDenylist' in changes) {
+        const value = changes.ctDenylist.newValue;
+        settings.denylist = Array.isArray(value) && value.length ? value : null;
+      }
+      if ('ctLlmChatDomains' in changes) {
+        const value = changes.ctLlmChatDomains.newValue;
+        settings.llmChatDomains = Array.isArray(value) && value.length ? value : null;
+      }
+      applySettingsChange();
+    });
 
-    capture = newCapture(false);
-    lastInputAt = Date.now(); // page load counts as engagement start
+    document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState === 'hidden') send(false);
+    });
+    window.addEventListener('pagehide', () => {
+      send(true);
+      if (tickTimer) clearInterval(tickTimer);
+    });
 
     const noteInput = () => {
       lastInputAt = Date.now();
@@ -227,13 +277,10 @@
     }
     tickTimer = setInterval(tick, 1000);
 
-    document.addEventListener('visibilitychange', () => {
-      if (document.visibilityState === 'hidden') send(false);
-    });
-    window.addEventListener('pagehide', () => {
-      send(true);
-      if (tickTimer) clearInterval(tickTimer);
-    });
+    if (!capturable(location.href)) return;
+
+    capture = newCapture(false);
+    lastInputAt = Date.now(); // the load itself counts as engagement
     // First message carries the text right away.
     send(false);
   }

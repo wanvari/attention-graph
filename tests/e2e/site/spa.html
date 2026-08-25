@@ -6,8 +6,14 @@
   <h1 id="headline">First view content about mechanical keyboard switches and lubing</h1>
   <p>Linear switches travel smoothly from top to bottom while tactiles add a bump near actuation.</p>
   <button id="nav-btn">Go to second view</button>
+  <button id="nav-login">Go to the login view</button>
 </main>
 <script>
+document.getElementById('nav-login').addEventListener('click', () => {
+  history.pushState({}, '', '/spa/login');
+  document.getElementById('headline').textContent = 'Sensitive view: please sign in with your password';
+  document.title = 'Sign in';
+});
 document.getElementById('nav-btn').addEventListener('click', () => {
   history.pushState({}, '', '/spa/second-view');
   document.getElementById('headline').textContent = 'Second view content about marathon training and taper weeks';

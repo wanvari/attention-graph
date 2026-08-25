@@ -240,6 +240,53 @@ async function main() {
       await dense.close();
     });
 
+    // --- 4b. SPA navigation into a sensitive route is not captured -------
+    await check('SPA navigation into /login is excluded, not captured', async () => {
+      const spa = await context.newPage();
+      await spa.goto(`http://news.fixture.test:${PORT}/spa.html`);
+      await spa.bringToFront();
+      await spa.mouse.move(70, 70);
+      await spa.waitForTimeout(1500);
+      await spa.click('#nav-login');
+      await spa.waitForTimeout(2500);
+      await spa.close();
+      const captures = await flushAndReadCaptures(extPage);
+      const sensitive = captures.filter(c => c.url.includes('/spa/login'));
+      assert.strictEqual(sensitive.length, 0,
+        'a client-side route into /login must get the same check a page load would');
+      assert.ok(!captures.some(c => (c.extractedText || '').includes('please sign in with your password')),
+        'and none of its text is stored anywhere');
+    });
+
+    // --- 4c. pause reaches tabs that are already open --------------------
+    await check('pausing stops an already-open tab mid-capture', async () => {
+      const open = await context.newPage();
+      await open.goto(`http://news.fixture.test:${PORT}/article.html?already-open=1`);
+      await open.bringToFront();
+      await open.mouse.move(90, 90);
+      await open.waitForTimeout(1500);
+
+      await setPaused(extPage, true);
+      await open.bringToFront();
+      await open.waitForTimeout(500);
+      const atPause = await flushAndReadCaptures(extPage);
+      const before = atPause.find(c => c.url.includes('already-open'));
+      assert.ok(before, 'the tab was capturing before the pause');
+
+      // Keep the tab active for several seconds while paused.
+      for (let i = 0; i < 6; i++) {
+        await open.mouse.move(100 + i * 5, 100 + i * 5);
+        await open.waitForTimeout(500);
+      }
+      const afterPause = await flushAndReadCaptures(extPage);
+      const after = afterPause.find(c => c.url.includes('already-open'));
+      assert.strictEqual(after.activeMs, before.activeMs,
+        `an open tab must stop accruing active time when capture is paused (${before.activeMs} -> ${after.activeMs})`);
+
+      await setPaused(extPage, false);
+      await open.close();
+    });
+
     // --- 5. pause toggle --------------------------------------------------
     await check('pause stops captures; unpause resumes', async () => {
       await setPaused(extPage, true);

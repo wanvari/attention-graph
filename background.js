@@ -6,6 +6,7 @@ importScripts('lib/text.js', 'lib/privacy.js', 'lib/store.js', 'lib/ollamaRules.
 const store = CTStore.createStore({});
 
 const FLUSH_ALARM = 'flush';
+const RETENTION_ALARM = 'retention';
 const DAILY_ALARM = 'daily';
 const RUN_MIN_INTERVAL_MS = 20 * 3600 * 1000;   // condition 1a
 const RUN_NEW_VISIT_TRIGGER = 150;              // condition 1b
@@ -43,6 +44,7 @@ const flushCaptures = () => captures.flush();
 async function handleCaptureUpdate(message, sender) {
   // Defense in depth: never store anything from incognito contexts.
   if (sender && sender.tab && sender.tab.incognito) return { ok: false, textStored: false };
+  if (deletionInProgress) return { ok: false, textStored: false };
   await store.open();
   return captures.submit(message.capture);
 }
@@ -103,6 +105,17 @@ async function ollamaHealthy() {
 
 // ---- offscreen lifecycle (§1.2) ---------------------------------------
 
+// Set while a wipe is running so nothing writes underneath it.
+let deletionInProgress = false;
+
+async function closeOffscreenDocument() {
+  try {
+    if (await offscreenExists()) await chrome.offscreen.closeDocument();
+  } catch (error) {
+    console.warn('could not close offscreen document', error);
+  }
+}
+
 async function offscreenExists() {
   const contexts = await chrome.runtime.getContexts({ contextTypes: ['OFFSCREEN_DOCUMENT'] });
   return contexts.length > 0;
@@ -130,6 +143,7 @@ async function markAbandonedRuns() {
 }
 
 async function startPipeline(trigger, force) {
+  if (deletionInProgress) return { started: false, reason: 'deletion-in-progress' };
   // A service-worker restart does not fire onStartup, so sweep here too:
   // this is the moment a stale `running` row actually matters.
   await markAbandonedRuns();
@@ -248,12 +262,28 @@ chrome.notifications?.onClicked.addListener(() => {
 function ensureAlarms() {
   chrome.alarms.create(DAILY_ALARM, { periodInMinutes: 60 });
   chrome.alarms.create(FLUSH_ALARM, { periodInMinutes: 2 });
+  // Retention is a promise made in PRIVACY.md, so it cannot be a side effect
+  // of a successful analysis run: text must age out even if Ollama is never
+  // available again.
+  chrome.alarms.create(RETENTION_ALARM, { periodInMinutes: 6 * 60 });
+}
+
+async function runRetention() {
+  try {
+    await store.open();
+    const swept = await store.retentionSweep(Date.now());
+    if (swept) console.info(`retention: cleared text from ${swept} capture(s)`);
+    await store.setSetting('lastRetentionSweep', Date.now());
+  } catch (error) {
+    console.warn('retention sweep failed', error);
+  }
 }
 
 chrome.runtime.onInstalled.addListener(() => {
   installOllamaOriginRules();
   ensureAlarms();
   markAbandonedRuns();
+  runRetention();
   mirrorSettingsForContentScripts();
 });
 
@@ -261,12 +291,14 @@ chrome.runtime.onStartup.addListener(() => {
   installOllamaOriginRules();
   ensureAlarms();
   markAbandonedRuns();
+  runRetention();
   mirrorSettingsForContentScripts();
 });
 
 chrome.alarms.onAlarm.addListener(alarm => {
   if (alarm.name === FLUSH_ALARM) flushCaptures();
   if (alarm.name === DAILY_ALARM) dailyAlarmFired();
+  if (alarm.name === RETENTION_ALARM) runRetention();
 });
 
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
@@ -304,6 +336,26 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
           });
         })
         .catch(error => sendResponse({ error: String(error) }));
+      return true;
+    }
+    case 'DELETE_EVERYTHING': {
+      // Order matters: refuse new work, discard what is in flight, and only
+      // then wipe. Otherwise a buffered capture or a running pipeline writes
+      // data back moments after the user asked for it all to be gone.
+      (async () => {
+        deletionInProgress = true;
+        try {
+          captures.clear();
+          await closeOffscreenDocument();
+          await store.open();
+          await store.wipe();
+          await new Promise(resolve => chrome.storage.local.clear(resolve));
+          captures.clear(); // anything that arrived while we were wiping
+          return { ok: true };
+        } finally {
+          deletionInProgress = false;
+        }
+      })().then(sendResponse, error => sendResponse({ ok: false, error: String(error) }));
       return true;
     }
     case 'FLUSH_CAPTURES':

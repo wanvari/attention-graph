@@ -294,9 +294,18 @@ if (typeof chrome !== 'undefined' && chrome.runtime && chrome.runtime.id &&
     document.getElementById('delete-everything').addEventListener('click', async () => {
       if (!confirm('Delete the entire local record? This wipes every topic, metric, capture, and setting.')) return;
       if (!confirm('Really delete everything? There is no undo.')) return;
-      await store.wipe();
-      await new Promise(resolve => chrome.storage.local.clear(resolve));
-      status.textContent = 'Everything deleted.';
+      status.textContent = 'Stopping capture and analysis, then deleting…';
+      // The service worker owns the wipe: it has to stop the pipeline and drop
+      // the in-memory capture buffer first, or both write data back moments
+      // after the user asked for it to be gone.
+      const result = await new Promise(resolve => {
+        chrome.runtime.sendMessage({ type: 'DELETE_EVERYTHING' }, reply => {
+          resolve(chrome.runtime.lastError ? { ok: false, error: chrome.runtime.lastError.message } : reply);
+        });
+      });
+      status.textContent = result && result.ok
+        ? 'Everything deleted.'
+        : `Deletion failed: ${result ? result.error : 'no response'}. Nothing was partially removed.`;
       refresh();
     });
   });
