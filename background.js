@@ -139,6 +139,9 @@ async function markAbandonedRuns() {
 }
 
 async function startPipeline(trigger, force) {
+  // A service-worker restart does not fire onStartup, so sweep here too:
+  // this is the moment a stale `running` row actually matters.
+  await markAbandonedRuns();
   if (await pipelineIsRunning()) {
     await store.put('runs', {
       runId: `run-${Date.now().toString(36)}-skip`,
@@ -187,6 +190,9 @@ function queryIdleState(seconds) {
 
 async function dailyAlarmFired() {
   await store.open();
+  // Housekeeping first, before any due-check can return early: the alarm is
+  // the natural moment to notice that a previous run died without finishing.
+  await markAbandonedRuns();
   const settings = await store.getSettingsMap();
   const runs = await store.getAll('runs');
   const lastOk = runs.filter(r => r.status === 'ok').sort((a, b) => b.startedAt - a.startedAt)[0];

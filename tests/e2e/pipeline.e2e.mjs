@@ -27,13 +27,32 @@ function startServer() {
   return new Promise(resolve => server.listen(PORT, () => resolve(server)));
 }
 
-async function extensionPage(context) {
+let cachedExtensionId = null;
+async function extensionId(context) {
+  if (cachedExtensionId) return cachedExtensionId;
   let [worker] = context.serviceWorkers();
   if (!worker) worker = await context.waitForEvent('serviceworker', { timeout: 15000 });
-  const id = new URL(worker.url()).host;
-  const page = await context.newPage();
-  await page.goto(`chrome-extension://${id}/ui/newtab.html`);
-  return page;
+  cachedExtensionId = new URL(worker.url()).host;
+  return cachedExtensionId;
+}
+
+async function extensionPage(context) {
+  const id = await extensionId(context);
+  // An extension that is mid-reload refuses navigation with
+  // ERR_BLOCKED_BY_CLIENT, so retry until it is serving again.
+  let lastError = null;
+  for (let attempt = 0; attempt < 15; attempt++) {
+    const page = await context.newPage();
+    try {
+      await page.goto(`chrome-extension://${id}/ui/newtab.html`, { timeout: 5000 });
+      return page;
+    } catch (error) {
+      lastError = error;
+      await page.close().catch(() => {});
+      await new Promise(resolve => setTimeout(resolve, 1000));
+    }
+  }
+  throw lastError;
 }
 
 const send = (page, message) => page.evaluate(
@@ -120,12 +139,23 @@ async function main() {
       const ok = runs.find(r => r.status === 'ok');
       assert.ok(ok, `no successful run after 3 min (statuses: ${runs.map(r => r.status)})`);
 
-      const topics = await readStore(ext, 'topics');
-      assert.ok(topics.length >= 1, 'registry has topics');
+      // The four fixture pages are viewed for about a second each, which is
+      // thin evidence by design — the honest outcome is metrics plus an
+      // exclusion, not a topic conjured from four seconds of browsing.
       const metrics = await readStore(ext, 'daily_metrics');
       assert.ok(metrics.length >= 1, 'daily metrics written');
       const briefs = await readStore(ext, 'briefs');
       assert.ok(briefs.length >= 1, 'brief written');
+      const visits = await readStore(ext, 'visits');
+      assert.ok(visits.length >= 3, `history was ingested (got ${visits.length} visits)`);
+      const pages = await readStore(ext, 'pages');
+      assert.ok(pages.length >= 3, 'page aggregates written');
+      const topics = await readStore(ext, 'topics');
+      const uncategorized = await readStore(ext, 'uncategorized');
+      assert.ok(topics.length + uncategorized.length >= 1,
+        'every ingested page is either in a topic or accounted for as uncategorized');
+      const embeddings = await readStore(ext, 'embeddings');
+      assert.ok(embeddings.length >= 3, 'pages were embedded through local Ollama');
 
       // Offscreen document should have closed itself.
       await ext.waitForTimeout(2000);
@@ -135,48 +165,65 @@ async function main() {
       assert.strictEqual(contexts.length, 0, 'offscreen document closed after the run');
     });
 
-    await check('stale running row marked abandoned after reload; rerun succeeds', async () => {
+    await check('stale running row is marked abandoned and does not block a rerun', async () => {
+      // chrome.runtime.reload() cannot be used here: an extension loaded with
+      // --load-extension never comes back in a Playwright context. The
+      // mechanism under test is the sweep that runs whenever a run is
+      // considered, which is what a real service-worker restart triggers.
       await writeRun(ext, {
         runId: 'run-stale-test', startedAt: Date.now() - 30 * 60000, finishedAt: null,
         status: 'running', stage: 'embed', heartbeat: Date.now() - 15 * 60000,
         watermarkBefore: 0, counts: {}, timingsMs: {}, warnings: []
       });
-      await ext.evaluate(() => chrome.runtime.reload());
-      await ext.close().catch(() => {});
-      await new Promise(resolve => setTimeout(resolve, 4000));
-      const ext2 = await extensionPage(context);
+      await send(ext, { type: 'TEST_SET_SETTING', key: 'watermark', value: 1 });
+      const fired = await send(ext, { type: 'TEST_FIRE_ALARM', alarm: 'daily' });
+      assert.ok(fired && fired.ok, `alarm fire refused: ${JSON.stringify(fired)}`);
+
       let stale = null;
-      for (let i = 0; i < 10; i++) {
-        await ext2.waitForTimeout(1000);
-        const runs = await readStore(ext2, 'runs');
+      for (let i = 0; i < 15; i++) {
+        await ext.waitForTimeout(1000);
+        const runs = await readStore(ext, 'runs');
         stale = runs.find(r => r.runId === 'run-stale-test');
         if (stale && stale.status === 'abandoned') break;
       }
-      assert.ok(stale, 'stale row still present');
-      assert.strictEqual(stale.status, 'abandoned', `stale running row marked abandoned (got ${stale.status})`);
-      await ext2.close();
+      assert.ok(stale, 'the stale row is still present');
+      assert.strictEqual(stale.status, 'abandoned',
+        `a run whose heartbeat is 15 min old must be marked abandoned (got ${stale.status})`);
+      assert.ok(stale.finishedAt, 'the abandoned run is closed out');
+
+      // And a fresh run is not blocked by the stale row.
+      const started = await send(ext, { type: 'RUN_PIPELINE_MANUAL' });
+      assert.strictEqual(started.started, true,
+        `a stale row must not block a new run (refused: ${started.reason})`);
+      let laterRun = null;
+      for (let i = 0; i < 90; i++) {
+        await ext.waitForTimeout(2000);
+        const runs = await readStore(ext, 'runs');
+        laterRun = runs.find(r => r.runId !== 'run-stale-test' && r.startedAt > stale.startedAt);
+        if (laterRun && laterRun.status !== 'running') break;
+      }
+      assert.ok(laterRun, 'a new run row appeared');
+      assert.strictEqual(laterRun.status, 'ok', `the rerun failed: ${laterRun && laterRun.error}`);
     });
 
     await check('double alarm fire while running is skipped', async () => {
-      const ext3 = await extensionPage(context);
-      // A fresh-heartbeat running row simulates a run in progress.
-      await writeRun(ext3, {
+      // A fresh-heartbeat running row stands in for a run in flight.
+      await writeRun(ext, {
         runId: 'run-inflight-test', startedAt: Date.now(), finishedAt: null,
         status: 'running', stage: 'embed', heartbeat: Date.now(),
         watermarkBefore: 0, counts: {}, timingsMs: {}, warnings: []
       });
-      await send(ext3, { type: 'TEST_SET_SETTING', key: 'testMode', value: true });
-      await send(ext3, { type: 'TEST_SET_SETTING', key: 'idleGatingEnabled', value: false });
-      await send(ext3, { type: 'TEST_SET_SETTING', key: 'watermark', value: 1 });
-      const fired = await send(ext3, { type: 'TEST_FIRE_ALARM', alarm: 'daily' });
-      assert.ok(fired && fired.ok, `alarm fire refused: ${JSON.stringify(fired)}`);
-      await ext3.waitForTimeout(2000);
-      const runs = await readStore(ext3, 'runs');
-      assert.ok(runs.some(r => r.status === 'skipped'), 'second fire recorded as skipped');
+      const started = await send(ext, { type: 'RUN_PIPELINE_MANUAL' });
+      assert.strictEqual(started.started, false, 'a manual run is refused while one is in flight');
+      assert.strictEqual(started.reason, 'already-running');
+      await ext.waitForTimeout(2000);
+      const runs = await readStore(ext, 'runs');
+      assert.ok(runs.some(r => r.status === 'skipped'),
+        `the second fire is recorded as skipped (statuses: ${runs.map(r => r.status).join(',')})`);
       const inflight = runs.find(r => r.runId === 'run-inflight-test');
-      assert.strictEqual(inflight.status, 'running', 'the in-flight run row is untouched');
-      await ext3.close();
+      assert.strictEqual(inflight.status, 'running', 'the in-flight run row is left untouched');
     });
+
   } finally {
     await context.close();
     server.close();
