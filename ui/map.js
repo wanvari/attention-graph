@@ -180,35 +180,35 @@ class TopicMapVisualizer {
     });
   }
 
+  // The map reads the registry, so "nothing to draw" almost always means the
+  // pipeline has not run yet, not that Ollama is down. Say which.
   renderUnavailable(result) {
     this.analysis = result;
     this.g.selectAll('*').remove();
     this.setLoading(false);
-    this.setHealth('unavailable', 'Ollama unavailable');
-    this.setStatus(result.message || 'Local analysis is unavailable.');
-    const health = result.health || {};
-    const extensionOrigin = health.origin || (location.origin && location.origin.startsWith('chrome-extension://') ? location.origin : '');
-    const originsValue = extensionOrigin
-      ? `http://localhost,http://127.0.0.1,${extensionOrigin}`
-      : 'http://localhost,http://127.0.0.1,chrome-extension://YOUR_EXTENSION_ID';
-    const setupDetails = health.originRejected ? `
-        <div>Ollama is reachable, but it rejected this extension origin.</div>
-        <div>Set <code>OLLAMA_ORIGINS</code> to allow this local extension:</div>
-        <div><code>launchctl setenv OLLAMA_ORIGINS "${escapeHtml(originsValue)}"</code></div>
-        <div>Then quit and reopen Ollama, and refresh this page.</div>
-      ` : `
-        <div>Expected local endpoint: <code>http://localhost:11434</code></div>
-        <div>Required models: <code>bge-m3:latest</code> and <code>gemma3:12b-32k</code></div>
-        <div>Start Ollama, install missing models, then refresh.</div>
-      `;
+    const failed = !!result.message;
+    this.setHealth('unavailable', failed ? 'Registry unavailable' : 'No topics yet');
+    this.setStatus(failed
+      ? result.message
+      : `No topics with activity in the last ${this.windowDays || 30} days.`);
     document.getElementById('summary-strip').innerHTML = '';
     document.getElementById('legend').innerHTML = '';
-    document.getElementById('evidence-panel').innerHTML = `
+    document.getElementById('evidence-panel').innerHTML = failed ? `
       <div class="evidence-section">
-        <h2>Local analysis unavailable</h2>
-        <p>${escapeHtml(result.message || 'Could not run the local topic map.')}</p>
+        <h2>Could not read the registry</h2>
+        <p>${escapeHtml(result.message)}</p>
+      </div>
+    ` : `
+      <div class="evidence-section">
+        <h2>Nothing mapped yet</h2>
+        <p>
+          This map draws the persistent topic registry, so it stays empty until an analysis run has
+          finished. Runs happen on their own when the machine is idle, or overnight.
+        </p>
         <div class="setup-box">
-          ${setupDetails}
+          <div>To run one now, open <a href="audit.html">Audit</a> and press <strong>Run now</strong>.</div>
+          <div>That needs local Ollama at <code>http://localhost:11434</code> with <code>bge-m3:latest</code> and <code>gemma3:12b</code> pulled.</div>
+          <div>If topics exist but are older than this window, widen it to 90 days.</div>
         </div>
       </div>
     `;
