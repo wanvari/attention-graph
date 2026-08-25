@@ -65,7 +65,7 @@
           <label class="option-row">
             <div>
               <strong>Pages embedded per run</strong>
-              <small>Higher works the machine harder. Pages beyond the cap are deferred to the next run, never dropped.</small>
+              <small>Higher works the machine harder. Pages beyond the cap are queued and retried on later runs until they are done, not dropped.</small>
             </div>
             <select name="maxNewPagesPerRun">
               <option value="150">150 (light)</option>

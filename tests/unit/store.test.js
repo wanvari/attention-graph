@@ -180,30 +180,69 @@ async function testRetentionDeletesTextOnly() {
   assert.strictEqual(oldRow.maxScrollDepth, 0.8);
   const newRow = await store.get('captures', 'c-new');
   assert.strictEqual(newRow.extractedText, 'fresh text', 'recent captures untouched');
+
+  // An explicit zero window means "everything already in the past", not "use
+  // the default" -- `retentionMs || DEFAULT` used to silently do the latter,
+  // so a caller asking for zero retention got thirty days.
+  const sweptAll = await store.retentionSweep(now + 1000, 0);
+  assert.strictEqual(sweptAll, 1, 'a zero retention window clears remaining text');
+  assert.strictEqual((await store.get('captures', 'c-new')).extractedText, '');
 }
 
-async function testDayCommitReplacesDayRows() {
+async function testDayCommitSemantics() {
   const store = CTStore.createStore({ indexedDB: freshFactory(), IDBKeyRange });
   await store.open();
   await store.dayCommit('2026-03-10', {
     metrics: { day: '2026-03-10', activeMs: 100 },
     transitions: [{ day: '2026-03-10', sourceTopicId: 'a', targetTopicId: 'b', type: 'topic_switch', visitCount: 1 }],
-    uncategorized: [{ day: '2026-03-10', normalizedUrl: 'https://x.example/1', reason: 'disagreement' }],
+    uncategorized: [
+      { day: '2026-03-10', normalizedUrl: 'https://x.example/1', reason: 'disagreement' },
+      { day: '2026-03-10', normalizedUrl: 'https://x.example/2', reason: 'thin_evidence' }
+    ],
     baselines: [{ metric: 'topicEntropy', n: 14, mean: 2 }],
     brief: { day: '2026-03-10', items: [] }
   });
-  // Recommit with different rows: old day rows are replaced, not appended.
+
+  // Transitions ARE recomputed from every visit on the day, so replacing them
+  // wholesale is correct.
   await store.dayCommit('2026-03-10', {
     metrics: { day: '2026-03-10', activeMs: 200 },
-    transitions: [{ day: '2026-03-10', sourceTopicId: 'a', targetTopicId: 'c', type: 'topic_switch', visitCount: 2 }],
-    uncategorized: []
+    transitions: [{ day: '2026-03-10', sourceTopicId: 'a', targetTopicId: 'c', type: 'topic_switch', visitCount: 2 }]
   });
   const transitions = await store.getAll('transitions');
-  assert.strictEqual(transitions.length, 1, 'day recommit replaces the day');
+  assert.strictEqual(transitions.length, 1, 'a day recommit replaces that day\'s transitions');
   assert.strictEqual(transitions[0].targetTopicId, 'c');
   assert.strictEqual((await store.get('daily_metrics', '2026-03-10')).activeMs, 200);
-  assert.strictEqual((await store.getAll('uncategorized')).length, 0);
   assert.strictEqual((await store.getAll('baselines')).length, 1, 'baselines persist when omitted');
+
+  // Exclusions are NOT recomputed for the whole day: an incremental run only
+  // reconsiders the pages it touched. A commit that names none of them must
+  // leave every existing record alone.
+  assert.strictEqual((await store.getAll('uncategorized')).length, 2,
+    'a commit that examined no pages erases no exclusions');
+
+  // A page this run positively categorized has its stale exclusion cleared.
+  await store.dayCommit('2026-03-10', {
+    metrics: { day: '2026-03-10', activeMs: 200 },
+    categorizedUrls: ['https://x.example/1']
+  });
+  const remaining = await store.getAll('uncategorized');
+  assert.strictEqual(remaining.length, 1, 'only the newly-categorized page is cleared');
+  assert.strictEqual(remaining[0].normalizedUrl, 'https://x.example/2');
+
+  // Re-excluding a page updates its reason in place rather than duplicating.
+  await store.dayCommit('2026-03-10', {
+    uncategorized: [{ day: '2026-03-10', normalizedUrl: 'https://x.example/2', reason: 'agreed_uncategorized' }]
+  });
+  const updated = await store.getAll('uncategorized');
+  assert.strictEqual(updated.length, 1);
+  assert.strictEqual(updated[0].reason, 'agreed_uncategorized');
+
+  // Days are independent.
+  await store.dayCommit('2026-03-11', {
+    uncategorized: [{ day: '2026-03-11', normalizedUrl: 'https://y.example/1', reason: 'no_content' }]
+  });
+  assert.strictEqual((await store.getAll('uncategorized')).length, 2, 'a commit for one day never touches another');
 }
 
 // Only allowlisted keys may be persisted from a form, so stored settings can
@@ -249,7 +288,7 @@ async function run() {
   await testRegistryCommitRollsBack();
   await testEmbeddingPruneRespectsMembership();
   await testRetentionDeletesTextOnly();
-  await testDayCommitReplacesDayRows();
+  await testDayCommitSemantics();
   console.log('store tests passed');
 }
 
