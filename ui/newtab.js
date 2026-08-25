@@ -365,7 +365,10 @@
 });
 
 // Auto-boot only inside the extension page.
-if (typeof chrome !== 'undefined' && chrome.runtime && chrome.runtime.id && typeof document !== 'undefined') {
+// The demo page renders these surfaces itself against a recorded store,
+// so the live boot path must not also run there.
+if (typeof chrome !== 'undefined' && chrome.runtime && chrome.runtime.id &&
+    typeof document !== 'undefined' && !globalThis.__CT_DEMO__) {
   document.addEventListener('DOMContentLoaded', () => {
     CTNewtab.main({
       statusProvider: () => new Promise(resolve => {

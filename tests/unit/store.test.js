@@ -206,8 +206,44 @@ async function testDayCommitReplacesDayRows() {
   assert.strictEqual((await store.getAll('baselines')).length, 1, 'baselines persist when omitted');
 }
 
+// Only allowlisted keys may be persisted from a form, so stored settings can
+// never shadow pipeline internals (the watermark, pause intervals) or point
+// the analysis at a non-local endpoint.
+async function testSettingsAllowlist() {
+  const store = CTStore.createStore({ indexedDB: freshFactory(), IDBKeyRange });
+  await store.open();
+  await store.setSetting('watermark', 12345);
+  await store.saveEditableSettings({
+    days: 14,
+    chatModel: 'gemma3:12b',
+    denylist: ['*.example.com'],
+    notificationsEnabled: true,
+    ollamaBaseUrl: 'http://evil.example.com',
+    watermark: 999,
+    pauseIntervals: [{ start: 0, end: null }],
+    forceRefresh: true
+  });
+  const settings = await store.getSettingsMap();
+  assert.strictEqual(settings.days, 14);
+  assert.strictEqual(settings.chatModel, 'gemma3:12b');
+  assert.deepStrictEqual(settings.denylist, ['*.example.com']);
+  assert.strictEqual(settings.notificationsEnabled, true);
+  assert.strictEqual(settings.ollamaBaseUrl, undefined, 'the endpoint can never be redirected from a form');
+  assert.strictEqual(settings.forceRefresh, undefined);
+  assert.strictEqual(settings.watermark, 12345, 'the watermark is not clobbered by a form submission');
+  assert.strictEqual(settings.pauseIntervals, undefined, 'pause intervals are written by the SW, not a form');
+
+  // Empty and null values are skipped rather than persisted as blanks.
+  await store.saveEditableSettings({ days: '', chatModel: null, embeddingModel: 'bge-m3:latest' });
+  const after = await store.getSettingsMap();
+  assert.strictEqual(after.days, 14, 'an empty field leaves the stored value alone');
+  assert.strictEqual(after.chatModel, 'gemma3:12b');
+  assert.strictEqual(after.embeddingModel, 'bge-m3:latest');
+}
+
 async function run() {
   await testSchemaCreation();
+  await testSettingsAllowlist();
   await testMigrationFromV3();
   await testMigrationFailureLeavesV3Intact();
   await testRegistryCommitRollsBack();
