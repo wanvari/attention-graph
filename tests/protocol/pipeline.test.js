@@ -50,6 +50,53 @@ const { makeEnv, scriptedTransport, wellBehavedHandlers, loadFixtures } = requir
     assert.strictEqual(rerun.counts.topicsCreated, 0);
   }
 
+  // --- overlapping re-runs must not inflate the registry -----------------
+  // Every run re-ingests a 2 h overlap window on purpose (§4.1). Membership
+  // and topic dwell are therefore recomputed from each page's authoritative
+  // visit totals, never accumulated; otherwise the same browsing is counted
+  // again on every overlapping run and every topic-time claim inflates.
+  {
+    const env = await makeEnv();
+    const anchor = new Date(env.fixtures.visitData.anchorDay1);
+    const at = (day, hour, minute) =>
+      new Date(anchor.getFullYear(), anchor.getMonth(), anchor.getDate() + (day - 1), hour, minute).getTime();
+    const totals = async () => {
+      const memberships = await env.store.getAll('memberships');
+      const topics = await env.store.getAll('topics');
+      return {
+        dwellMs: memberships.reduce((sum, m) => sum + m.dwellMs, 0),
+        visitCount: memberships.reduce((sum, m) => sum + m.visitCount, 0),
+        topicDwellMs: topics.reduce((sum, t) => sum + (t.totalDwellMs || 0), 0)
+      };
+    };
+
+    // 19:30 on fixture day 2, just after the 19:00 session.
+    env.clock.now = at(2, 19, 30);
+    assert.strictEqual((await env.pipeline.run({ trigger: 'manual' })).ok, true);
+    const first = await totals();
+    assert.ok(first.dwellMs > 0 && first.visitCount > 0, 'the first run records dwell');
+
+    // Two more runs whose `since` (watermark - 2 h) re-covers that session.
+    for (const [hour, minute] of [[19, 45], [20, 0]]) {
+      env.clock.now = at(2, hour, minute);
+      assert.strictEqual((await env.pipeline.run({ trigger: 'manual' })).ok, true);
+      const again = await totals();
+      assert.strictEqual(again.dwellMs, first.dwellMs,
+        `membership dwell must not change on an overlapping re-run (${again.dwellMs} vs ${first.dwellMs})`);
+      assert.strictEqual(again.visitCount, first.visitCount, 'membership visit counts must not inflate');
+      assert.strictEqual(again.topicDwellMs, first.topicDwellMs, 'topic dwell must not inflate');
+    }
+
+    // And the registry total must agree with the idempotent visits store.
+    const visits = await env.store.getAll('visits');
+    const memberedUrls = new Set((await env.store.getAll('memberships')).map(m => m.normalizedUrl));
+    const visitDwell = visits
+      .filter(v => memberedUrls.has(v.normalizedUrl))
+      .reduce((sum, v) => sum + (v.dwellMs || 0), 0);
+    assert.strictEqual(first.dwellMs, visitDwell,
+      'membership dwell must equal the dwell of the visits it covers');
+  }
+
   // --- Ollama down at embed: run fails at the stage, watermark unmoved ----
   {
     const fixtures = loadFixtures();

@@ -151,8 +151,38 @@ function makeCluster(overrides) {
   const updated = result.topicRows[0];
   assert.ok(updated.centroid[0] > updated.centroid[1], 'old dwell outweighs one new day');
   const expected = CTCluster.normalize(Float32Array.from([60, 15]));
-  assert.ok(Math.abs(updated.centroid[0] - expected[0]) < 1e-5, 'weights are exactly the dwell totals');
-  assert.strictEqual(updated.totalDwellMs, 75 * 60000);
+  assert.ok(Math.abs(updated.centroid[0] - expected[0]) < 1e-5,
+    'centroid weights are the topic total against the dwell this run adds');
+  // totalDwellMs is RECOMPUTED from the topic's memberships, never accumulated
+  // (runs re-ingest an overlap window, so accumulating would inflate it).
+  // Here the topic ends up with exactly one membership worth 15 minutes.
+  assert.strictEqual(updated.totalDwellMs, 15 * 60000);
+}
+
+// --- topic dwell is the sum over memberships, including untouched ones
+{
+  const topic = makeTopic({ totalDwellMs: 999 * 60000 }); // deliberately wrong stored value
+  const existing = new Map([
+    [CTRegistry.membershipKey('topic-a', 'https://old.example/1'), {
+      topicId: 'topic-a', normalizedUrl: 'https://old.example/1',
+      firstDay: '2026-03-01', lastDay: '2026-03-02', dwellMs: 20 * 60000, activeMs: 0, visitCount: 3
+    }]
+  ]);
+  const pageTotals = new Map([
+    ['https://new.example/1', { dwellMs: 10 * 60000, activeMs: 0, visitCount: 2, firstDay: '2026-03-10', lastDay: '2026-03-10' }],
+    ['https://new.example/2', { dwellMs: 5 * 60000, activeMs: 0, visitCount: 1, firstDay: '2026-03-10', lastDay: '2026-03-10' }]
+  ]);
+  const result = CTRegistry.applyMatches(
+    [{ action: 'merge', cluster: makeCluster(), topicId: 'topic-a', score: 0.9 }],
+    new Map([['topic-a', topic]]),
+    existing,
+    { runId: 'r1', today: '2026-03-10', now: 1000, pageTotals }
+  );
+  assert.strictEqual(result.topicRows[0].totalDwellMs, 35 * 60000,
+    'untouched membership (20m) plus the two recomputed rows (10m + 5m); the stale stored total is discarded');
+  const rows = result.membershipRows;
+  assert.strictEqual(rows.find(r => r.normalizedUrl === 'https://new.example/1').dwellMs, 10 * 60000,
+    'membership dwell comes from the page total, not from adding this run to the stored row');
 }
 
 // --- relabel rule
@@ -279,18 +309,36 @@ function makeCluster(overrides) {
   assert.strictEqual(result.events.find(e => e.topicId === 't3').day, '2026-03-13');
 }
 
-// --- membership rows accumulate onto existing memberships
+// --- membership rows take the page's authoritative totals, and keep the
+//     widest day span they have ever seen
 {
   const existing = new Map([[CTRegistry.membershipKey('topic-a', 'https://new.example/1'), {
     topicId: 'topic-a', normalizedUrl: 'https://new.example/1',
     firstDay: '2026-02-01', lastDay: '2026-02-20', dwellMs: 10 * 60000, activeMs: 60000, visitCount: 4
   }]]);
-  const rows = CTRegistry.buildMembershipRows('topic-a', makeCluster(), existing, 'r2');
+  const pageTotals = new Map([
+    ['https://new.example/1', { dwellMs: 25 * 60000, activeMs: 7 * 60000, visitCount: 9, firstDay: '2026-02-05', lastDay: '2026-03-10' }]
+  ]);
+  const rows = CTRegistry.buildMembershipRows('topic-a', makeCluster(), existing, 'r2', pageTotals);
   const merged = rows.find(r => r.normalizedUrl === 'https://new.example/1');
-  assert.strictEqual(merged.firstDay, '2026-02-01');
-  assert.strictEqual(merged.lastDay, '2026-03-10');
-  assert.strictEqual(merged.dwellMs, 20 * 60000);
-  assert.strictEqual(merged.visitCount, 6, 'existing 4 visits + cluster page 2 visits');
+  assert.strictEqual(merged.firstDay, '2026-02-01', 'the earlier stored firstDay is kept');
+  assert.strictEqual(merged.lastDay, '2026-03-10', 'the later day wins');
+  assert.strictEqual(merged.dwellMs, 25 * 60000, 'dwell is the page total, not stored + this run');
+  assert.strictEqual(merged.visitCount, 9, 'visits are the page total, not stored + this run');
+  assert.strictEqual(merged.activeMs, 7 * 60000);
+
+  // Re-running with the same totals must be a no-op, which is the property
+  // that keeps the 2 h re-ingest overlap from inflating the registry.
+  const rerun = CTRegistry.buildMembershipRows(
+    'topic-a', makeCluster(), new Map(rows.map(r => [CTRegistry.membershipKey(r.topicId, r.normalizedUrl), r])), 'r3', pageTotals
+  );
+  const again = rerun.find(r => r.normalizedUrl === 'https://new.example/1');
+  assert.strictEqual(again.dwellMs, merged.dwellMs, 'idempotent across re-runs');
+  assert.strictEqual(again.visitCount, merged.visitCount);
+
+  // Without pageTotals (unit-test convenience) the cluster page's own values stand.
+  const fallback = CTRegistry.buildMembershipRows('topic-a', makeCluster(), new Map(), 'r2');
+  assert.strictEqual(fallback[0].dwellMs, 10 * 60000, 'falls back to the page object when no totals are supplied');
 }
 
 console.log('registry tests passed');
