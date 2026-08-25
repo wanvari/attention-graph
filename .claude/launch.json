@@ -2,10 +2,10 @@
   "version": "0.0.1",
   "configurations": [
     {
-      "name": "static-preview",
-      "runtimeExecutable": "python3",
-      "runtimeArgs": ["-m", "http.server", "8451"],
-      "port": 8451
+      "name": "demo",
+      "runtimeExecutable": "node",
+      "runtimeArgs": ["tools/serveDemo.js", "8912"],
+      "port": 8912
     }
   ]
 }

@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Cognitive Trails — Demo</title>
+  <link rel="stylesheet" href="shared.css" />
+  <link rel="stylesheet" href="newtab.css" />
+  <link rel="stylesheet" href="audit.css" />
+  <link rel="stylesheet" href="demo.css" />
+</head>
+<body>
+  <div class="demo-shell">
+    <header class="demo-header">
+      <div>
+        <h1>Cognitive Trails — recorded demo</h1>
+        <p class="demo-sub" id="demo-sub">Loading the recorded run…</p>
+      </div>
+      <nav class="demo-tabs">
+        <button class="btn demo-tab active" data-view="home">Home</button>
+        <button class="btn demo-tab" data-view="audit">Audit</button>
+        <button class="btn demo-tab" data-view="evidence">Adjudication &amp; exclusions</button>
+        <button class="btn demo-tab" data-view="validation">Validation</button>
+      </nav>
+    </header>
+
+    <p class="demo-note">
+      This page replays a real <code>gemma3:12b</code> run over the committed 384-page / 28-day fixture.
+      Nothing here calls a model: the transcript and the resulting database were recorded by
+      <code>tools/recordGolden.js</code> and committed, so this works from a fresh clone with Ollama absent.
+      The fixture is synthetic and non-personal by construction.
+    </p>
+
+    <section id="view-home" class="demo-view">
+      <div id="app"></div>
+    </section>
+
+    <section id="view-audit" class="demo-view" hidden>
+      <div class="audit-grid">
+        <section class="panel" id="coverage-panel"><h2>Coverage &amp; honesty</h2><div id="coverage-content"></div></section>
+        <section class="panel" id="registry-panel"><h2>Registry</h2><div id="registry-content"></div></section>
+        <section class="panel" id="uncategorized-panel"><h2>Uncategorized, by reason</h2><div id="uncategorized-content"></div></section>
+        <section class="panel" id="proposals-panel"><h2>Proposals awaiting you</h2><div id="proposals-content"></div></section>
+        <section class="panel wide" id="runs-panel"><h2>Run history</h2><div id="runs-content"></div></section>
+        <section class="panel wide" id="storage-panel"><h2>Storage &amp; models</h2><div id="storage-content"></div></section>
+      </div>
+    </section>
+
+    <section id="view-evidence" class="demo-view" hidden>
+      <div class="audit-grid">
+        <section class="panel wide">
+          <h2>What the record refuses to claim</h2>
+          <div id="exclusion-content"></div>
+        </section>
+        <section class="panel wide">
+          <h2>The adjudication protocol, on real model output</h2>
+          <div id="protocol-content"></div>
+        </section>
+        <section class="panel wide">
+          <h2>Every topic, with its evidence</h2>
+          <div id="topics-content"></div>
+        </section>
+        <section class="panel wide">
+          <h2>Recorded model calls in this run</h2>
+          <div id="calls-content"></div>
+        </section>
+      </div>
+    </section>
+
+    <section id="view-validation" class="demo-view" hidden>
+      <div class="panel wide">
+        <h2>Validation report</h2>
+        <div id="validation-content">Loading the committed validation report…</div>
+      </div>
+    </section>
+  </div>
+
+  <script src="../lib/text.js"></script>
+  <script src="../lib/privacy.js"></script>
+  <script src="../lib/store.js"></script>
+  <script src="newtab.js"></script>
+  <script src="audit.js"></script>
+  <script src="demo.js"></script>
+</body>
+</html>

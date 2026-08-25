@@ -1,0 +1,248 @@
+{
+ "recordedAt": "2026-08-25T00:51:11.251Z",
+ "chatModel": "gemma3:12b",
+ "explanation": "The audit gate was deliberately widened (cohesionThreshold 0.99) so every cluster is audited. In production the gate fires on cohesion < 0.70, which on this fixture means it does not fire at all.",
+ "results": [
+  {
+   "name": "A coherent single-topic cluster",
+   "note": "Every page is genuinely about Rust async runtimes. The expected honest verdict is keep — but note the model prefers to subdivide large coherent topics, which is exactly why the production gate does not audit clusters like this.",
+   "pageCount": 12,
+   "cohesion": 0.859,
+   "gatedInProduction": false,
+   "summary": {
+    "audited": 1,
+    "kept": 0,
+    "split": 0,
+    "uncategorized": 0,
+    "disagreed": 1,
+    "errors": 0,
+    "calls": 2
+   },
+   "survivingClusters": [],
+   "excluded": [
+    {
+     "title": "Tokio runtime multi-thread scheduler internals",
+     "reason": "disagreement"
+    },
+    {
+     "title": "Pin and Unpin explained for async Rust",
+     "reason": "disagreement"
+    },
+    {
+     "title": "Cancellation safety in select loops",
+     "reason": "disagreement"
+    },
+    {
+     "title": "Async traits and dynamic dispatch overhead",
+     "reason": "disagreement"
+    },
+    {
+     "title": "Structured concurrency with JoinSet",
+     "reason": "disagreement"
+    },
+    {
+     "title": "Blocking calls inside async contexts",
+     "reason": "disagreement"
+    },
+    {
+     "title": "Waker contracts and manual Future impls",
+     "reason": "disagreement"
+    },
+    {
+     "title": "Send bounds on spawned tasks",
+     "reason": "disagreement"
+    },
+    {
+     "title": "io_uring backends for async runtimes",
+     "reason": "disagreement"
+    },
+    {
+     "title": "Comparing tokio and smol executors",
+     "reason": "disagreement"
+    },
+    {
+     "title": "Backpressure with bounded mpsc channels",
+     "reason": "disagreement"
+    },
+    {
+     "title": "Async drop and linear types debate",
+     "reason": "disagreement"
+    }
+   ],
+   "verdicts": {
+    "pass1": "split",
+    "pass2": "split"
+   },
+   "groupingAgreement": 0.333,
+   "agreementThreshold": 0.6
+  },
+  {
+   "name": "A genuinely mixed cluster",
+   "note": "Half sourdough baking, half Kubernetes networking, forced together. There is no honest shared theme; split or uncategorized are both defensible.",
+   "pageCount": 12,
+   "cohesion": 0.608,
+   "gatedInProduction": true,
+   "summary": {
+    "audited": 1,
+    "kept": 0,
+    "split": 0,
+    "uncategorized": 0,
+    "disagreed": 1,
+    "errors": 0,
+    "calls": 2
+   },
+   "survivingClusters": [],
+   "excluded": [
+    {
+     "title": "Managing sourdough starter hydration in winter",
+     "reason": "disagreement"
+    },
+    {
+     "title": "Why my sourdough crumb is dense and gummy",
+     "reason": "disagreement"
+    },
+    {
+     "title": "Autolyse versus fermentolyse for high-hydration dough",
+     "reason": "disagreement"
+    },
+    {
+     "title": "Scoring patterns for batard loaves",
+     "reason": "disagreement"
+    },
+    {
+     "title": "Cold retard timing for open crumb",
+     "reason": "disagreement"
+    },
+    {
+     "title": "Whole wheat starter conversion guide",
+     "reason": "disagreement"
+    },
+    {
+     "title": "Service ClusterIP to pod routing internals",
+     "reason": "disagreement"
+    },
+    {
+     "title": "CNI plugin comparison Cilium Calico Flannel",
+     "reason": "disagreement"
+    },
+    {
+     "title": "eBPF replacing kube-proxy iptables",
+     "reason": "disagreement"
+    },
+    {
+     "title": "NetworkPolicy default deny patterns",
+     "reason": "disagreement"
+    },
+    {
+     "title": "Ingress versus Gateway API migration",
+     "reason": "disagreement"
+    },
+    {
+     "title": "DNS resolution flow inside a cluster",
+     "reason": "disagreement"
+    }
+   ],
+   "verdicts": {
+    "pass1": "split",
+    "pass2": "split"
+   },
+   "groupingAgreement": 0.4,
+   "agreementThreshold": 0.6
+  },
+  {
+   "name": "Ambiguous link-roundup pages",
+   "note": "Pages that blend several topics with filler. This is the material the exclusion path exists for.",
+   "pageCount": 8,
+   "cohesion": 0.575,
+   "gatedInProduction": true,
+   "summary": {
+    "audited": 1,
+    "kept": 0,
+    "split": 0,
+    "uncategorized": 0,
+    "disagreed": 1,
+    "errors": 0,
+    "calls": 2
+   },
+   "survivingClusters": [],
+   "excluded": [
+    {
+     "title": "Friday grab bag #1",
+     "reason": "disagreement"
+    },
+    {
+     "title": "Weekly links roundup #2",
+     "reason": "disagreement"
+    },
+    {
+     "title": "Miscellany #3",
+     "reason": "disagreement"
+    },
+    {
+     "title": "Weekly links roundup #4",
+     "reason": "disagreement"
+    },
+    {
+     "title": "Weekly links roundup #5",
+     "reason": "disagreement"
+    },
+    {
+     "title": "Open thread #6",
+     "reason": "disagreement"
+    },
+    {
+     "title": "Open thread #7",
+     "reason": "disagreement"
+    },
+    {
+     "title": "Weekly links roundup #8",
+     "reason": "disagreement"
+    }
+   ],
+   "verdicts": {
+    "pass1": "split",
+    "pass2": "split"
+   },
+   "groupingAgreement": 0.467,
+   "agreementThreshold": 0.6
+  }
+ ],
+ "calls": [
+  {
+   "case": "A coherent single-topic cluster",
+   "kind": "adjudicate_pass1",
+   "prompt": "You are auditing one browser-history topic cluster whose label is low confidence.\nDecide one verdict:\n- \"keep\": these pages genuinely belong together as one topic.\n- \"split\": the pages form 2-4 clearly distinct topics. Provide groups.\n- \"uncategorized\": the pages are too mixed to support any honest topic label.\nReturn JSON only, shaped as {\"verdict\":\"keep|split|uncategorized\",\"label\":\"short topic label (keep only)\",\"confidence\":0.0-1.0,\"rationale\":\"one sentence\",\"groups\":[{\"label\":\"short topic label\",\"page_indexes\":[0,2]}]}.\n\"groups\" is required only for split, and page_indexes reference the \"i\" field of the input pages.\nDo not invent a theme to avoid saying uncategorized.\n{\"current_label\":\"Async Rust Programming\",\"keywords\":[\"async\",\"tokio\",\"docs\",\"rust\",\"boats\",\"fasterthanli\",\"for\",\"lang\",\"without\",\"backends\"],\"pages\":[{\"i\":0,\"title\":\"Tokio runtime multi-thread scheduler internals\",\"domain\":\"tokio.rs\"},{\"i\":1,\"title\":\"Pin and Unpin explained for async Rust\",\"domain\":\"docs.rs\"},{\"i\":2,\"title\":\"Cancellation safety in select loops\",\"domain\":\"rust-lang.org\"},{\"i\":3,\"title\":\"Async traits and dynamic dispatch overhead\",\"domain\":\"without.boats\"},{\"i\":4,\"title\":\"Structured concurrency with JoinSet\",\"domain\":\"fasterthanli.me\"},{\"i\":5,\"title\":\"Blocking calls inside async contexts\",\"domain\":\"tokio.rs\"},{\"i\":6,\"title\":\"Waker contracts and manual Future impls\",\"domain\":\"docs.rs\"},{\"i\":7,\"title\":\"Send bounds on spawned tasks\",\"domain\":\"rust-lang.org\"},{\"i\":8,\"title\":\"io_uring backends for async runtimes\",\"domain\":\"without.boats\"},{\"i\":9,\"title\":\"Comparing tokio and smol executors\",\"domain\":\"fasterthanli.me\"},{\"i\":10,\"title\":\"Backpressure with bounded mpsc channels\",\"domain\":\"tokio.rs\"},{\"i\":11,\"title\":\"Async drop and linear types debate\",\"domain\":\"docs.rs\"}]}",
+   "reply": "```json\n{\"verdict\":\"split\",\"label\":\"Async Rust Programming\",\"confidence\":0.7,\"rationale\":\"While all pages relate to asynchronous Rust, they cover distinct areas from runtime internals to trait design and performance considerations.\",\"groups\":[{\"label\":\"Tokio Runtime & Executors\",\"page_indexes\":[0,5,9,10]},{\"label\":\"Async Traits & Implementation Details\",\"page_indexes\":[1,6,7,11]},{\"label\":\"Async Performance & Backends\",\"page_indexes\":[3,4,8]},{ \"label\":\"Async Safety & Cancellation\",\"page_indexes\":[2]}]}\n```"
+  },
+  {
+   "case": "A coherent single-topic cluster",
+   "kind": "adjudicate_pass2",
+   "prompt": "You are auditing one browser-history topic cluster whose label is low confidence.\nDecide one verdict:\n- \"keep\": these pages genuinely belong together as one topic.\n- \"split\": the pages form 2-4 clearly distinct topics. Provide groups.\n- \"uncategorized\": the pages are too mixed to support any honest topic label.\nReturn JSON only, shaped as {\"verdict\":\"keep|split|uncategorized\",\"label\":\"short topic label (keep only)\",\"confidence\":0.0-1.0,\"rationale\":\"one sentence\",\"groups\":[{\"label\":\"short topic label\",\"page_indexes\":[0,2]}]}.\n\"groups\" is required only for split, and page_indexes reference the \"i\" field of the input pages.\nDo not invent a theme to avoid saying uncategorized.\n{\"current_label\":\"Async Rust Programming\",\"keywords\":[\"async\",\"tokio\",\"docs\",\"rust\",\"boats\",\"fasterthanli\",\"for\",\"lang\",\"without\",\"backends\"],\"pages\":[{\"i\":0,\"title\":\"Async drop and linear types debate\",\"domain\":\"docs.rs\"},{\"i\":1,\"title\":\"Backpressure with bounded mpsc channels\",\"domain\":\"tokio.rs\"},{\"i\":2,\"title\":\"Comparing tokio and smol executors\",\"domain\":\"fasterthanli.me\"},{\"i\":3,\"title\":\"io_uring backends for async runtimes\",\"domain\":\"without.boats\"},{\"i\":4,\"title\":\"Send bounds on spawned tasks\",\"domain\":\"rust-lang.org\"},{\"i\":5,\"title\":\"Waker contracts and manual Future impls\",\"domain\":\"docs.rs\"},{\"i\":6,\"title\":\"Blocking calls inside async contexts\",\"domain\":\"tokio.rs\"},{\"i\":7,\"title\":\"Structured concurrency with JoinSet\",\"domain\":\"fasterthanli.me\"},{\"i\":8,\"title\":\"Async traits and dynamic dispatch overhead\",\"domain\":\"without.boats\"},{\"i\":9,\"title\":\"Cancellation safety in select loops\",\"domain\":\"rust-lang.org\"},{\"i\":10,\"title\":\"Pin and Unpin explained for async Rust\",\"domain\":\"docs.rs\"},{\"i\":11,\"title\":\"Tokio runtime multi-thread scheduler internals\",\"domain\":\"tokio.rs\"}]}",
+   "reply": "```json\n{\"verdict\":\"split\",\"label\":\"Async Rust Programming\",\"confidence\":0.7,\"rationale\":\"The pages cover a range of topics from executor comparison to low-level implementation details, suggesting distinct sub-topics.\",\"groups\":[{\"label\":\"Async Rust Fundamentals\",\"page_indexes\":[0, 5, 10]},{\"label\":\"Tokio Specifics\",\"page_indexes\":[1, 6, 11]},{\"label\":\"Async Concurrency Patterns\",\"page_indexes\":[2, 7]},{\"label\":\"Async Rust Implementation Details\",\"page_indexes\":[3, 4, 8, 9]}]}\n```"
+  },
+  {
+   "case": "A genuinely mixed cluster",
+   "kind": "adjudicate_pass1",
+   "prompt": "You are auditing one browser-history topic cluster whose label is low confidence.\nDecide one verdict:\n- \"keep\": these pages genuinely belong together as one topic.\n- \"split\": the pages form 2-4 clearly distinct topics. Provide groups.\n- \"uncategorized\": the pages are too mixed to support any honest topic label.\nReturn JSON only, shaped as {\"verdict\":\"keep|split|uncategorized\",\"label\":\"short topic label (keep only)\",\"confidence\":0.0-1.0,\"rationale\":\"one sentence\",\"groups\":[{\"label\":\"short topic label\",\"page_indexes\":[0,2]}]}.\n\"groups\" is required only for split, and page_indexes reference the \"i\" field of the input pages.\nDo not invent a theme to avoid saying uncategorized.\n{\"current_label\":\"MIXED\",\"keywords\":[\"cilium\",\"for\",\"crumb\",\"hydration\",\"kingarthurbaking\",\"kubernetes\",\"patterns\",\"sourdough\",\"starter\",\"theperfectloaf\"],\"pages\":[{\"i\":0,\"title\":\"Managing sourdough starter hydration in winter\",\"domain\":\"theperfectloaf.com\"},{\"i\":1,\"title\":\"Why my sourdough crumb is dense and gummy\",\"domain\":\"kingarthurbaking.com\"},{\"i\":2,\"title\":\"Autolyse versus fermentolyse for high-hydration dough\",\"domain\":\"breadtopia.com\"},{\"i\":3,\"title\":\"Scoring patterns for batard loaves\",\"domain\":\"seriouseats.com\"},{\"i\":4,\"title\":\"Cold retard timing for open crumb\",\"domain\":\"theperfectloaf.com\"},{\"i\":5,\"title\":\"Whole wheat starter conversion guide\",\"domain\":\"kingarthurbaking.com\"},{\"i\":6,\"title\":\"Service ClusterIP to pod routing internals\",\"domain\":\"kubernetes.io\"},{\"i\":7,\"title\":\"CNI plugin comparison Cilium Calico Flannel\",\"domain\":\"cilium.io\"},{\"i\":8,\"title\":\"eBPF replacing kube-proxy iptables\",\"domain\":\"tigera.io\"},{\"i\":9,\"title\":\"NetworkPolicy default deny patterns\",\"domain\":\"learnk8s.io\"},{\"i\":10,\"title\":\"Ingress versus Gateway API migration\",\"domain\":\"kubernetes.io\"},{\"i\":11,\"title\":\"DNS resolution flow inside a cluster\",\"domain\":\"cilium.io\"}]}",
+   "reply": "```json\n{\"verdict\":\"split\",\"label\":null,\"confidence\":0.7,\"rationale\":\"The pages clearly separate into distinct topics of sourdough baking and Kubernetes networking.\",\"groups\":[{\"label\":\"Sourdough Baking\",\"page_indexes\":[0,1,2,4,5,8]},{\"label\":\"Kubernetes Networking\",\"page_indexes\":[6,7,8,9,10,11]}]}\n```"
+  },
+  {
+   "case": "A genuinely mixed cluster",
+   "kind": "adjudicate_pass2",
+   "prompt": "You are auditing one browser-history topic cluster whose label is low confidence.\nDecide one verdict:\n- \"keep\": these pages genuinely belong together as one topic.\n- \"split\": the pages form 2-4 clearly distinct topics. Provide groups.\n- \"uncategorized\": the pages are too mixed to support any honest topic label.\nReturn JSON only, shaped as {\"verdict\":\"keep|split|uncategorized\",\"label\":\"short topic label (keep only)\",\"confidence\":0.0-1.0,\"rationale\":\"one sentence\",\"groups\":[{\"label\":\"short topic label\",\"page_indexes\":[0,2]}]}.\n\"groups\" is required only for split, and page_indexes reference the \"i\" field of the input pages.\nDo not invent a theme to avoid saying uncategorized.\n{\"current_label\":\"MIXED\",\"keywords\":[\"cilium\",\"for\",\"crumb\",\"hydration\",\"kingarthurbaking\",\"kubernetes\",\"patterns\",\"sourdough\",\"starter\",\"theperfectloaf\"],\"pages\":[{\"i\":0,\"title\":\"DNS resolution flow inside a cluster\",\"domain\":\"cilium.io\"},{\"i\":1,\"title\":\"Ingress versus Gateway API migration\",\"domain\":\"kubernetes.io\"},{\"i\":2,\"title\":\"NetworkPolicy default deny patterns\",\"domain\":\"learnk8s.io\"},{\"i\":3,\"title\":\"eBPF replacing kube-proxy iptables\",\"domain\":\"tigera.io\"},{\"i\":4,\"title\":\"CNI plugin comparison Cilium Calico Flannel\",\"domain\":\"cilium.io\"},{\"i\":5,\"title\":\"Service ClusterIP to pod routing internals\",\"domain\":\"kubernetes.io\"},{\"i\":6,\"title\":\"Whole wheat starter conversion guide\",\"domain\":\"kingarthurbaking.com\"},{\"i\":7,\"title\":\"Cold retard timing for open crumb\",\"domain\":\"theperfectloaf.com\"},{\"i\":8,\"title\":\"Scoring patterns for batard loaves\",\"domain\":\"seriouseats.com\"},{\"i\":9,\"title\":\"Autolyse versus fermentolyse for high-hydration dough\",\"domain\":\"breadtopia.com\"},{\"i\":10,\"title\":\"Why my sourdough crumb is dense and gummy\",\"domain\":\"kingarthurbaking.com\"},{\"i\":11,\"title\":\"Managing sourdough starter hydration in winter\",\"domain\":\"theperfectloaf.com\"}]}",
+   "reply": "```json\n{\"verdict\":\"split\",\"label\":\"Kubernetes Networking\",\"confidence\":0.7,\"rationale\":\"The cluster of pages is split into two distinct topics: Kubernetes networking and sourdough baking.\",\"groups\":[{\"label\":\"Kubernetes Networking\",\"page_indexes\":[0,1,3,4,5]},{\"label\":\"Sourdough Baking\",\"page_indexes\":[2,6,7,8,9,10,11]}]}\n```"
+  },
+  {
+   "case": "Ambiguous link-roundup pages",
+   "kind": "adjudicate_pass1",
+   "prompt": "You are auditing one browser-history topic cluster whose label is low confidence.\nDecide one verdict:\n- \"keep\": these pages genuinely belong together as one topic.\n- \"split\": the pages form 2-4 clearly distinct topics. Provide groups.\n- \"uncategorized\": the pages are too mixed to support any honest topic label.\nReturn JSON only, shaped as {\"verdict\":\"keep|split|uncategorized\",\"label\":\"short topic label (keep only)\",\"confidence\":0.0-1.0,\"rationale\":\"one sentence\",\"groups\":[{\"label\":\"short topic label\",\"page_indexes\":[0,2]}]}.\n\"groups\" is required only for split, and page_indexes reference the \"i\" field of the input pages.\nDo not invent a theme to avoid saying uncategorized.\n{\"current_label\":\"Weekly Link Roundups\",\"keywords\":[\"links\",\"roundup\",\"mixed\",\"news\",\"ycombinator\",\"reddit\",\"substack\",\"weekly\",\"open\",\"thread\"],\"pages\":[{\"i\":0,\"title\":\"Friday grab bag #1\",\"domain\":\"reddit.com\"},{\"i\":1,\"title\":\"Weekly links roundup #2\",\"domain\":\"news.ycombinator.com\"},{\"i\":2,\"title\":\"Miscellany #3\",\"domain\":\"substack.com\"},{\"i\":3,\"title\":\"Weekly links roundup #4\",\"domain\":\"news.ycombinator.com\"},{\"i\":4,\"title\":\"Weekly links roundup #5\",\"domain\":\"substack.com\"},{\"i\":5,\"title\":\"Open thread #6\",\"domain\":\"news.ycombinator.com\"},{\"i\":6,\"title\":\"Open thread #7\",\"domain\":\"reddit.com\"},{\"i\":7,\"title\":\"Weekly links roundup #8\",\"domain\":\"news.ycombinator.com\"}]}",
+   "reply": "```json\n{\"verdict\":\"split\",\"label\":\"Weekly Link Roundups\",\"confidence\":0.7,\"rationale\":\"The pages contain a mix of 'roundup' and 'open thread' formats, suggesting two distinct user interests.\",\"groups\":[{\"label\":\"Weekly Link Roundups\",\"page_indexes\":[0,1,3,4,7]},{\"label\":\"Open Threads\",\"page_indexes\":[2,5,6]}]}\n```"
+  },
+  {
+   "case": "Ambiguous link-roundup pages",
+   "kind": "adjudicate_pass2",
+   "prompt": "You are auditing one browser-history topic cluster whose label is low confidence.\nDecide one verdict:\n- \"keep\": these pages genuinely belong together as one topic.\n- \"split\": the pages form 2-4 clearly distinct topics. Provide groups.\n- \"uncategorized\": the pages are too mixed to support any honest topic label.\nReturn JSON only, shaped as {\"verdict\":\"keep|split|uncategorized\",\"label\":\"short topic label (keep only)\",\"confidence\":0.0-1.0,\"rationale\":\"one sentence\",\"groups\":[{\"label\":\"short topic label\",\"page_indexes\":[0,2]}]}.\n\"groups\" is required only for split, and page_indexes reference the \"i\" field of the input pages.\nDo not invent a theme to avoid saying uncategorized.\n{\"current_label\":\"Weekly Link Roundups\",\"keywords\":[\"links\",\"roundup\",\"mixed\",\"news\",\"ycombinator\",\"reddit\",\"substack\",\"weekly\",\"open\",\"thread\"],\"pages\":[{\"i\":0,\"title\":\"Weekly links roundup #8\",\"domain\":\"news.ycombinator.com\"},{\"i\":1,\"title\":\"Open thread #7\",\"domain\":\"reddit.com\"},{\"i\":2,\"title\":\"Open thread #6\",\"domain\":\"news.ycombinator.com\"},{\"i\":3,\"title\":\"Weekly links roundup #5\",\"domain\":\"substack.com\"},{\"i\":4,\"title\":\"Weekly links roundup #4\",\"domain\":\"news.ycombinator.com\"},{\"i\":5,\"title\":\"Miscellany #3\",\"domain\":\"substack.com\"},{\"i\":6,\"title\":\"Weekly links roundup #2\",\"domain\":\"news.ycombinator.com\"},{\"i\":7,\"title\":\"Friday grab bag #1\",\"domain\":\"reddit.com\"}]}",
+   "reply": "```json\n{\"verdict\":\"split\",\"label\":\"Weekly Link Roundups\",\"confidence\":0.6,\"rationale\":\"The pages mix YCombinator/Reddit link roundups with more general 'open thread' and 'grab bag' formats, suggesting distinct subtopics.\",\"groups\":[{\"label\":\"Y Combinator Weekly Link Roundups\",\"page_indexes\":[0,3,4,6]},{\"label\":\"Reddit Open Threads & Grab Bags\",\"page_indexes\":[1,2,7]},{\"label\":\"Substack Miscellany\",\"page_indexes\":[5]}]}\n```"
+  }
+ ]
+}

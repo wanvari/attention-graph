@@ -1,0 +1,86 @@
+/* Read-only demo shell (spec §8 Phase 6). */
+.demo-shell { max-width: 1100px; margin: 0 auto; padding: 22px 18px 60px; }
+.demo-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+.demo-header h1 { margin: 0 0 4px; font-size: 21px; }
+.demo-sub { margin: 0; color: var(--text-dim); font-size: 13px; }
+.demo-tabs { display: flex; gap: 8px; flex-wrap: wrap; }
+.demo-tab.active { background: var(--accent); border-color: var(--accent); color: #fff; }
+.demo-note {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 10px 14px;
+  font-size: 13px;
+  color: var(--text-dim);
+  margin: 14px 0 18px;
+}
+.demo-view .newtab-column { padding-top: 0; }
+
+.evidence-topic {
+  border-top: 1px solid var(--line);
+  padding: 9px 2px;
+}
+.evidence-topic:first-child { border-top: none; }
+.evidence-topic-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  align-items: baseline;
+  cursor: pointer;
+}
+.evidence-topic-label { font-weight: 600; }
+.evidence-topic-meta { color: var(--text-dim); font-size: 12.5px; font-variant-numeric: tabular-nums; }
+.evidence-pages { margin: 6px 0 0 0; padding-left: 18px; font-size: 12.5px; color: var(--text-dim); }
+.evidence-pages li { padding: 1px 0; }
+.topic-state {
+  font-size: 11px;
+  padding: 1px 7px;
+  border-radius: 8px;
+  background: var(--panel-2);
+  color: var(--text-dim);
+}
+.call-block {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  margin-bottom: 8px;
+  overflow: hidden;
+}
+.call-head {
+  padding: 7px 10px;
+  background: var(--panel-2);
+  font-size: 12.5px;
+  cursor: pointer;
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+}
+.call-body {
+  padding: 8px 10px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 11.5px;
+  white-space: pre-wrap;
+  max-height: 340px;
+  overflow: auto;
+  border-top: 1px solid var(--line);
+}
+#validation-content table { width: 100%; border-collapse: collapse; font-size: 13px; }
+#validation-content th, #validation-content td {
+  text-align: left;
+  padding: 5px 8px;
+  border-top: 1px solid var(--line);
+}
+#validation-content pre {
+  background: var(--panel-2);
+  padding: 10px;
+  border-radius: 8px;
+  overflow: auto;
+  font-size: 12px;
+}
+#validation-content h1 { font-size: 18px; }
+#validation-content h2 { font-size: 14px; text-transform: none; letter-spacing: 0; color: var(--text); }

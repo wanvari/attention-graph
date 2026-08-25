@@ -1,89 +1,128 @@
-# Cognitive Trails v3
+# Cognitive Trails v4
 
-A local-first Chrome extension that maps browser history into auditable topic flows.
+A Chrome extension that keeps a **passive, longitudinal, local-only record of where your browsing attention went**, and surfaces it on your new-tab page.
 
-The app answers:
+It is a record-keeper, not a coach. It will tell you that a topic went quiet for eighteen days and then came back, or that today's spread of attention was unusual *for you*. It will never tell you that was good, bad, productive, or distracting — and it is built so that it *cannot*, because those words fail a test in CI.
 
-- What topics did my attention move through?
-- How often did I switch between topics?
-- What evidence supports each topic or flow label?
+Everything runs on your machine. The only network destination the extension is permitted to reach is `http://localhost:11434`, where your own Ollama serves the models.
 
-## What v3 changes
+---
 
-v3 is the generation where **the app resolves its own uncertainty instead of asking you to**.
+## What it measures
 
-Earlier versions surfaced every low-confidence topic and flow in a manual review
-queue, which made the user the tie-breaker for the model's doubt. v3 removes that
-queue entirely:
+| It reports | Definition |
+|---|---|
+| **Spread** | Shannon entropy over the day's topic dwell shares, in bits. Descriptive; no direction is implied. |
+| **Continuity** | Share of consecutive-visit transitions that stayed inside one topic or moved to a near-neighbour topic. |
+| **Active time** | Estimated attention, from history gaps (capped at 30 min, session-enders get 1 min), *lowered* — never raised — by measured in-page active time. |
+| **Topics touched**, **switch rate** | Counts and rates over the day's categorized visits. |
+| **Dormancy / revival** | A topic with no activity for 14 days goes dormant; a new page brings it back, and the record notes how long it was gone. |
+| **Convergence** | A topic that appeared in *both* ordinary browsing and LLM chat conversations within the trailing 7 days. |
 
-- Clusters that look mixed are re-audited locally, twice, with the page order
-  reversed the second time. A verdict counts only when both passes agree.
-- Agreeing on `keep` confirms the topic; agreeing on `split` separates it;
-  agreeing on `uncategorized` -- or disagreeing at all -- excludes the pages.
-- Excluded pages are reported honestly in an **Uncategorized** bucket and are
-  counted out of every topic metric, rather than being forced into a topic.
-- Borderline flow labels get one second-opinion pass; disagreement falls back to
-  the similarity estimate, marked uncertain.
+Each daily number is shown next to a **deviation from your own 28-day baseline** — "within your range", "outside usual", "unusual for you" — and only once at least 14 comparable days exist. There is no cross-user comparison, no target, and no score.
 
-Corrections still exist, but only in context on the map -- rename a topic when it
-bothers you, not because a queue assigned you homework. v3 also fixes dwell-time
-inflation (visits that end a session no longer inherit the time you were away),
-adds a settings page, and reports context switches by hour of day.
+## What it refuses to infer
 
-The audit budget is capped and sequential -- at most four topic audits (two calls
-each) plus one verification call per re-run -- so a re-analysis stays comfortable
-on an ordinary laptop.
+These are design commitments, not omissions:
 
-## Requirements
+- **No normative scores.** No green/red, no "focus score", no good/bad. Enforced by `tests/copy.test.js` (a forbidden-word sweep over every user-facing string) and `tests/ui.test.js` (a hue check that fails the build if any stylesheet uses a saturated red or green).
+- **No goal inference.** The system reports that a topic went dormant. What that means is yours to decide.
+- **No synthesis.** It may report that a topic appeared in two sources. It will never claim that topic X *relates to* topic Y beyond the observed same/adjacent/switch classification of consecutive visits.
+- **No forced classification.** Pages the analysis cannot honestly label are excluded and counted in an uncategorized bucket *with the reason*, rather than being pushed into the nearest topic. Coverage is always displayed next to the claims it qualifies.
+- **No review queue.** Uncertainty is resolved by spending local compute, not your attention (see below).
 
-- Chrome or another Chromium browser with Manifest V3 support
-- Local Ollama at `http://localhost:11434`
-- Models:
-  - `bge-m3:latest` for embeddings
-  - `gemma3:12b` for topic and transition labels (the stock tag; the extension requests a 16K context per call, so no custom Modelfile is needed)
+## How uncertainty is handled
 
-Install the models with:
+A topic cluster whose internal cohesion falls below the bar we require to merge two pages in the first place is *audited*: the same question is put to the local model twice, with the page order reversed the second time. Only agreement counts.
 
-```bash
-ollama pull bge-m3
-ollama pull gemma3:12b
-```
+- Both passes say **keep** → the topic stands.
+- Both say **uncategorized** → every page is excluded, reason `agreed_uncategorized`.
+- Both say **split** → the two groupings are compared as sets of co-membership pairs (Jaccard ≥ 0.60). Agreement applies the split; pages the passes placed differently are excluded as `split_leftover`.
+- Anything else — differing verdicts, unparseable output, incompatible groupings → excluded as `disagreement`.
 
-The extension includes a local-only Chrome network rule that rewrites requests to `localhost:11434` so Ollama sees a normal localhost origin. No hosted API calls are made.
+A model or network failure is *not* evidence of a bad cluster: the topic is kept and the error is counted. The whole audit is capped at 4 topics × 2 sequential calls per run.
 
-## Installation
+## Validation
 
-1. Open Chrome and go to `chrome://extensions/`
-2. Enable Developer mode
-3. Click Load unpacked
-4. Select this repository folder
-5. Click the extension icon
+`node tools/validate.js` runs the pipeline over a committed 384-page / 28-day synthetic fixture with live Ollama, N times, and writes a dated report to `validation/`. It separates two things the previous version conflated:
 
-## How It Works
+- **Accuracy** — Adjusted Rand Index and pairwise precision/recall against ground-truth topics.
+- **Consistency** — pairwise ARI *between runs*, which is what tells you whether the thing is stable rather than merely plausible-looking once.
 
-- Expands Chrome history with `chrome.history.getVisits` so repeated visits are preserved.
-- Estimates dwell time from time until next visit, capped at 30 minutes; visits that end a session count 1 minute instead of inheriting the away-from-browser gap.
-- Uses local Ollama only. No hosted API calls are made.
-- Builds topic clusters with `bge-m3` embeddings and labels them with `gemma3:12b`.
-- Runs a capped second adjudication pass over the lowest-confidence topics: each is re-checked twice (page order reversed the second time) and the verdict only counts when both runs agree. Confirmed topics stay, mixed ones are split, and anything the model cannot label honestly moves to an explicit **Uncategorized** bucket instead of being forced into a topic or handed to the user to sort.
-- Verifies borderline transition labels with one extra pass; disagreement falls back to the similarity heuristic, marked uncertain.
-- Reports coverage honestly: topic metrics only count pages the analysis stands behind, and uncategorized time/visits are shown, not hidden.
-- Serves the stored analysis until you re-run, and shows a banner when new browsing has happened since it was generated.
-- Stores analysis cache, embeddings (pruned after 45 days unused), settings, and user corrections in IndexedDB. Topic-label corrections re-attach across re-runs by page overlap.
+It also reports exclusion honesty (of the pages excluded, how many were genuinely ambiguous or junk) and replays the 28 fixture days as 28 sequential runs to assert that topic identity, dormancy, revival, convergence, and the data-gap report all behave.
 
-## Views
+The committed report in `validation/` carries the current numbers. **Any claim in this README about accuracy is only as good as that file** — if they disagree, the file is right.
 
-- `popup.html`: topic-sector map with top flow controls and an evidence panel. Corrections are made in context here (rename a topic, reclassify a flow).
-- `analysis.html`: trust audit dashboard with data coverage, topic time share, switch burden (including context switches by hour of day), focused runs, and the uncategorized bucket.
-- `options.html`: settings for history window, page budget, and local model names.
-- `test.html`: static demo page for smoke testing outside the Chrome extension context.
-
-## Development Checks
+## Try it without installing anything
 
 ```bash
-npm test
-node tools/auditHistory.js --days=7 --max-results=2000
-node tools/auditHistory.js --days=7 --max-results=2000 --with-ollama --max-pages=420
+node tools/serveDemo.js
 ```
 
-The test suite covers visit expansion, dwell estimation at session breaks, same-domain false positives, Ollama JSON parsing, adjudication verdicts (keep/split/uncategorized/disagreement/error), transition verification, staleness detection, correction re-attachment, and cache behavior.
+Then open `http://localhost:8912/ui/demo.html`. This replays a real recorded `gemma3:12b` run over the fixture — the home screen, the trust audit, every topic with its evidence pages, the exclusion bucket by reason, the adjudication protocol on real model output, and the validation report. It needs no Ollama and no Chrome extension install.
+
+## Install
+
+1. **Ollama**, running locally:
+   ```bash
+   ollama serve
+   ollama pull bge-m3
+   ollama pull gemma3:12b
+   ```
+   Roughly 11 GB resident when both are loaded; the pipeline unloads the embedding model before chat work so they overlap only briefly.
+2. **The extension**: open `chrome://extensions/`, enable Developer mode, choose *Load unpacked*, and select this directory.
+3. Chrome will warn that the extension can read data on all sites. It can — that is how the content sensor works. Nothing leaves your machine; see `PRIVACY.md`.
+4. Browse normally. The first analysis runs on its own when the machine is idle (or between 02:00 and 05:00). To run it immediately, open the extension's **Audit** page and press **Run now**.
+
+Upgrading from v3: your cached embeddings and corrections are migrated. The v3 snapshot analysis is deliberately *not* imported — its topics had no stable identity, and seeding the registry with them would fabricate history. The registry starts fresh.
+
+## Architecture
+
+```
+content/capture.js  ──►  background.js  ──►  offscreen/analysis.js  ──►  Ollama
+   (per-tab sensor)      (SW: alarms,          (the pipeline; outlives     (localhost
+                          buffering,            the service worker)         :11434)
+                          scheduling)                   │
+                                                        ▼
+                                          IndexedDB `cognitive-trails`
+                                                        │
+                        ┌───────────────┬───────────────┼───────────────┐
+                        ▼               ▼               ▼               ▼
+                   ui/newtab.html   ui/map.html   ui/audit.html   ui/options.html
+```
+
+The service worker never runs analysis — Chrome kills it after ~30 s idle. Work happens in an offscreen document that survives service-worker termination, writes a heartbeat, and closes itself when done. A run that fails leaves the watermark untouched, so the next run redoes exactly the work that was lost and nothing else.
+
+The **topic registry** is the core primitive: topics have stable ids across runs, so dormancy, revival, entropy trends and baselines are all computed over one continuous record rather than over disconnected snapshots.
+
+### Layout
+
+| Path | What it is |
+|---|---|
+| `lib/` | Everything testable: store, history, cluster, ollama, label, adjudicate, registry, metrics, brief, pipeline, text, privacy. Each loads in both the extension and Node. |
+| `content/capture.js` | The sensor: active-time, scroll depth, main-content extraction. |
+| `offscreen/` | The pipeline host. |
+| `ui/` | newtab (home), map, audit, options, demo. |
+| `fixtures/` | 384 synthetic pages, 28 days of designed visits, real committed bge-m3 vectors, and recorded model transcripts. |
+| `tests/` | `unit/`, `protocol/` (full pipeline with a scripted model), `copy`, `ui`, and `e2e/` (Playwright, real Chrome). |
+| `tools/` | Fixture generation, golden recording, validation, benchmarking, demo server. |
+
+## Development
+
+```bash
+npm test                      # unit + protocol + copy + ui  (no Ollama, no Chrome)
+npm run e2e                   # Playwright capture suite (real Chrome, local only)
+node tests/e2e/pipeline.e2e.mjs   # scheduling/lifetime suite (needs Ollama)
+node tools/validate.js        # accuracy + consistency report (needs Ollama)
+node tools/bench.js           # per-stage timing budget (needs Ollama)
+```
+
+There is no build step. `npm test` runs every `tests/**/*.test.js` in its own process.
+
+## Known limitations
+
+- **Video pages undercount.** Active time requires an input event within 60 s, so watching a long video without touching anything reads as inactive. Not special-cased: doing so would require a judgement about what watching means.
+- **Scroll depth is captured but never scored.** Turning it into an "engagement" number would require a claim about what scrolling means.
+- **Dwell is an estimate**, and is labelled as one everywhere it appears.
+- **Chrome-only, one profile, one device.** No sync.
+- **The uncategorized bucket is not empty, by design.** Its size is the honest cost of not guessing.
