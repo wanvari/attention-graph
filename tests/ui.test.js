@@ -165,12 +165,14 @@ async function renderNewtab(seed) {
 
   const errors = [];
   window.addEventListener('error', event => errors.push(event.error));
+  const searched = [];
   const result = await CTNewtab.main({
     store,
     container: window.document.getElementById('app'),
-    now: new Date(2026, 2, 28, 21, 0, 0).getTime()
+    now: new Date(2026, 2, 28, 21, 0, 0).getTime(),
+    onSearch: query => searched.push(query)
   });
-  return { result, window, errors, store };
+  return { result, window, errors, store, searched };
 }
 
 (async () => {
@@ -293,6 +295,31 @@ async function renderNewtab(seed) {
     const text = window.document.textContent || window.document.body.textContent;
     assert.ok(/has not been analyzed yet/.test(text), 'the stale stamp is explicit');
     assert.ok(/Today so far \(live, unanalyzed\)/.test(text), "today's live counts show without any analysis");
+  }
+
+  // --- the search box actually submits
+  // It shipped calling chrome.search behind a guard that silently did nothing
+  // when the permission was missing, which is indistinguishable from a dead
+  // input. This covers the DOM half; the boot half now falls back and warns.
+  {
+    const { window, searched, errors } = await renderNewtab(null);
+    assert.strictEqual(errors.length, 0, 'rendering the search box threw');
+    const input = window.document.querySelector('.nt-search-input');
+    const form = window.document.querySelector('.nt-search');
+    assert.ok(input, 'no search input rendered');
+    assert.ok(form, 'the search input is not inside a form, so Enter cannot submit it');
+    assert.strictEqual(form.tagName, 'FORM');
+    assert.strictEqual(input.type, 'text');
+
+    input.value = '  sourdough hydration  ';
+    form.dispatchEvent(new window.Event('submit', { bubbles: true, cancelable: true }));
+    assert.deepStrictEqual(searched, ['sourdough hydration'],
+      'submitting the search form did not call onSearch with the trimmed query');
+    assert.strictEqual(input.value, '', 'the input was not cleared after submitting');
+
+    input.value = '   ';
+    form.dispatchEvent(new window.Event('submit', { bubbles: true, cancelable: true }));
+    assert.deepStrictEqual(searched, ['sourdough hydration'], 'an empty query was submitted');
   }
 
   console.log('ui tests passed');

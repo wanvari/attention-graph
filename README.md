@@ -133,3 +133,6 @@ There is no build step. `npm test` runs every `tests/**/*.test.js` in its own pr
 - **Dwell is an estimate**, and is labelled as one everywhere it appears.
 - **Chrome-only, one profile, one device.** No sync.
 - **The uncategorized bucket is not empty, by design.** Its size is the honest cost of not guessing.
+- **The bookmarks bar hides on the new tab.** Chrome only auto-reveals it on its own built-in new tab page; any extension that overrides the new tab loses that behaviour, and no extension API restores it. Turn on **Always show bookmarks bar** (`Cmd/Ctrl+Shift+B`) to keep it visible everywhere.
+- **Chrome shows a "your new tab page was changed" notice.** That bar comes from Chrome's extension-controlled-settings warning, not from this extension, and cannot be dismissed programmatically.
+- **The new tab's search box routes through your default engine.** It calls `chrome.search.query`, so Chrome picks the engine you already configured; the query is never read, stored, or added to the record.

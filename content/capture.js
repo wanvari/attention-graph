@@ -140,6 +140,11 @@
   function send(final) {
     if (!capture) return;
     if (final) capture.endedAt = Date.now();
+    // How far this capture has actually watched. The dwell downgrade in
+    // lib/history.js needs it: activeMs is only evidence about the span the
+    // capture observed, and without this a capture that had been alive for
+    // three seconds looked like a measurement over the whole visit.
+    capture.updatedAt = Date.now();
     const payload = { ...capture };
     if (textSent) {
       // extractedText travels once (§2.4); later messages carry only the hash.

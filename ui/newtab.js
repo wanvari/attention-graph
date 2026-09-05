@@ -142,6 +142,54 @@
     return svg;
   }
 
+  // A new tab is somewhere you start a search from. Overriding Chrome's new
+  // tab took that away, so the page has to give it back: chrome.search.query
+  // routes to whichever engine the user already chose, so nothing here knows
+  // or hardcodes a provider, and no query ever reaches the extension's record.
+  function buildSearch(opts) {
+    const form = el('form', 'nt-search');
+    form.setAttribute('role', 'search');
+    const input = el('input', 'nt-search-input');
+    input.type = 'text';
+    input.name = 'q';
+    input.autocomplete = 'off';
+    input.spellcheck = false;
+    input.placeholder = 'Search the web';
+    input.setAttribute('aria-label', 'Search the web');
+    form.appendChild(input);
+    form.addEventListener('submit', event => {
+      event.preventDefault();
+      const query = input.value.trim();
+      if (!query || !opts.onSearch) return;
+      opts.onSearch(query);
+      input.value = '';
+    });
+    return form;
+  }
+
+  // Trailing-window totals straight out of the daily rows already loaded, so
+  // this costs no extra read. Its job is to keep the page from going blank on
+  // a thin day: the rings still report today and only today, but they no
+  // longer stand alone next to ten days of record the page never mentions.
+  function windowSummary(history, todayKey, days) {
+    const from = CTText.addDays(todayKey, -(days - 1));
+    const rows = history.filter(r => r.day >= from && r.day <= todayKey);
+    const activeMs = rows.reduce((sum, r) => sum + (r.activeMs || 0), 0);
+    const dwellByTopic = new Map();
+    for (const row of rows) {
+      for (const topic of row.topTopics || []) {
+        const entry = dwellByTopic.get(topic.topicId) || { label: topic.label, dwellMs: 0 };
+        entry.dwellMs += topic.dwellMs || 0;
+        dwellByTopic.set(topic.topicId, entry);
+      }
+    }
+    return {
+      days: rows.length,
+      activeMs,
+      topics: Array.from(dwellByTopic.values()).sort((a, b) => b.dwellMs - a.dwellMs)
+    };
+  }
+
   function briefTextToNodes(text) {
     // Topic labels arrive as *label*; render them emphasized, never as HTML.
     const fragment = document.createDocumentFragment();
@@ -158,8 +206,15 @@
     const now = opts.now || Date.now();
     const todayKey = opts.todayKey;
     container.textContent = '';
-    const column = el('div', 'newtab-column');
-    container.appendChild(column);
+    const page = el('div', 'nt-page');
+    container.appendChild(page);
+
+    // ---- zone 1: the browser surface -----------------------------------
+    // Search comes first and owns its own space. The record is a separate
+    // zone below it, so the page reads as a new tab that also keeps a record
+    // rather than a dashboard that happens to have replaced the new tab.
+    const hero = el('section', 'nt-hero');
+    page.appendChild(hero);
 
     // ---- header
     const header = el('div', 'nt-header');
@@ -172,7 +227,17 @@
     const statusText = el('span', null, 'checking…');
     status.appendChild(statusText);
     header.appendChild(status);
-    column.appendChild(header);
+    hero.appendChild(header);
+
+    hero.appendChild(buildSearch(opts));
+
+    const divider = el('div', 'nt-divider');
+    divider.appendChild(el('span', null, 'Your record'));
+    page.appendChild(divider);
+
+    // ---- zone 2: the record --------------------------------------------
+    const column = el('div', 'newtab-column');
+    page.appendChild(column);
     if (opts.statusProvider) {
       Promise.resolve(opts.statusProvider()).then(info => {
         if (!info) { statusText.textContent = ''; return; }
@@ -231,6 +296,29 @@
     if (staleDay) {
       ringsCard.appendChild(el('div', 'nt-brief-stamp', `Showing ${latest.day} — today has not been analyzed yet.`));
     }
+
+    // Today can legitimately be empty. Without this the whole page reads as
+    // zeros and says nothing about the record that does exist.
+    const week = windowSummary(history, todayKey, 7);
+    if (week.days) {
+      const context = el('div', 'nt-window');
+      const stat = (value, label) => {
+        const item = el('div', 'nt-window-stat');
+        item.appendChild(el('span', 'nt-window-value', value));
+        item.appendChild(el('span', 'nt-window-label', label));
+        return item;
+      };
+      context.appendChild(stat(`${week.days}`, week.days === 1 ? 'day recorded' : 'days recorded'));
+      context.appendChild(stat(formatHours(week.activeMs), 'active'));
+      context.appendChild(stat(`${week.topics.length}`, 'topics touched'));
+      const heading = el('div', 'nt-window-heading', 'Last 7 days');
+      ringsCard.appendChild(heading);
+      ringsCard.appendChild(context);
+      if (week.topics.length) {
+        ringsCard.appendChild(el('div', 'nt-window-topics',
+          week.topics.slice(0, 3).map(t => t.label).join(' · ')));
+      }
+    }
     column.appendChild(ringsCard);
 
     // ---- live today strip when today's run has not happened
@@ -240,6 +328,12 @@
       strip.textContent = `Today so far (live, unanalyzed): ${data.todayCaptures.length} pages, ${formatHours(activeMs)} active.`;
       column.appendChild(strip);
     }
+
+    // ---- the record's lower half. One flex child on narrow windows, a
+    // two-column grid on wide ones (see .nt-lower in newtab.css).
+    const lower = el('div', 'nt-lower');
+    column.appendChild(lower);
+    const side = el('div', 'nt-side');
 
     // ---- within your range
     const rangeCard = el('div', 'nt-card');
@@ -295,11 +389,18 @@
       rangeCard.appendChild(row);
       rangeCard.appendChild(sparkRow);
     }
-    column.appendChild(rangeCard);
+    lower.appendChild(rangeCard);
 
     // ---- outlook (brief)
+    // A day with nothing lifecycle-worthy to report produces a brief with zero
+    // items. Falling back to the newest brief by date then picked that empty
+    // one and printed "no brief yet", hiding every earlier brief that did have
+    // something to say.
     const briefs = (data.briefs || []).slice().sort((a, b) => b.day.localeCompare(a.day));
-    const brief = briefs.find(b => b.day === todayKey) || briefs[0] || null;
+    const todayBrief = briefs.find(b => b.day === todayKey);
+    const brief = (todayBrief && todayBrief.items && todayBrief.items.length)
+      ? todayBrief
+      : briefs.find(b => b.items && b.items.length) || todayBrief || null;
     const outlook = el('div', 'nt-card');
     outlook.appendChild(el('h2', null, 'Outlook'));
     if (brief && brief.items.length) {
@@ -311,14 +412,15 @@
       }
       outlook.appendChild(list);
       outlook.appendChild(el('div', 'nt-brief-stamp',
-        `${brief.day === todayKey ? 'Today' : brief.day} — computed at ${formatClock(brief.generatedAt)}`));
+        `${brief.day === todayKey ? 'Today' : `Most recent — ${brief.day}`} — computed at ${formatClock(brief.generatedAt)}`));
     } else {
       outlook.appendChild(el('div', 'nt-brief-stamp', 'No brief yet for this record.'));
     }
-    column.appendChild(outlook);
+    side.appendChild(outlook);
 
     // ---- today's activities (focused runs)
     const runsCard = el('div', 'nt-card');
+    side.appendChild(runsCard);
     runsCard.appendChild(el('h2', null, staleDay ? `Activities — ${latest.day}` : "Today's activities"));
     const runs = latest.runs || [];
     if (runs.length) {
@@ -332,7 +434,7 @@
     } else {
       runsCard.appendChild(el('div', 'nt-brief-stamp', 'No focused runs of 5 minutes or more.'));
     }
-    column.appendChild(runsCard);
+    lower.appendChild(side);
 
     appendFooter(column, opts);
     return { state: 'rendered', brief, staleDay };
@@ -368,7 +470,8 @@
       now,
       todayKey,
       statusProvider: d.statusProvider,
-      onTogglePause: d.onTogglePause
+      onTogglePause: d.onTogglePause,
+      onSearch: d.onSearch
     });
     // Mark the brief seen AFTER render so the load path stays at 4 reads.
     if (result.brief && !result.brief.seen) {
@@ -399,7 +502,44 @@ if (typeof chrome !== 'undefined' && chrome.runtime && chrome.runtime.id &&
         chrome.runtime.sendMessage({ type: 'SET_CAPTURE_PAUSED', paused: pausing }, () => {
           button.textContent = pausing ? 'Resume capture' : 'Pause capture';
         });
+      },
+      // The user's own default engine, resolved by Chrome. The query is never
+      // read, stored, or routed through the extension's record.
+      //
+      // chrome.search needs the "search" permission, which means it is absent
+      // until the extension is reloaded after a manifest change. Silently
+      // doing nothing in that case just looks like a broken search box, so
+      // fall back to a plain query URL and say why in the console.
+      onSearch: query => {
+        const fallback = () => {
+          window.location.assign(`https://www.google.com/search?q=${encodeURIComponent(query)}`);
+        };
+        if (!chrome.search || !chrome.search.query) {
+          console.warn(
+            'chrome.search is unavailable, so this search used Google directly rather than ' +
+            'your default engine. Reload the extension at chrome://extensions/ to pick up the ' +
+            '"search" permission.'
+          );
+          fallback();
+          return;
+        }
+        try {
+          chrome.search.query({ text: query, disposition: 'CURRENT_TAB' }, () => {
+            if (chrome.runtime.lastError) {
+              console.warn('chrome.search.query failed:', chrome.runtime.lastError.message);
+              fallback();
+            }
+          });
+        } catch (error) {
+          console.warn('chrome.search.query threw:', error);
+          fallback();
+        }
       }
+    }).then(() => {
+      // Typing should go somewhere useful the moment the tab opens. Cmd/Ctrl+L
+      // still reaches the address bar.
+      const input = document.querySelector('.nt-search-input');
+      if (input) input.focus();
     }).catch(error => console.error('newtab render failed', error));
   });
 }

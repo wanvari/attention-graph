@@ -1,10 +1,81 @@
-/* The Whoop-style home (spec §5.1): mobile-narrow centered column, dark by
-   default via shared.css tokens, single neutral hue, no valence colors. */
+/* The home surface (spec §5.1). Two zones: a search-first hero that gives
+   back what overriding the new tab took away, then the record below a labelled
+   divider. Colors come from the shared.css tokens (light by default, dark via
+   prefers-color-scheme), single neutral hue, no valence colors. */
+
+.nt-page {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+/* ---- zone 1: search ---------------------------------------------------- */
+
+.nt-hero {
+  display: flex;
+  flex-direction: column;
+  gap: 22px;
+  padding: 14vh 16px 0;
+  max-width: 620px;
+  width: 100%;
+  margin: 0 auto;
+}
+
+.nt-search {
+  display: block;
+}
+.nt-search-input {
+  width: 100%;
+  padding: 14px 20px;
+  font: inherit;
+  font-size: 16px;
+  color: var(--text);
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 26px;
+  outline: none;
+  transition: border-color 120ms ease, box-shadow 120ms ease;
+}
+.nt-search-input::placeholder { color: var(--text-dim); }
+.nt-search-input:hover { border-color: var(--accent-soft); }
+.nt-search-input:focus-visible {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-faint);
+}
+
+/* ---- the seam between the two zones ------------------------------------ */
+
+.nt-divider {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  max-width: 900px;
+  width: 100%;
+  margin: 0 auto;
+  padding: 8vh 16px 0;
+}
+.nt-divider::before,
+.nt-divider::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: var(--line);
+}
+.nt-divider span {
+  font-size: 11.5px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text-dim);
+}
+
+/* ---- zone 2: the record ------------------------------------------------ */
 
 .newtab-column {
-  max-width: 720px;
+  max-width: 900px;
+  width: 100%;
   margin: 0 auto;
-  padding: 28px 16px 60px;
+  padding: 20px 16px 60px;
   display: flex;
   flex-direction: column;
   gap: 18px;
@@ -151,3 +222,53 @@
 .empty-state h2 { color: var(--text); }
 .empty-state ol { text-align: left; max-width: 420px; margin: 14px auto; }
 .empty-state code { background: var(--panel-2); padding: 1px 5px; border-radius: 4px; }
+
+/* ---- trailing-window context under the rings --------------------------- */
+
+.nt-window-heading {
+  margin-top: 16px;
+  padding-top: 14px;
+  border-top: 1px solid var(--line);
+  font-size: 11.5px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-dim);
+}
+.nt-window {
+  display: flex;
+  gap: 26px;
+  margin-top: 8px;
+}
+.nt-window-stat {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+}
+.nt-window-value {
+  font-size: 16px;
+  font-weight: 650;
+  font-variant-numeric: tabular-nums;
+}
+.nt-window-label {
+  font-size: 12.5px;
+  color: var(--text-dim);
+}
+.nt-window-topics {
+  margin-top: 8px;
+  font-size: 12.5px;
+  color: var(--text-dim);
+}
+
+/* On a wide window the three lower cards sit side by side instead of forcing
+   a long scroll past content the user can already see. */
+.nt-lower { display: flex; flex-direction: column; gap: 18px; }
+.nt-side { display: flex; flex-direction: column; gap: 18px; }
+@media (min-width: 760px) {
+  .nt-lower {
+    display: grid;
+    grid-template-columns: 1.35fr 1fr;
+    gap: 18px;
+    align-items: start;
+  }
+}

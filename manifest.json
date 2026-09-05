@@ -13,6 +13,7 @@
     "alarms",
     "offscreen",
     "idle",
+    "search",
     "storage",
     "notifications",
     "tabs"

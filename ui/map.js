@@ -1,8 +1,10 @@
 const FLOW_COLORS = CTMapData.TRANSITION_TYPES;
-const store = CTStore.createStore({});
 
 class TopicMapVisualizer {
-  constructor() {
+  // `deps.store` is the seam a headless render test drives this through; the
+  // extension page passes nothing and gets the real IndexedDB store.
+  constructor(deps) {
+    this.store = (deps && deps.store) || CTStore.createStore({});
     this.svg = null;
     this.g = null;
     this.width = 1000;
@@ -121,9 +123,9 @@ class TopicMapVisualizer {
     this.setStatus(forceRefresh ? 'Re-running the full local analysis...' : 'Loading stored analysis...');
     this.setHealth('checking', forceRefresh ? 'Analyzing locally' : 'Loading');
     try {
-      await store.open();
-      const analysis = await CTMapData.build(store, { windowDays: this.windowDays || 30 });
-      analysis.corrections = await store.getAll('corrections');
+      await this.store.open();
+      const analysis = await CTMapData.build(this.store, { windowDays: this.windowDays || 30 });
+      analysis.corrections = await this.store.getAll('corrections');
       if (!analysis.ok) {
         this.renderUnavailable(analysis);
         return;
@@ -485,7 +487,7 @@ class TopicMapVisualizer {
     const strip = document.getElementById('summary-strip');
     const coverage = analysis.coverage;
     const categorized = analysis.categorizedCoverage || {};
-    const switches = analysis.metrics.switchBurden;
+    const switches = analysis.metrics.switching;
     const visibleFlows = this.graphData.transitionLinks || [];
     const contextSwitches = analysis.metrics.transitionMix?.items?.find(item => item.type === 'topic_switch')?.count || switches.switchCount || 0;
     const metric = (value, label, title) => `
@@ -552,7 +554,7 @@ class TopicMapVisualizer {
   renderDefaultEvidence(analysis) {
     const panel = document.getElementById('evidence-panel');
     const uncategorized = analysis.uncategorized || { pageCount: 0, estimatedDwellMinutes: 0 };
-    const topTopic = analysis.metrics.topicTimeShare[0];
+    const topTopic = analysis.topics[0];
     const collapsed = !!this.evidenceCollapsed;
     panel.innerHTML = `
       <div class="evidence-section">
@@ -612,7 +614,7 @@ class TopicMapVisualizer {
       if (!label) return;
       // Topic ids are stable across runs in v4, so the correction applies
       // directly to the registry row instead of being re-matched by pages.
-      await store.put('corrections', {
+      await this.store.put('corrections', {
         correctionId: `topic_label:${topic.id}`,
         kind: 'topic_label',
         targetId: topic.id,
@@ -620,8 +622,8 @@ class TopicMapVisualizer {
         pageUrls: (topic.pageUrls || []).slice(0, 100),
         createdAt: Date.now()
       });
-      const row = await store.get('topics', topic.id);
-      if (row) await store.put('topics', { ...row, label, labelSource: 'user', userCorrected: true });
+      const row = await this.store.get('topics', topic.id);
+      if (row) await this.store.put('topics', { ...row, label, labelSource: 'user', userCorrected: true });
       topic.label = label;
       this.renderAnalysis(this.analysis);
       this.selectTopic(topic);
@@ -658,7 +660,7 @@ class TopicMapVisualizer {
     document.getElementById('transition-correction').addEventListener('submit', async event => {
       event.preventDefault();
       const type = new FormData(event.currentTarget).get('type').toString();
-      await store.put('corrections', {
+      await this.store.put('corrections', {
         correctionId: `transition_type:${transition.sourceTopicId}->${transition.targetTopicId}`,
         kind: 'transition_type',
         targetId: `${transition.sourceTopicId}->${transition.targetTopicId}`,
@@ -667,8 +669,8 @@ class TopicMapVisualizer {
         createdAt: Date.now()
       });
       for (const day of transition.days || []) {
-        const row = await store.get('transitions', [day, transition.sourceTopicId, transition.targetTopicId]);
-        if (row) await store.put('transitions', { ...row, type, userCorrected: true });
+        const row = await this.store.get('transitions', [day, transition.sourceTopicId, transition.targetTopicId]);
+        if (row) await this.store.put('transitions', { ...row, type, userCorrected: true });
       }
       transition.type = type;
       transition.label = FLOW_COLORS[type].label;
@@ -954,10 +956,25 @@ function escapeAttribute(value) {
   return escapeHtml(value).replace(/`/g, '&#096;');
 }
 
-document.addEventListener('DOMContentLoaded', () => {
-  if (typeof d3 === 'undefined') {
-    document.getElementById('loading').textContent = 'D3.js library not loaded. Reload the extension.';
-    return;
-  }
-  new TopicMapVisualizer();
-});
+// ---- module surface ------------------------------------------------------
+// Exported so a headless test can construct the visualizer against a seeded
+// store. Nothing in the class touches chrome.* on the render path.
+if (typeof module !== 'undefined' && module.exports) {
+  module.exports = { TopicMapVisualizer };
+} else {
+  globalThis.CTMap = { TopicMapVisualizer };
+}
+
+// ---- extension-page boot -------------------------------------------------
+// The demo page renders these surfaces itself against a recorded store,
+// so the live boot path must not also run there.
+if (typeof chrome !== 'undefined' && chrome.runtime && chrome.runtime.id &&
+    typeof document !== 'undefined' && !globalThis.__CT_DEMO__) {
+  document.addEventListener('DOMContentLoaded', () => {
+    if (typeof d3 === 'undefined') {
+      document.getElementById('loading').textContent = 'D3.js library not loaded. Reload the extension.';
+      return;
+    }
+    new TopicMapVisualizer();
+  });
+}

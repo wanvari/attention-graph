@@ -191,7 +191,12 @@ async function makeEnv(options) {
       domain: page.domain,
       source: page.source,
       startedAt: visit.visitTime,
-      endedAt: visit.visitTime + 60 * 1000,
+      // A tab left open across the whole visit (the 30-minute dwell cap) with
+      // 3 minutes of measured attention inside it. The span has to cover the
+      // visit: lib/history.js only lets a capture lower dwell across the span
+      // it actually observed, so a capture that watched 60 seconds says
+      // nothing about the remaining minutes and must not shrink them.
+      endedAt: visit.visitTime + 30 * 60 * 1000,
       activeMs: 3 * 60 * 1000,
       maxScrollDepth: 0.6,
       textHash: CTText.hashString(page.extractedText),

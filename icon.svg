@@ -1,0 +1,13 @@
+<!-- Source of truth for icon16/48/128.png. Regenerate with tools/renderIcons.js.
+     A trail of attention over time: three marks of growing size along a rising
+     path, the leading one brightest. Single accent hue on a near-black tile,
+     no valence colors. Tuned for 16px first — that is the size a tab shows. -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" width="128" height="128">
+  <rect width="128" height="128" rx="30" fill="#12121A"/>
+  <path d="M28 97 C 45 97, 51 63, 64 50 S 91 30, 100 32"
+        fill="none" stroke="#6E7FE8" stroke-opacity=".85"
+        stroke-width="9" stroke-linecap="round"/>
+  <circle cx="28" cy="97" r="7" fill="#6E7FE8"/>
+  <circle cx="64" cy="50" r="9.5" fill="#9AA7F7"/>
+  <circle cx="100" cy="32" r="12" fill="#ffffff"/>
+</svg>

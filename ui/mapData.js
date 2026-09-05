@@ -244,9 +244,35 @@
       };
     });
 
+    // Flow aggregates over exactly the edges this window drew, so the summary
+    // strip can never claim more switching than the map itself shows. Derived
+    // here rather than averaged out of daily_metrics: a per-day rate mean is
+    // not the rate over the window.
+    const transitionMixItems = Object.keys(TRANSITION_TYPES).map(type => {
+      const rows = transitions.filter(t => t.type === type);
+      return {
+        type,
+        label: TRANSITION_TYPES[type].label,
+        count: rows.reduce((sum, t) => sum + t.visitCount, 0)
+      };
+    });
+    const switchCount = (transitionMixItems.find(i => i.type === 'topic_switch') || { count: 0 }).count;
+    const activeHours = activeMs / 3.6e6;
+
     return {
       ok: visibleTopics.length > 0,
       version: 'cognitive-trails-v4',
+      source: 'registry',
+      metrics: {
+        switching: {
+          switchCount,
+          switchesPerActiveHour: activeHours > 0
+            ? Math.round((switchCount / activeHours) * 10) / 10
+            : 0
+        },
+        transitionMix: { items: transitionMixItems },
+        topicTimeShare: ranked
+      },
       generatedAt: lastOkRun ? new Date(lastOkRun.startedAt).toISOString() : new Date(now).toISOString(),
       fromCache: true,
       windowDays,
