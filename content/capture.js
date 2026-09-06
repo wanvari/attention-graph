@@ -132,6 +132,7 @@
       startedAt: Date.now(),
       endedAt: null,
       activeMs: 0,
+      activityIntervals: [],
       activityMethod: 'visible-focused-recent-input',
       maxScrollDepth: currentScrollDepth(),
       textHash: CTText.hashString(extraction.text),
@@ -277,7 +278,13 @@
       // Count elapsed observed time, bounded across throttling/sleep; a timer
       // firing is not evidence that a whole away-gap was active.
       const measured = Math.min(elapsed, Math.max(0, lastInputAt + ACTIVE_INPUT_WINDOW_MS - (now - elapsed)));
-      capture.activeMs = Math.min(capture.activeMs + measured, ACTIVE_CAP_MS);
+      if (measured > 0) {
+        const start = Math.max(capture.startedAt, now - elapsed), end = start + measured;
+        const last = capture.activityIntervals[capture.activityIntervals.length - 1];
+        if (last && start <= last[1] + 1) { capture.activeMs += Math.max(0, end - last[1]); last[1] = Math.max(last[1], end); }
+        else if (capture.activityIntervals.length < 2048) { capture.activityIntervals.push([start, end]); capture.activeMs += end - start; }
+        else capture.timingTruncated = true;
+      }
     }
     lastMeasuredAt = clock;
     wasEligible = eligible;

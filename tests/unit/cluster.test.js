@@ -129,12 +129,12 @@ function partitionSignature(clusters) {
 
 // --- assignToExistingTopics honors the 0.78 threshold and skips retired topics
 {
-  const page = { normalizedUrl: 'https://p.example/a', embedding: Float32Array.from([1, 0]) };
+  const page = { visitCount: 2, normalizedUrl: 'https://p.example/a', embedding: Float32Array.from([1, 0]) };
   const topicAt = (id, c, state) => ({
     topicId: id, state: state || 'active',
     centroid: Float32Array.from([c, Math.sqrt(1 - c * c)])
   });
-  const hit = CTCluster.assignToExistingTopics([page], [topicAt('t1', 0.80)], {});
+  const hit = CTCluster.assignToExistingTopics([page], [topicAt('t1', 0.80)], { memberVectorsByTopic: new Map([['t1', [topicAt('t1', 0.80).centroid]]]) });
   assert.strictEqual(hit.assigned.get('t1').length, 1);
   const miss = CTCluster.assignToExistingTopics([page], [topicAt('t1', 0.76)], {});
   assert.strictEqual(miss.remainder.length, 1, 'below 0.78 the page stays unassigned');

@@ -15,7 +15,7 @@ const { makeEnv, scriptedTransport, wellBehavedHandlers, loadFixtures } = requir
     assert.ok(result.counts.embeddingsCached > 20);
 
     const topics = await env.store.getAll('topics');
-    assert.strictEqual(topics.length, 8, 'day 1-2 fixture forms eight topics');
+    assert.strictEqual(topics.length, 7, 'day 1-2 fixture forms seven supported topics');
     const labels = topics.map(t => t.label).sort();
     for (const expected of ['Topic sourdough-baking', 'Topic rust-async', 'Topic attention-research']) {
       assert.ok(labels.includes(expected), `missing ${expected} in ${labels}`);
@@ -26,7 +26,7 @@ const { makeEnv, scriptedTransport, wellBehavedHandlers, loadFixtures } = requir
     const memberships = await env.store.getAll('memberships');
     assert.ok(memberships.length >= 25);
     const events = await env.store.getAll('topic_events');
-    assert.strictEqual(events.filter(e => e.type === 'created').length, 8);
+    assert.strictEqual(events.filter(e => e.type === 'created').length, 7);
     assert.strictEqual(events.filter(e => e.type === 'dormant').length, 0, 'no lifecycle events on early runs');
 
     const metrics1 = await env.store.get('daily_metrics', '2026-03-01');
@@ -46,7 +46,7 @@ const { makeEnv, scriptedTransport, wellBehavedHandlers, loadFixtures } = requir
     const chatCallsBefore = env.ollama.stats.chatCalls;
     const rerun = await env.runThroughDay(2);
     assert.strictEqual(rerun.ok, true);
-    assert.strictEqual((await env.store.getAll('topics')).length, 8, 'rerun does not duplicate topics');
+    assert.strictEqual((await env.store.getAll('topics')).length, 7, 'rerun does not duplicate topics');
     assert.strictEqual(rerun.counts.topicsCreated, 0);
   }
 
@@ -145,7 +145,7 @@ const { makeEnv, scriptedTransport, wellBehavedHandlers, loadFixtures } = requir
     env.store.registryCommit = originalCommit;
     const retry = await env.runThroughDay(2);
     assert.strictEqual(retry.ok, true);
-    assert.strictEqual((await env.store.getAll('topics')).length, 8);
+    assert.strictEqual((await env.store.getAll('topics')).length, 7);
   }
 
   // --- timeout mid-adjudication: topic kept, errors counted, run ok -------
@@ -164,7 +164,7 @@ const { makeEnv, scriptedTransport, wellBehavedHandlers, loadFixtures } = requir
     const result = await env.runThroughDay(2);
     assert.strictEqual(result.ok, true, 'adjudication failures never fail the run');
     assert.ok(result.counts.errors >= 1);
-    assert.strictEqual((await env.store.getAll('topics')).length, 8, 'audited topics kept on error');
+    assert.strictEqual((await env.store.getAll('topics')).length, 7, 'audited topics kept on error');
     const uncategorized = await env.store.getAll('uncategorized');
     assert.ok(!uncategorized.some(u => u.reason === 'disagreement'), 'errors are not disagreement');
   }

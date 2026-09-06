@@ -35,7 +35,7 @@ async function harness() {
       clear: async () => { for (const key of Object.keys(storage)) delete storage[key]; }
     } },
     declarativeNetRequest: { updateDynamicRules: async () => {} },
-    alarms: { create() {}, onAlarm: event('alarm') },
+    alarms: { create() {}, async clear() {}, onAlarm: event('alarm') },
     idle: { queryState: (_, reply) => reply(h.idleState) },
     offscreen: {
       createDocument: async () => { h.hasOffscreen = true; events.push('create'); },
@@ -45,7 +45,7 @@ async function harness() {
         events.push('close');
       }
     },
-    notifications: { onClicked: event('notification'), create() {} },
+    notifications: { onClicked: event('notification'), create() {}, async clear() {} },
     action: { onClicked: event('action') },
     history: { search: (_, reply) => reply([]), getVisits: (_, reply) => reply([]) },
     tabs: {}, windows: {}
@@ -56,7 +56,7 @@ async function harness() {
     CTStore: { createStore: () => store },
     CTText: require('../../lib/text.js'), CTPrivacy: require('../../lib/privacy.js'),
     CTCaptureBuffer: require('../../lib/captureBuffer.js'), CTOllama,
-    CTTrails: require('../../lib/trails.js'), CTOllamaRules: require('../../lib/ollamaRules.js'), importScripts() {}
+    CTSessions: require('../../lib/sessions.js'), CTDashboard: require('../../lib/dashboard.js'), CTIntegrity: require('../../lib/integrity.js'), CTTrails: require('../../lib/trails.js'), CTOllamaRules: require('../../lib/ollamaRules.js'), importScripts() {}
   };
   vm.runInNewContext(fs.readFileSync(path.join(root, 'background.js'), 'utf8'), sandbox);
   h.send = (message, sender = {}) => new Promise(resolve => handlers.message(message, sender, resolve));

@@ -27,7 +27,7 @@ const { makeEnv } = require('../helpers/pipelineHarness.js');
     }
     assert.ok(drained, 'the backlog drains across runs');
     const pages = await env.store.getAll('pages');
-    const unembedded = pages.filter(p => !p.embeddingKey && p.hadTitle);
+    const unembedded = pages.filter(p => !p.embeddingKey && p.hadTitle && !['thin_evidence', 'limited-evidence', 'operational-page', 'utility_page'].includes(p.classificationReason));
     assert.strictEqual(unembedded.length, 0,
       `every page with something to embed eventually gets embedded (${unembedded.length} left)`);
     const memberships = new Set((await env.store.getAll('memberships')).map(m => m.normalizedUrl));

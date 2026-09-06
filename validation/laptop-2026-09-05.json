@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-09-05T23:02:04.460Z",
+  "generatedAt": "2026-09-06T01:32:44.524Z",
   "scope": "Synthetic 28-day history, empty embedding cache, live production model profile. One laptop; not a human evaluation or proof of broad hardware support.",
   "host": {
     "platform": "darwin",
@@ -25,95 +25,95 @@
     {
       "kind": "embed",
       "model": "bge-m3:latest",
-      "durationMs": 1503,
+      "durationMs": 1584,
       "inputs": 8,
       "promptTokens": 2862,
-      "loadDurationMs": 790
+      "loadDurationMs": 803
     },
     {
       "kind": "embed",
       "model": "bge-m3:latest",
-      "durationMs": 687,
+      "durationMs": 678,
       "inputs": 8,
-      "promptTokens": 2823,
-      "loadDurationMs": 2
+      "promptTokens": 2796,
+      "loadDurationMs": 7
     },
     {
       "kind": "embed",
       "model": "bge-m3:latest",
-      "durationMs": 698,
+      "durationMs": 699,
       "inputs": 8,
-      "promptTokens": 2955,
-      "loadDurationMs": 2
-    },
-    {
-      "kind": "embed",
-      "model": "bge-m3:latest",
-      "durationMs": 708,
-      "inputs": 8,
-      "promptTokens": 2979,
+      "promptTokens": 2985,
       "loadDurationMs": 3
     },
     {
       "kind": "embed",
       "model": "bge-m3:latest",
-      "durationMs": 653,
+      "durationMs": 710,
       "inputs": 8,
-      "promptTokens": 2767,
+      "promptTokens": 3016,
+      "loadDurationMs": 3
+    },
+    {
+      "kind": "embed",
+      "model": "bge-m3:latest",
+      "durationMs": 627,
+      "inputs": 8,
+      "promptTokens": 2729,
+      "loadDurationMs": 4
+    },
+    {
+      "kind": "embed",
+      "model": "bge-m3:latest",
+      "durationMs": 686,
+      "inputs": 8,
+      "promptTokens": 2986,
+      "loadDurationMs": 6
+    },
+    {
+      "kind": "embed",
+      "model": "bge-m3:latest",
+      "durationMs": 605,
+      "inputs": 8,
+      "promptTokens": 2598,
+      "loadDurationMs": 4
+    },
+    {
+      "kind": "embed",
+      "model": "bge-m3:latest",
+      "durationMs": 661,
+      "inputs": 8,
+      "promptTokens": 2738,
       "loadDurationMs": 5
     },
     {
       "kind": "embed",
       "model": "bge-m3:latest",
-      "durationMs": 674,
-      "inputs": 8,
-      "promptTokens": 2952,
-      "loadDurationMs": 3
-    },
-    {
-      "kind": "embed",
-      "model": "bge-m3:latest",
-      "durationMs": 640,
-      "inputs": 8,
-      "promptTokens": 2733,
-      "loadDurationMs": 3
-    },
-    {
-      "kind": "embed",
-      "model": "bge-m3:latest",
-      "durationMs": 635,
-      "inputs": 8,
-      "promptTokens": 2641,
-      "loadDurationMs": 3
-    },
-    {
-      "kind": "embed",
-      "model": "bge-m3:latest",
-      "durationMs": 687,
+      "durationMs": 695,
       "inputs": 8,
       "promptTokens": 3044,
-      "loadDurationMs": 3
+      "loadDurationMs": 4
     },
     {
       "kind": "embed",
       "model": "bge-m3:latest",
-      "durationMs": 673,
+      "durationMs": 678,
       "inputs": 8,
       "promptTokens": 2939,
-      "loadDurationMs": 3
+      "loadDurationMs": 4
     },
     {
       "kind": "embed",
       "model": "bge-m3:latest",
-      "durationMs": 728,
+      "durationMs": 725,
       "inputs": 8,
       "promptTokens": 3139,
-      "loadDurationMs": 3
+      "loadDurationMs": 4
     },
     {
       "kind": "embed",
       "model": "bge-m3:latest",
-      "durationMs": 660,
+      "durationMs": 656,
       "inputs": 8,
       "promptTokens": 2882,
       "loadDurationMs": 4
@@ -121,57 +121,67 @@
     {
       "kind": "embed",
       "model": "bge-m3:latest",
-      "durationMs": 388,
+      "durationMs": 385,
       "inputs": 4,
       "promptTokens": 1554,
-      "loadDurationMs": 3
+      "loadDurationMs": 4
     },
     {
       "kind": "label_topics",
       "model": "qwen3:4b",
-      "durationMs": 16730,
+      "durationMs": 16154,
       "promptTokens": 1962,
       "outputTokens": 433,
-      "loadDurationMs": 2372,
+      "loadDurationMs": 2087,
       "doneReason": "stop"
     },
     {
       "kind": "label_topics",
       "model": "qwen3:4b",
-      "durationMs": 13370,
-      "promptTokens": 1597,
-      "outputTokens": 445,
-      "loadDurationMs": 9,
+      "durationMs": 12325,
+      "promptTokens": 1520,
+      "outputTokens": 413,
+      "loadDurationMs": 6,
+      "doneReason": "stop"
+    },
+    {
+      "kind": "adjudicate_pass1",
+      "model": "qwen3:4b",
+      "durationMs": 1949,
+      "promptTokens": 269,
+      "outputTokens": 63,
+      "loadDurationMs": 7,
+      "doneReason": "stop"
+    },
+    {
+      "kind": "adjudicate_pass2",
+      "model": "qwen3:4b",
+      "durationMs": 3445,
+      "promptTokens": 269,
+      "outputTokens": 63,
+      "loadDurationMs": 5,
       "doneReason": "stop"
     },
     {
       "kind": "embed",
       "model": "bge-m3:latest",
-      "durationMs": 1417,
+      "durationMs": 1464,
       "inputs": 8,
-      "promptTokens": 2575,
-      "loadDurationMs": 783
+      "promptTokens": 2800,
+      "loadDurationMs": 799
     },
     {
       "kind": "embed",
       "model": "bge-m3:latest",
-      "durationMs": 634,
+      "durationMs": 662,
       "inputs": 8,
-      "promptTokens": 2674,
-      "loadDurationMs": 2
-    },
-    {
-      "kind": "embed",
-      "model": "bge-m3:latest",
-      "durationMs": 656,
-      "inputs": 8,
-      "promptTokens": 2844,
+      "promptTokens": 2809,
       "loadDurationMs": 5
     },
     {
       "kind": "embed",
       "model": "bge-m3:latest",
-      "durationMs": 690,
+      "durationMs": 689,
       "inputs": 8,
       "promptTokens": 3025,
       "loadDurationMs": 4
@@ -179,122 +189,98 @@
     {
       "kind": "embed",
       "model": "bge-m3:latest",
-      "durationMs": 756,
+      "durationMs": 771,
       "inputs": 8,
-      "promptTokens": 3121,
-      "loadDurationMs": 4
+      "promptTokens": 3099,
+      "loadDurationMs": 2
     },
     {
       "kind": "embed",
       "model": "bge-m3:latest",
-      "durationMs": 664,
+      "durationMs": 632,
       "inputs": 8,
-      "promptTokens": 2887,
-      "loadDurationMs": 4
+      "promptTokens": 2850,
+      "loadDurationMs": 2
     },
     {
       "kind": "embed",
       "model": "bge-m3:latest",
-      "durationMs": 674,
+      "durationMs": 690,
       "inputs": 8,
-      "promptTokens": 3016,
-      "loadDurationMs": 1
+      "promptTokens": 3037,
+      "loadDurationMs": 3
+    },
+    {
+      "kind": "embed",
+      "model": "bge-m3:latest",
+      "durationMs": 603,
+      "inputs": 8,
+      "promptTokens": 2576,
+      "loadDurationMs": 3
     },
     {
       "kind": "embed",
       "model": "bge-m3:latest",
       "durationMs": 637,
       "inputs": 8,
-      "promptTokens": 2690,
-      "loadDurationMs": 3
-    },
-    {
-      "kind": "embed",
-      "model": "bge-m3:latest",
-      "durationMs": 657,
-      "inputs": 8,
-      "promptTokens": 2861,
+      "promptTokens": 2743,
       "loadDurationMs": 5
     },
     {
       "kind": "embed",
       "model": "bge-m3:latest",
-      "durationMs": 625,
+      "durationMs": 648,
       "inputs": 8,
-      "promptTokens": 2686,
-      "loadDurationMs": 4
+      "promptTokens": 2909,
+      "loadDurationMs": 3
     },
     {
       "kind": "embed",
       "model": "bge-m3:latest",
-      "durationMs": 716,
+      "durationMs": 706,
       "inputs": 8,
-      "promptTokens": 2980,
-      "loadDurationMs": 4
+      "promptTokens": 2963,
+      "loadDurationMs": 3
     },
     {
       "kind": "embed",
       "model": "bge-m3:latest",
-      "durationMs": 568,
-      "inputs": 7,
-      "promptTokens": 2475,
-      "loadDurationMs": 4
+      "durationMs": 203,
+      "inputs": 2,
+      "promptTokens": 696,
+      "loadDurationMs": 3
     },
     {
       "kind": "label_topics",
       "model": "qwen3:4b",
-      "durationMs": 12102,
-      "promptTokens": 757,
-      "outputTokens": 431,
-      "loadDurationMs": 819,
+      "durationMs": 10881,
+      "promptTokens": 951,
+      "outputTokens": 372,
+      "loadDurationMs": 842,
       "doneReason": "stop"
     },
     {
       "kind": "label_topics",
       "model": "qwen3:4b",
-      "durationMs": 2710,
+      "durationMs": 2590,
       "promptTokens": 229,
       "outputTokens": 110,
-      "loadDurationMs": 3,
+      "loadDurationMs": 4,
       "doneReason": "stop"
-    },
-    {
-      "kind": "embed",
-      "model": "bge-m3:latest",
-      "durationMs": 1491,
-      "inputs": 8,
-      "promptTokens": 2695,
-      "loadDurationMs": 799
-    },
-    {
-      "kind": "embed",
-      "model": "bge-m3:latest",
-      "durationMs": 598,
-      "inputs": 8,
-      "promptTokens": 2456,
-      "loadDurationMs": 3
-    },
-    {
-      "kind": "embed",
-      "model": "bge-m3:latest",
-      "durationMs": 552,
-      "inputs": 6,
-      "promptTokens": 2030,
-      "loadDurationMs": 3
     }
   ],
   "runs": [
     {
       "pass": 1,
-      "elapsedMs": 79330,
+      "elapsedMs": 87486,
       "result": {
         "ok": true,
-        "runId": "run-mnb7ay80-ipu6",
+        "runId": "run-mnb7ay80-6rew",
         "day": "2026-03-28",
         "brief": {
           "day": "2026-03-28",
           "generatedAt": 1774755000000,
-          "runId": "run-mnb7ay80-ipu6",
+          "runId": "run-mnb7ay80-6rew",
           "items": [
             {
               "kind": "first_run",
@@ -306,7 +292,7 @@
             },
             {
               "kind": "new_topics",
-              "text": "12 new topics started: *Rust async programming concepts*, *Sourdough baking techniques*, *Cognitive attention and task switching research*.",
+              "text": "11 new trails were grouped: *Rust async programming concepts*, *Sourdough baking techniques*, *Cognitive attention and task switching research*.",
               "topicIds": [
                 "t-001",
                 "t-002",
@@ -318,11 +304,10 @@
                 "t-008",
                 "t-009",
                 "t-010",
-                "t-011",
-                "t-012"
+                "t-011"
               ],
               "evidence": {
-                "count": 12,
+                "count": 11,
                 "topicIds": [
                   "t-001",
                   "t-002",
@@ -334,8 +319,7 @@
                   "t-008",
                   "t-009",
                   "t-010",
-                  "t-011",
-                  "t-012"
+                  "t-011"
                 ]
               }
             }
@@ -347,45 +331,45 @@
           "visitsIngested": 410,
           "pagesEmbedded": 100,
           "embeddingsCached": 0,
-          "pagesDeferred": 117,
-          "pagesPending": 122,
-          "topicsCreated": 12,
+          "pagesDeferred": 82,
+          "pagesPending": 88,
+          "topicsCreated": 11,
           "topicsMatched": 0,
-          "adjudicated": 0,
+          "adjudicated": 1,
           "kept": 0,
           "split": 0,
-          "uncategorized": 12,
+          "uncategorized": 49,
           "disagreed": 0,
           "errors": 0,
-          "utilityPagesExcluded": 5,
+          "utilityPagesExcluded": 42,
           "utilityMembershipsRemoved": 0
         },
         "timingsMs": {
-          "ingest": 75,
-          "embed": 18870,
+          "ingest": 252,
+          "embed": 18997,
           "cluster": 19,
-          "label": 60238,
-          "adjudicate": 2,
-          "registry": 56,
-          "transitions": 63
+          "label": 56987,
+          "adjudicate": 10813,
+          "registry": 312,
+          "transitions": 74
         },
         "warnings": []
       },
-      "pending": 122,
-      "calls": 15,
-      "pacingMs": 39461
+      "pending": 88,
+      "calls": 17,
+      "pacingMs": 43299
     },
     {
       "pass": 2,
-      "elapsedMs": 47371,
+      "elapsedMs": 43299,
       "result": {
         "ok": true,
-        "runId": "run-mnb7ay80-4ckg",
+        "runId": "run-mnb7ay80-a8h",
         "day": "2026-03-28",
         "brief": {
           "day": "2026-03-28",
           "generatedAt": 1774755000000,
-          "runId": "run-mnb7ay80-4ckg",
+          "runId": "run-mnb7ay80-a8h",
           "items": [
             {
               "kind": "dormancy",
@@ -401,26 +385,26 @@
             },
             {
               "kind": "new_topics",
-              "text": "7 new topics started: *Y Combinator links roundups*, *Reddit Friday grab bags*, *Y Combinator weekly links*.",
+              "text": "7 new trails were grouped: *Energy storage cost comparisons*, *Tech links roundup*, *Reddit Friday links*.",
               "topicIds": [
+                "t-012",
                 "t-013",
                 "t-014",
                 "t-015",
                 "t-016",
                 "t-017",
-                "t-018",
-                "t-019"
+                "t-018"
               ],
               "evidence": {
                 "count": 7,
                 "topicIds": [
+                  "t-012",
                   "t-013",
                   "t-014",
                   "t-015",
                   "t-016",
                   "t-017",
-                  "t-018",
-                  "t-019"
+                  "t-018"
                 ]
               }
             }
@@ -430,97 +414,50 @@
         },
         "counts": {
           "visitsIngested": 0,
-          "pagesEmbedded": 95,
-          "embeddingsCached": 5,
-          "pagesDeferred": 22,
-          "pagesPending": 22,
-          "topicsCreated": 7,
-          "topicsMatched": 12,
-          "adjudicated": 0,
-          "kept": 0,
-          "split": 0,
-          "uncategorized": 1,
-          "disagreed": 0,
-          "errors": 0,
-          "utilityPagesExcluded": 0,
-          "utilityMembershipsRemoved": 0
-        },
-        "timingsMs": {
-          "ingest": 5,
-          "embed": 17574,
-          "cluster": 2,
-          "label": 29640,
-          "adjudicate": 1,
-          "registry": 56,
-          "transitions": 78
-        },
-        "warnings": []
-      },
-      "pending": 22,
-      "calls": 14,
-      "pacingMs": 23530
-    },
-    {
-      "pass": 3,
-      "elapsedMs": 5443,
-      "result": {
-        "ok": true,
-        "runId": "run-mnb7ay80-8br4",
-        "day": "2026-03-28",
-        "brief": {
-          "day": "2026-03-28",
-          "generatedAt": 1774755000000,
-          "runId": "run-mnb7ay80-8br4",
-          "items": [],
-          "seen": false,
-          "seenAt": null
-        },
-        "counts": {
-          "visitsIngested": 0,
-          "pagesEmbedded": 22,
-          "embeddingsCached": 0,
+          "pagesEmbedded": 82,
+          "embeddingsCached": 6,
           "pagesDeferred": 0,
           "pagesPending": 0,
-          "topicsCreated": 0,
-          "topicsMatched": 7,
+          "topicsCreated": 7,
+          "topicsMatched": 11,
           "adjudicated": 0,
           "kept": 0,
           "split": 0,
-          "uncategorized": 5,
+          "uncategorized": 0,
           "disagreed": 0,
           "errors": 0,
           "utilityPagesExcluded": 0,
           "utilityMembershipsRemoved": 0
         },
         "timingsMs": {
-          "ingest": 6,
-          "embed": 5345,
-          "cluster": 1,
-          "label": 6,
-          "adjudicate": 1,
-          "registry": 13,
-          "transitions": 58
+          "ingest": 259,
+          "embed": 15587,
+          "cluster": 3,
+          "label": 26962,
+          "adjudicate": 2,
+          "registry": 386,
+          "transitions": 85
         },
         "warnings": []
       },
       "pending": 0,
-      "calls": 3,
-      "pacingMs": 2645
+      "calls": 13,
+      "pacingMs": 21199
     }
   ],
   "peakResidentBytes": 3856589127,
   "modelOverlap": false,
-  "recordBuildMs": 9.47,
+  "recordBuildMs": 7.47,
   "summary": {
     "visitCount": 415,
     "pageCount": 228,
     "sourceCount": 61,
     "dayCount": 25,
     "returnDays": 24,
-    "categorizedCount": 393,
+    "categorizedCount": 361,
     "measuredCount": 415,
     "pendingCount": 5,
-    "estimatedMs": 59895443.388183594
+    "estimatedMs": 58995443.388183594
   },
   "topics": [
     {
@@ -580,55 +517,50 @@
     },
     {
       "topicId": "t-012",
-      "label": "Long-duration energy storage",
+      "label": "Energy storage cost comparisons",
       "state": "active"
     },
     {
       "topicId": "t-013",
-      "label": "Y Combinator links roundups",
+      "label": "Tech links roundup",
       "state": "active"
     },
     {
       "topicId": "t-014",
-      "label": "Reddit Friday grab bags",
+      "label": "Reddit Friday links",
       "state": "active"
     },
     {
       "topicId": "t-015",
-      "label": "Y Combinator weekly links",
+      "label": "Medium Friday links",
       "state": "active"
     },
     {
       "topicId": "t-016",
-      "label": "Medium Friday grab bags",
+      "label": "Medium monthly reading roundup",
       "state": "active"
     },
     {
       "topicId": "t-017",
-      "label": "Medium monthly reading summaries",
+      "label": "Medium Friday links",
       "state": "active"
     },
     {
       "topicId": "t-018",
-      "label": "Medium Friday grab bags",
-      "state": "dormant"
-    },
-    {
-      "topicId": "t-019",
       "label": "Reddit monthly roundup",
-      "state": "dormant"
+      "state": "active"
     }
   ],
   "grouping": {
     "ingestedPages": 224,
-    "memberships": 211,
+    "memberships": 181,
     "clearPages": 200,
-    "clearPagesGrouped": 200,
+    "clearPagesGrouped": 171,
     "noisePages": 24,
-    "noisePagesGrouped": 11,
-    "sameTrailPairs": 1730,
-    "sameTruthPairs": 1697,
-    "pairPrecision": 0.9809248554913295,
+    "noisePagesGrouped": 10,
+    "sameTrailPairs": 1323,
+    "sameTruthPairs": 1298,
+    "pairPrecision": 0.981103552532124,
     "note": "Pair precision measures only grouped fixture pages; coverage is separate. It does not validate inferred intention or real-world label quality."
   },
   "complete": true

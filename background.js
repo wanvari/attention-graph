@@ -1,7 +1,7 @@
 // Service worker: message routing, capture buffering, alarms, offscreen
 // lifecycle (spec §1.2-§1.3, §2.4). The pipeline NEVER runs here — the SW is
 // killed after ~30 s idle; all analysis happens in the offscreen document.
-importScripts('lib/text.js', 'lib/privacy.js', 'lib/store.js', 'lib/ollama.js', 'lib/ollamaRules.js', 'lib/captureBuffer.js', 'lib/trails.js');
+importScripts('lib/text.js', 'lib/privacy.js', 'lib/store.js', 'lib/ollama.js', 'lib/ollamaRules.js', 'lib/captureBuffer.js', 'lib/relevance.js', 'lib/trails.js', 'lib/cluster.js', 'lib/integrity.js', 'lib/dashboard.js', 'lib/sessions.js');
 
 const store = CTStore.createStore({});
 
@@ -55,6 +55,13 @@ async function installOllamaOriginRules() {
 const captures = CTCaptureBuffer.createCaptureBuffer({ store });
 
 const flushCaptures = () => captures.flush();
+const sessions = CTSessions.createManager(store, {
+  flush: flushCaptures,
+  alarm: (name, info) => chrome.alarms.create(name, info),
+  clearAlarm: name => chrome.alarms.clear(name),
+  notify: (id, info) => chrome.notifications.create(id, info),
+  clearNotification: id => chrome.notifications.clear(id)
+});
 
 async function handleCaptureUpdate(message, sender) {
   // Defense in depth: never store anything from incognito contexts.
@@ -80,6 +87,10 @@ async function handleCaptureUpdate(message, sender) {
     updatedAt: Math.min(Number(incoming.updatedAt) || cutoff, cutoff),
     activeMs: Math.max(0, Math.min(Number(incoming.activeMs) || 0, 30 * 60 * 1000, cutoff - incoming.startedAt))
   };
+  if (Array.isArray(incoming.activityIntervals)) {
+    capture.activityIntervals = CTTrails.cleanIntervals(incoming.activityIntervals.slice(0, 2048), incoming.startedAt, Math.min(cutoff, capture.updatedAt));
+    capture.activeMs = CTTrails.intervalMs(capture.activityIntervals);
+  }
   if (incoming.extractedText !== undefined) capture.extractedText = String(incoming.extractedText).slice(0, 8000);
   if (message.final) capture.endedAt = Math.min(Number(incoming.endedAt) || cutoff, cutoff);
   return captures.submit(capture, { final: !!message.final });
@@ -101,7 +112,12 @@ async function setCapturePaused(paused) {
   }
   await store.setSetting('pauseIntervals', intervals);
   await chrome.storage.local.set({ ctPaused: paused });
-  return { paused };
+  let endedSession = null;
+  if (paused) {
+    const active = (await sessions.all()).find(s => s.status === 'active');
+    if (active) endedSession = await sessions.end(active.sessionId, 'capture-paused');
+  }
+  return { paused, endedSession };
 }
 
 async function mirrorSettingsForContentScripts() {
@@ -296,8 +312,9 @@ async function maybeNotify(brief) {
   }
 }
 
-chrome.notifications?.onClicked.addListener(() => {
-  chrome.tabs.create({ url: chrome.runtime.getURL('ui/newtab.html') });
+chrome.notifications?.onClicked.addListener(id => {
+  const sessionId = id.startsWith(CTSessions.PREFIX) ? id.slice(CTSessions.PREFIX.length) : null;
+  chrome.tabs.create({ url: chrome.runtime.getURL('ui/newtab.html') + (sessionId ? `?session=${encodeURIComponent(sessionId)}` : '') });
 });
 
 // ---- wiring ------------------------------------------------------------
@@ -332,6 +349,7 @@ function deleteEverything() {
     await captures.discardAndDrain();
     await closeOffscreenDocument();
     await store.open();
+    await sessions.clear();
     await store.wipe();
     pipelineLaunchUntil = 0;
     const deletedAt = Date.now();
@@ -353,6 +371,7 @@ function deleteEverything() {
 function maintenance() {
   return withWriter(async () => {
     await markAbandonedRuns();
+    await CTIntegrity.repair(store, { once: true });
     const settings = await store.getSettingsMap();
     if (!settings.laptopProfileVersion) {
       const rows = [{ key: 'laptopProfileVersion', value: 1 }];
@@ -362,6 +381,7 @@ function maintenance() {
       await store.bulkPut('settings', rows);
     }
     await runRetention();
+    await sessions.reconcile();
     await mirrorSettingsForContentScripts();
   });
 }
@@ -379,7 +399,8 @@ chrome.runtime.onStartup.addListener(() => {
 });
 
 chrome.alarms.onAlarm.addListener(alarm => {
-  if (alarm.name === FLUSH_ALARM) withWriter(flushCaptures);
+  if (alarm.name.startsWith(CTSessions.PREFIX)) withWriter(() => sessions.reconcile()).catch(error => console.warn('Session reconciliation failed', error));
+  if (alarm.name === FLUSH_ALARM) withWriter(async () => { await flushCaptures(); await sessions.reconcile(); }).catch(error => console.warn(error));
   if (alarm.name === DAILY_ALARM) withWriter(dailyAlarmFired);
   if (alarm.name === RETENTION_ALARM) withWriter(runRetention);
 });
@@ -420,6 +441,42 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         await store.put('corrections', CTTrails.makeCorrection(row.targetId, row.value || {}, Date.now(), previous));
         return { ok: true };
       }).then(sendResponse, error => sendResponse({ ok: false, error: error.message }));
+      return true;
+    case 'START_TRAIL_SESSION':
+    case 'END_TRAIL_SESSION':
+    case 'GET_TRAIL_SESSION_STATUS':
+    case 'GET_TRAIL_SESSION_RECAP':
+    case 'MARK_TRAIL_SESSION_RECAP_SEEN':
+      withWriter(async () => {
+        await store.open();
+        if (message.type === 'START_TRAIL_SESSION') return sessions.start(message);
+        if (message.type === 'END_TRAIL_SESSION') return { ok: true, session: await sessions.end(message.sessionId) };
+        if (message.type === 'MARK_TRAIL_SESSION_RECAP_SEEN') return sessions.seen(message.sessionId);
+        const active = await sessions.reconcile();
+        if (message.type === 'GET_TRAIL_SESSION_STATUS') return { ok: true, session: active };
+        const session = await store.get('intent_sessions', message.sessionId);
+        if (!session) throw new Error('Session no longer exists');
+        const record = CTTrails.buildRecord(await CTTrails.loadData(store));
+        return { ok: true, recap: CTDashboard.buildSessionRecap(record, session) };
+      }).then(sendResponse, error => sendResponse({ ok: false, error: error.message }));
+      return true;
+    case 'SAVE_PAGE_MEMBERSHIP':
+      withWriter(async () => {
+        await store.open();
+        const url = CTTrails.safeUrl(message.normalizedUrl);
+        if (!url || CTText.normalizeUrl(url) !== message.normalizedUrl) throw new Error('Invalid page');
+        const exists = await store.get('pages', url) || (await store.byIndex('captures', 'byNormUrl', url)).length;
+        if (!exists) throw new Error('Page no longer exists');
+        const topicId = message.topicId;
+        if (topicId !== null && (typeof topicId !== 'string' || !await store.get('topics', topicId))) throw new Error('Trail no longer exists');
+        const correction = { correctionId: `page:${url}`, kind: 'page_membership', targetId: url, value: { topicId }, updatedAt: Date.now() };
+        await CTIntegrity.repair(store, { correction });
+        return { ok: true };
+      }).then(sendResponse, error => sendResponse({ ok: false, error: error.message }));
+      return true;
+    case 'AUDIT_EVIDENCE':
+      withWriter(async () => { await store.open(); return { ok: true, audit: await CTIntegrity.repair(store) }; })
+        .then(sendResponse, error => sendResponse({ ok: false, error: error.message }));
       return true;
     case 'SAVE_PREFERENCES':
       withWriter(async () => {
@@ -473,6 +530,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
           if (!testMode) return { ok: false, reason: 'not in test mode' };
           if (message.alarm === FLUSH_ALARM) await flushCaptures();
           else if (message.alarm === RETENTION_ALARM) await runRetention();
+          else if (message.alarm.startsWith(CTSessions.PREFIX)) await sessions.reconcile();
           else await dailyAlarmFired();
           return { ok: true };
         }))

@@ -67,7 +67,7 @@ function snapshot() {
   const record = CTTrails.buildRecord(data, { now });
   assert.equal(record.visitCount, 6);
   assert.equal(record.events.find(e => e.id === 'a1').captureId, 'observed');
-  assert.equal(record.events.find(e => e.id === 'a1').dwellMs, 40000);
+  assert.equal(record.events.find(e => e.id === 'a1').dwellMs, 25000, '15 seconds belong to the later opening, never both');
   assert.equal(record.pendingCount, 1);
   assert.equal(record.measuredCount, 2);
 }
