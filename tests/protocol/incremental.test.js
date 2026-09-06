@@ -8,7 +8,7 @@ const { makeEnv } = require('../helpers/pipelineHarness.js');
 (async () => {
   // --- deferred work is retried until it is done, never dropped ----------
   {
-    const env = await makeEnv({ settings: { maxNewPagesPerRun: 5 } });
+    const env = await makeEnv({ settings: { maxNewPagesPerRun: 1 } });
     await env.runThroughDay(2);
     const afterFirst = await env.store.getAll('pages');
     const backlog = afterFirst.filter(p => p.needsEmbedding).length;
@@ -19,16 +19,23 @@ const { makeEnv } = require('../helpers/pipelineHarness.js');
     // real the queue drains; if candidates were selected purely by the time
     // window, these pages would have been abandoned.
     let drained = false;
-    for (let i = 0; i < 15; i++) {
-      await env.runThroughDay(2);
+    for (let i = 0; i < 60; i++) {
+      const result = await env.runThroughDay(2);
+      assert.strictEqual(result.ok, true, result.error);
       const pages = await env.store.getAll('pages');
-      if (!pages.some(p => p.needsEmbedding)) { drained = true; break; }
+      if (!pages.some(p => p.needsEmbedding || p.needsClassification)) { drained = true; break; }
     }
     assert.ok(drained, 'the backlog drains across runs');
     const pages = await env.store.getAll('pages');
     const unembedded = pages.filter(p => !p.embeddingKey && p.hadTitle);
     assert.strictEqual(unembedded.length, 0,
       `every page with something to embed eventually gets embedded (${unembedded.length} left)`);
+    const memberships = new Set((await env.store.getAll('memberships')).map(m => m.normalizedUrl));
+    const excluded = new Set((await env.store.getAll('uncategorized')).map(m => m.normalizedUrl));
+    assert.ok(pages.every(p => memberships.has(p.normalizedUrl) || excluded.has(p.normalizedUrl)),
+      'queue exhaustion means every page is deliberately classified or excluded, not merely embedded');
+    assert.ok((await env.store.get('daily_metrics', '2026-03-01')).categorizedShare > 0.5,
+      'old days are repaired when classification finishes outside the overlap');
   }
 
   // --- an incremental run must not shrink a page's lifetime active time ---
@@ -109,26 +116,17 @@ const { makeEnv } = require('../helpers/pipelineHarness.js');
 
   // --- a page that becomes categorized loses its stale exclusion ----------
   {
-    const env = await makeEnv();
-    // A tiny topic budget forces pages into 'beyond_budget' first...
-    const first = await makeEnv({ settings: { maxNewTopicsPerRun: 1 } });
-    await first.runThroughDay(2);
-    const excluded = await first.store.getAll('uncategorized');
-    const beyond = excluded.filter(r => r.reason === 'beyond_budget');
-    if (beyond.length) {
-      // ...and a later unconstrained run should clear the ones it categorizes.
-      first.pipeline.cfg.maxNewTopicsPerRun = 20;
-      await first.runThroughDay(2);
-      const after = await first.store.getAll('uncategorized');
-      const stillBeyond = after.filter(r => r.reason === 'beyond_budget');
-      const memberships = await first.store.getAll('memberships');
-      const membered = new Set(memberships.map(m => m.normalizedUrl));
-      for (const row of stillBeyond) {
-        assert.ok(!membered.has(row.normalizedUrl),
-          `${row.normalizedUrl} is in a topic, so its exclusion should have been cleared`);
-      }
-    }
-    void env;
+    const env = await makeEnv({ settings: { maxNewTopicsPerRun: 1 } });
+    assert.strictEqual((await env.runThroughDay(2)).ok, true);
+    const beyond = (await env.store.getAll('uncategorized')).filter(r => r.reason === 'beyond_budget');
+    assert.ok(beyond.length > 0, 'fixture really reaches topic budget deferral');
+    env.pipeline.cfg.maxNewTopicsPerRun = 20;
+    assert.strictEqual((await env.runThroughDay(2)).ok, true);
+    const memberships = new Set((await env.store.getAll('memberships')).map(m => m.normalizedUrl));
+    const after = await env.store.getAll('uncategorized');
+    assert.ok(beyond.some(r => memberships.has(r.normalizedUrl)), 'old deferred pages actually receive memberships');
+    assert.ok(!after.some(r => memberships.has(r.normalizedUrl)), 'all stale per-day exclusions are cleared');
+    assert.ok(!(await env.store.getAll('pages')).some(p => p.needsClassification), 'classification queue drains');
   }
 
   console.log('incremental tests passed');

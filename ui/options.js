@@ -1,97 +1,99 @@
-// Settings page (spec §5.2). Only keys in the store's EDITABLE_SETTINGS
-// allowlist persist, so a form can never shadow pipeline internals such as
-// the watermark or the fixed Ollama endpoint.
-const DEFAULTS = {
-  days: 28,
-  maxNewPagesPerRun: 300,
-  dutyCycle: 1,
-  embeddingModel: 'bge-m3:latest',
-  chatModel: 'gemma3:12b',
-  idleGatingEnabled: true,
-  notificationsEnabled: false
-};
-
-const store = CTStore.createStore({});
-
-function setStatus(message) {
-  document.getElementById('status').textContent = message;
-}
-
-function linesToList(value) {
-  return String(value || '')
-    .split('\n')
-    .map(line => line.trim())
-    .filter(Boolean);
-}
-
-function fillForm(form, settings) {
-  form.elements.days.value = String(settings.days || DEFAULTS.days);
-  form.elements.maxNewPagesPerRun.value = String(settings.maxNewPagesPerRun || DEFAULTS.maxNewPagesPerRun);
-  form.elements.dutyCycle.value = String(settings.dutyCycle || DEFAULTS.dutyCycle);
-  form.elements.embeddingModel.value = settings.embeddingModel || DEFAULTS.embeddingModel;
-  form.elements.chatModel.value = settings.chatModel || DEFAULTS.chatModel;
-  form.elements.idleGatingEnabled.checked = settings.idleGatingEnabled !== false;
-  form.elements.notificationsEnabled.checked = !!settings.notificationsEnabled;
-  form.elements.denylist.value = (settings.denylist && settings.denylist.length
-    ? settings.denylist
-    : CTPrivacy.DEFAULT_DENYLIST).join('\n');
-  form.elements.llmChatDomains.value = (settings.llmChatDomains && settings.llmChatDomains.length
-    ? settings.llmChatDomains
-    : CTPrivacy.DEFAULT_LLM_CHAT_DOMAINS).join('\n');
-}
-
-document.addEventListener('DOMContentLoaded', async () => {
-  await store.open();
-  const form = document.getElementById('settings-form');
-  const settings = await store.getSettingsMap();
-  fillForm(form, settings);
-
-  const pauseButton = document.getElementById('pause-toggle');
-  const intervals = settings.pauseIntervals || [];
-  let paused = intervals.some(interval => interval.end == null);
-  const paintPause = () => {
-    pauseButton.textContent = paused ? 'Resume capture' : 'Pause capture';
-  };
-  paintPause();
-  pauseButton.addEventListener('click', () => {
-    const next = !paused;
-    chrome.runtime.sendMessage({ type: 'SET_CAPTURE_PAUSED', paused: next }, () => {
-      paused = next;
-      paintPause();
-      setStatus(next
-        ? 'Capture paused. History from this interval is excluded from analysis too.'
-        : 'Capture resumed.');
+// Preferences never write pipeline internals. Setup checks are read-only;
+// inference begins only from the explicit action or the idle scheduler.
+(function() {
+  'use strict';
+  const DEFAULTS = { days: 28, maxNewPagesPerRun: 100, dutyCycle: 0.5, idleGatingEnabled: true, notificationsEnabled: false };
+  const store = CTStore.createStore({});
+  const list = value => String(value || '').split('\n').map(s => s.trim()).filter(Boolean);
+  const call = (type, payload) => new Promise((resolve, reject) => {
+    if (!globalThis.chrome?.runtime?.id) { reject(new Error('These controls require the installed extension.')); return; }
+    chrome.runtime.sendMessage({ type, ...payload }, reply => {
+      if (chrome.runtime.lastError) reject(new Error(chrome.runtime.lastError.message));
+      else if (!reply || reply.error || reply.ok === false) reject(new Error(reply?.error || 'No reply from the extension.'));
+      else resolve(reply);
     });
   });
-
-  form.addEventListener('submit', async event => {
-    event.preventDefault();
-    const data = new FormData(form);
-    await store.saveEditableSettings({
-      days: Number(data.get('days')) || DEFAULTS.days,
-      maxNewPagesPerRun: Number(data.get('maxNewPagesPerRun')) || DEFAULTS.maxNewPagesPerRun,
-      dutyCycle: Number(data.get('dutyCycle')) || DEFAULTS.dutyCycle,
-      embeddingModel: String(data.get('embeddingModel') || '').trim() || DEFAULTS.embeddingModel,
-      chatModel: String(data.get('chatModel') || '').trim() || DEFAULTS.chatModel,
-      denylist: linesToList(data.get('denylist')),
-      llmChatDomains: linesToList(data.get('llmChatDomains')),
-      idleGatingEnabled: form.elements.idleGatingEnabled.checked,
-      notificationsEnabled: form.elements.notificationsEnabled.checked
+  document.addEventListener('DOMContentLoaded', async () => {
+    const byId = id => document.getElementById(id);
+    const status = text => { byId('status').textContent = text; };
+    const form = byId('settings-form');
+    let paused = false, checking = false, poll;
+    const paintPause = () => { byId('pause-toggle').textContent = paused ? 'Resume capture' : 'Pause capture'; };
+    function fill(settings) {
+      for (const key of ['days', 'maxNewPagesPerRun', 'dutyCycle']) {
+        const value = Number(settings[key]) || DEFAULTS[key];
+        const select = form.elements[key];
+        if (![...select.options].some(o => Number(o.value) === value)) {
+          const option = document.createElement('option'); option.value = value; option.textContent = `Existing preference · ${value}`; select.appendChild(option);
+        }
+        select.value = String(value);
+      }
+      form.elements.idleGatingEnabled.checked = settings.idleGatingEnabled !== false;
+      form.elements.notificationsEnabled.checked = !!settings.notificationsEnabled;
+      form.elements.denylist.value = (settings.denylist?.length ? settings.denylist : CTPrivacy.DEFAULT_DENYLIST).join('\n');
+      form.elements.llmChatDomains.value = (settings.llmChatDomains?.length ? settings.llmChatDomains : CTPrivacy.DEFAULT_LLM_CHAT_DOMAINS).join('\n');
+      byId('embedding-model').textContent = settings.embeddingModel || CTOllama.DEFAULTS.embeddingModel;
+      byId('chat-model').textContent = settings.chatModel || CTOllama.DEFAULTS.chatModel;
+      paused = (settings.pauseIntervals || []).some(i => i.end == null); paintPause();
+    }
+    async function check() {
+      if (checking) return;
+      checking = true; byId('check-setup').disabled = true;
+      try {
+        const info = await call('GET_STATUS');
+        paused = info.paused; paintPause();
+        const health = info.health || {};
+        byId('setup-instructions').hidden = !!info.ollama;
+        byId('group-now').disabled = !info.ollama || paused;
+        byId('setup-status').textContent = info.ollama
+          ? `Local models are ready. ${info.pending || 0} pages waiting for grouping.${paused ? ' Capture is paused.' : ''}`
+          : health.reachable ? `Local runtime found. Missing models: ${(health.missing || []).join(', ') || 'check the connection'}.`
+            : 'Ollama is off or unavailable. Your captured pages remain searchable.';
+        return info;
+      } catch (error) {
+        byId('setup-status').textContent = error.message;
+        byId('group-now').disabled = true; byId('setup-instructions').hidden = false;
+      } finally { checking = false; byId('check-setup').disabled = false; }
+    }
+    try { await store.open(); fill(await store.getSettingsMap()); await check(); }
+    catch (error) { status(`Unable to read preferences: ${error.message}`); }
+    byId('check-setup').addEventListener('click', check);
+    byId('pause-toggle').addEventListener('click', async () => {
+      const button = byId('pause-toggle'); button.disabled = true;
+      try { const reply = await call('SET_CAPTURE_PAUSED', { paused: !paused }); paused = reply.paused; paintPause(); status(paused ? 'Capture is paused.' : 'Capture resumed.'); await check(); }
+      catch (error) { status(`Could not change capture: ${error.message}`); }
+      finally { button.disabled = false; }
     });
-    chrome.runtime.sendMessage({ type: 'SETTINGS_UPDATED' }, () => {});
-    setStatus(form.elements.idleGatingEnabled.checked
-      ? 'Saved. Capture settings apply to newly loaded pages; analysis settings apply to the next run.'
-      : 'Saved. With idle gating off, a run of roughly one to four minutes of local GPU work can start while you are working.');
-  });
-
-  document.getElementById('reset-settings').addEventListener('click', async () => {
-    await store.saveEditableSettings({
-      ...DEFAULTS,
-      denylist: CTPrivacy.DEFAULT_DENYLIST,
-      llmChatDomains: CTPrivacy.DEFAULT_LLM_CHAT_DOMAINS
+    form.addEventListener('submit', async event => {
+      event.preventDefault();
+      const submit = form.querySelector('[type=submit]'); submit.disabled = true;
+      try {
+        await call('SAVE_PREFERENCES', { values: { days: Number(form.elements.days.value), maxNewPagesPerRun: Number(form.elements.maxNewPagesPerRun.value), dutyCycle: Number(form.elements.dutyCycle.value),
+          idleGatingEnabled: form.elements.idleGatingEnabled.checked, notificationsEnabled: form.elements.notificationsEnabled.checked,
+          denylist: list(form.elements.denylist.value), llmChatDomains: list(form.elements.llmChatDomains.value) } });
+        await call('SETTINGS_UPDATED'); status('Preferences saved. Capture changes apply to open tabs; analysis changes apply to the next run.');
+      } catch (error) { status(`Could not apply preferences: ${error.message}`); }
+      finally { submit.disabled = false; }
     });
-    fillForm(form, {});
-    chrome.runtime.sendMessage({ type: 'SETTINGS_UPDATED' }, () => {});
-    setStatus('Reset to defaults.');
+    byId('reset-settings').addEventListener('click', async () => {
+      try {
+        await call('SAVE_PREFERENCES', { values: { ...DEFAULTS, denylist: CTPrivacy.DEFAULT_DENYLIST, llmChatDomains: CTPrivacy.DEFAULT_LLM_CHAT_DOMAINS } });
+        await call('SETTINGS_UPDATED'); fill(await store.getSettingsMap()); status('Preferences reset. Your record and models are retained.');
+      } catch (error) { status(error.message); }
+    });
+    byId('group-now').addEventListener('click', async () => {
+      byId('group-now').disabled = true;
+      try {
+        const reply = await call('RUN_PIPELINE_MANUAL');
+        if (!reply.started) { status(`Grouping has not started: ${reply.reason}.`); await check(); return; }
+        status('Grouping locally. You can close this page; the work continues in the background.');
+        clearInterval(poll);
+        poll = setInterval(async () => {
+          const runs = await store.getAll('runs'); const latest = runs.sort((a, b) => b.startedAt - a.startedAt)[0];
+          if (latest && latest.status !== 'running') { clearInterval(poll); status(latest.status === 'ok' ? 'This run is complete. Remaining pages are queued for a later idle run.' : latest.error || `Run ${latest.status}.`); await check(); }
+        }, 3000);
+      } catch (error) { status(error.message); await check(); }
+    });
+    window.addEventListener('pagehide', () => clearInterval(poll), { once: true });
   });
-});
+})();

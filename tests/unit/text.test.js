@@ -3,7 +3,16 @@ const assert = require('assert');
 const CTText = require('../../lib/text.js');
 
 // normalizeUrl (spec §0.3, §7.1)
-assert.strictEqual(CTText.normalizeUrl('https://Example.com/Path/?q=1#frag'), 'https://example.com/Path');
+assert.strictEqual(CTText.normalizeUrl('https://Example.com/Path/?q=1#frag'), 'https://example.com/Path?q=1');
+assert.notStrictEqual(CTText.normalizeUrl('https://www.youtube.com/watch?v=one'), CTText.normalizeUrl('https://www.youtube.com/watch?v=two'), 'content identifiers remain distinct');
+assert.strictEqual(CTText.normalizeUrl('https://example.com/a?utm_source=news&fbclid=123&id=42#section'), 'https://example.com/a?id=42');
+assert.strictEqual(CTText.normalizeUrl('https://example.com/a?z=2&a=1'), CTText.normalizeUrl('https://example.com/a?a=1&z=2'), 'parameter ordering deduplicates');
+assert.notStrictEqual(CTText.normalizeUrl('https://example.com/#/article/one'), CTText.normalizeUrl('https://example.com/#/article/two'), 'SPA routes remain distinct');
+assert.strictEqual(CTText.normalizeUrl('https://example.com/#!/article?id=2&utm_source=x'), 'https://example.com/#/article?id=2');
+assert.strictEqual(CTText.sanitizeUrl('https://user:password@example.com/a?id=42&access_token=SECRET&email=private%40example.com#token=SECRET'), 'https://example.com/a?id=42');
+assert.strictEqual(CTText.sanitizeUrl('https://example.com/#/article?session_id=SECRET&id=42'), 'https://example.com/#/article?id=42');
+assert.strictEqual(CTText.sanitizeUrl('javascript:alert(1)'), '', 'unsafe reopen URL is rejected');
+assert.strictEqual(CTText.sanitizeUrl('not a url'), '');
 assert.strictEqual(CTText.normalizeUrl('https://www.example.com/a/'), 'https://example.com/a');
 assert.strictEqual(CTText.normalizeUrl('https://example.com/'), 'https://example.com/');
 assert.strictEqual(CTText.normalizeUrl('https://example.com'), 'https://example.com/');

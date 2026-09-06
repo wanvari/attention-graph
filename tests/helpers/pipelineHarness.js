@@ -3,6 +3,9 @@
 // bge-m3 embedding cache (so no live Ollama is needed for embeddings).
 // Chat calls go through an injectable transport (scripted / golden / live).
 'use strict';
+// The committed schedule is authored in this calendar, including its DST day.
+// Fixture replay must not change when the developer travels across time zones.
+process.env.TZ = 'America/New_York';
 const fs = require('fs');
 const path = require('path');
 const { IDBFactory, IDBKeyRange } = require('fake-indexeddb');
@@ -214,7 +217,7 @@ async function makeEnv(options) {
   const embedRows = [];
   for (const page of fixtures.pages) {
     const input = CTPipeline.embeddingInput({
-      title: page.title, domain: page.domain, url: page.url,
+      title: page.title, domain: page.domain, url: page.url, source: page.source,
       captureText: page.extractedText || ''
     });
     const key = CTPipeline.embeddingKeyFor('bge-m3:latest', input);
@@ -252,7 +255,8 @@ async function makeEnv(options) {
   };
 
   const transport = opts.transport || scriptedTransport(wellBehavedHandlers(fixtures.pages));
-  const ollama = CTOllama.createClient({ transport });
+  const ollama = CTOllama.createClient({ transport, embeddingModel: 'bge-m3:latest',
+    embeddingDimensions: 1024, chatModel: 'gemma3:12b', chatContextTokens: 16384, dutyCycle: 1, ...(opts.clientOptions || {}) });
 
   let topicSeq = 0;
   const pipeline = CTPipeline.createPipeline({
@@ -261,7 +265,8 @@ async function makeEnv(options) {
     ollama,
     now: () => clock.now,
     newTopicId: opts.deterministicIds === false ? undefined : () => `t-${String(++topicSeq).padStart(3, '0')}`,
-    settings: { days: 28, ...(opts.settings || {}) }
+    settings: { days: 28, maxNewPagesPerRun: 300, maxNewTopicsPerRun: 20, labelBatchSize: 14, pagesPerCluster: 8, textCharsPerPage: 200,
+      classifyTransitionsWithModel: true, ...(opts.settings || {}) }
   });
 
   return {

@@ -150,4 +150,13 @@ function partitionSignature(clusters) {
   assert.ok(c[0] > c[1], 'weights bias the centroid');
 }
 
+// Invalid dimensions fail loudly at the aggregation boundary instead of
+// constructing a partly NaN centroid that poisons every later comparison.
+{
+  assert.throws(() => CTCluster.centroid([Float32Array.from([1, 0]), Float32Array.from([1, 0, 0])]),
+    /different embedding dimensions/);
+  assert.strictEqual(CTCluster.isValidVector([1e308, 1e308]), false, 'overflow is invalid');
+  assert.strictEqual(CTCluster.cosine([NaN, 1], [1, 0]), 0);
+}
+
 console.log('cluster tests passed');

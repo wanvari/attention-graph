@@ -1,0 +1,11 @@
+'use strict';
+const assert = require('node:assert/strict');
+const History = require('../../lib/history.js');
+const items = ['https://youtube.com/watch?v=A&utm_source=test', 'https://youtube.com/watch?v=B', 'https://example.test/#/login?token=SECRET'];
+const result = History.buildVisitEvents(items.map((url, i) => ({ url, title: `Page ${i}`, lastVisitTime: 10000 + i * 10000 })), {}, { since: 5000 });
+assert.equal(result.length, 2);
+assert.notEqual(result[0].normalizedUrl, result[1].normalizedUrl);
+assert.ok(!JSON.stringify(result).includes('utm_'));
+assert.ok(!JSON.stringify(result).includes('SECRET'));
+assert.equal(History.buildVisitEvents([{ url: 'https://example.test/a', lastVisitTime: 100 }], {}, { since: 200 }).length, 0, 'fallback visits respect deletion/import cutoff');
+console.log('history identity tests passed');

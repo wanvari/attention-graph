@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
   "name": "Cognitive Trails",
-  "version": "4.0",
-  "description": "Passive, local-only, longitudinal record of where your browsing attention went",
+  "version": "5.0.0",
+  "description": "A local browsing record: find visited pages, revisit suggested topic trails, and keep optional notes.",
   "options_ui": {
     "page": "ui/options.html",
     "open_in_tab": true

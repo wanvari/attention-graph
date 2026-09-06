@@ -29,3 +29,19 @@
 .option-row input[type="checkbox"] { width: 18px; height: 18px; }
 .option-actions { display: flex; gap: 10px; }
 code { background: var(--panel-2); padding: 1px 5px; border-radius: 4px; font-size: 12px; }
+.settings-page { max-width: 1100px; }
+.settings-page main { max-width: 880px; }
+.settings-page h1 { font-family: Georgia, serif; font-weight: 400; font-size: 32px; letter-spacing: -.035em; }
+.settings-eyebrow { margin: 0 0 12px; font-size: 11px; letter-spacing: .1em; text-transform: uppercase; color: var(--text-dim); }
+.setup-panel { margin-bottom: 22px; }
+.setup-heading { display: flex; align-items: start; gap: 24px; justify-content: space-between; }
+.setup-heading .btn { flex: none; }
+.setup-steps { padding-left: 21px; line-height: 1.8; }
+.setup-command { padding: 16px 20px; background: var(--panel-2); border-radius: 8px; line-height: 1.8; overflow-x: auto; font-size: 13px; }
+.settings-status { margin: 14px 0; font-size: 13px; color: var(--text-dim); }
+.settings-details { border-top: 1px solid var(--line); padding-top: 12px; margin-top: 10px; }
+.settings-details summary { cursor: pointer; font-size: 13px; }
+.settings-details .option-row { margin-top: 14px; }
+.option-row { padding: 18px 0; }
+.option-row small { line-height: 1.65; max-width: 410px; }
+@media (max-width: 650px) { .option-row { flex-direction: column; } .option-row select,.option-row textarea { width: 100%; min-width: 0; } .setup-heading { flex-direction: column; } .option-actions { flex-wrap: wrap; } }

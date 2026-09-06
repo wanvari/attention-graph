@@ -20,6 +20,14 @@ for (const path of ['/checkout', '/payment/confirm', '/billing', '/login', '/sig
   assert.strictEqual(CTPrivacy.isExcluded(`https://shop.example.com${path}`), true, `${path} is sensitive`);
 }
 assert.strictEqual(CTPrivacy.isExcluded('https://shop.example.com/products'), false);
+for (const path of ['/%6cogin', '/%256cogin', '/#/login?token=FAKE', '/#!/billing', '/?route=%2Fcheckout', '/?next=%252Fpassword', '/?access_token=FAKE', '/#access_token=FAKE']) {
+  assert.strictEqual(CTPrivacy.isExcluded(`https://example.com${path}`), true, `${path} is denied before sanitization`);
+}
+assert.strictEqual(CTPrivacy.isExcluded('https://user:secret@example.com/article'), true, 'credentialed URLs excluded');
+assert.strictEqual(CTPrivacy.isExcluded('ftp://example.com/article'), true, 'only http(s) capture is permitted');
+assert.strictEqual(CTPrivacy.isExcluded('https://catalogin.example.com/article'), false, 'auth hostname pattern matches a label, not an interior substring');
+assert.strictEqual(CTPrivacy.isExcluded('https://example.com/article?id=42'), false);
+assert.strictEqual(CTPrivacy.isExcluded('https://example.com/#/article/42'), false);
 
 // custom denylist replaces the default
 assert.strictEqual(CTPrivacy.isExcluded('https://custom.example.com/x', ['custom.example.com']), true);

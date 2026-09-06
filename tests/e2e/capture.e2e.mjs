@@ -207,6 +207,47 @@ async function main() {
       await bank.close(); await login.close();
     });
 
+    await check('encoded and hash-routed sensitive pages capture nothing', async () => {
+      const before = (await flushAndReadCaptures(extPage)).length;
+      for (const route of ['/%6cogin', '/article.html#/login?token=FAKE', '/article.html?route=%2Fpayment']) {
+        const sensitive = await context.newPage();
+        await sensitive.goto(`http://news.fixture.test:${PORT}${route}`);
+        await sensitive.waitForTimeout(300);
+        await sensitive.close();
+      }
+      assert.strictEqual((await flushAndReadCaptures(extPage)).length, before);
+    });
+
+    await check('query-addressed content keeps distinct identities and strips tracking', async () => {
+      for (const id of ['contentA', 'contentB']) {
+        const item = await context.newPage();
+        await item.goto(`http://news.fixture.test:${PORT}/article.html?v=${id}&utm_source=private-campaign`);
+        await item.waitForTimeout(400);
+        await item.close();
+      }
+      const rows = (await flushAndReadCaptures(extPage)).filter(row => row.url.includes('?v=content'));
+      assert.strictEqual(new Set(rows.map(row => row.normalizedUrl)).size, 2);
+      assert.ok(rows.every(row => !row.url.includes('utm_source') && !row.url.includes('private-campaign')));
+    });
+
+    await check('growing conversations persist their final bounded tail text', async () => {
+      const conversation = await context.newPage();
+      await conversation.goto(`http://claude.ai:${PORT}/chat.html?growing=1`);
+      await conversation.waitForTimeout(500);
+      await conversation.evaluate(() => {
+        const response = document.createElement('p');
+        response.textContent = 'Long previous discussion. '.repeat(500) + ' Newly added orbital mechanics response.';
+        document.querySelector('main').append(response);
+      });
+      await conversation.waitForTimeout(200);
+      await conversation.close();
+      await extPage.waitForTimeout(300);
+      const row = (await flushAndReadCaptures(extPage)).find(c => c.url.includes('growing=1'));
+      assert.ok(row.endedAt, 'final capture persisted');
+      assert.ok(row.extractedText.includes('Newly added orbital mechanics response'));
+      assert.ok(row.extractedText.length <= 8000);
+    });
+
     // --- 3. SPA navigation ------------------------------------------------
     await check('pushState produces a second capture with isSpaNavigation', async () => {
       const spa = await context.newPage();
@@ -306,6 +347,27 @@ async function main() {
       const after = await flushAndReadCaptures(extPage);
       assert.ok(after.some(c => c.url.includes('after-pause')), 'captures resume after unpause');
       await resumed.close();
+    });
+
+    await check('delete closes capture and leaves an empty paused record until resume', async () => {
+      const open = await context.newPage();
+      await open.goto(`http://news.fixture.test:${PORT}/article.html?delete-open=1`);
+      await open.mouse.move(70, 80);
+      await open.waitForTimeout(500);
+      const outcome = await extPage.evaluate(() => chrome.runtime.sendMessage({ type: 'DELETE_EVERYTHING' }));
+      assert.strictEqual(outcome.ok, true);
+      assert.strictEqual(outcome.paused, true);
+      assert.ok(outcome.historyImportAfter > 0);
+      await open.waitForTimeout(1800);
+      await open.close();
+      assert.strictEqual((await flushAndReadCaptures(extPage)).length, 0, 'open-page/final messages do not resurrect deleted records');
+      await setPaused(extPage, false);
+      const next = await context.newPage();
+      await next.goto(`http://news.fixture.test:${PORT}/article.html?fresh-after-delete=1`);
+      await next.waitForTimeout(500);
+      await next.close();
+      const rows = await flushAndReadCaptures(extPage);
+      assert.ok(rows.length >= 1 && rows.every(row => row.url.includes('fresh-after-delete=1')));
     });
 
   } finally {

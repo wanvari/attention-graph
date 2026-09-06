@@ -221,8 +221,8 @@ async function renderMap() {
 
     const strip = window.document.getElementById('summary-strip').textContent;
     assert.ok(/topics shown/.test(strip), 'summary strip did not render');
-    assert.ok(/context switches/.test(strip), 'switch count missing from the summary strip');
-    assert.ok(/switch rate/.test(strip), 'switch rate missing from the summary strip');
+    assert.ok(/between-topic visits/.test(strip), 'switch count missing from the summary strip');
+    assert.ok(/changes per est. hour/.test(strip), 'switch rate missing from the summary strip');
     assert.ok(!/undefined/.test(strip), `summary strip printed "undefined": ${strip}`);
   }
 
@@ -254,7 +254,7 @@ async function renderMap() {
     assert.ok(!/undefined/.test(evidence), `evidence panel printed "undefined": ${evidence}`);
 
     const legend = window.document.getElementById('legend').textContent;
-    assert.ok(/Primary attention/.test(legend), 'legend did not render');
+    assert.ok(/Highest estimated time/.test(legend), 'legend did not render');
   }
 
   // ---- empty registry takes the honest path, not the failure path ------

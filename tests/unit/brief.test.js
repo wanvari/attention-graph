@@ -137,7 +137,7 @@ function assertNoForbiddenWords(brief) {
     day: '2026-03-02', metrics: { lowData: false },
     events: [{ type: 'created', topicId: 't2', detail: {} }], topicsById
   });
-  assert.strictEqual(single.items[0].text, 'A new topic started: *Ollama quantization*.');
+  assert.strictEqual(single.items[0].text, 'A new trail was grouped: *Ollama quantization*.');
   const multiple = CTBrief.buildBrief({
     day: '2026-03-02', metrics: { lowData: false },
     events: [
@@ -146,7 +146,7 @@ function assertNoForbiddenWords(brief) {
     ],
     topicsById
   });
-  assert.ok(multiple.items[0].text.startsWith('2 new topics started:'));
+  assert.ok(multiple.items[0].text.startsWith('2 new trails were grouped:'));
 }
 
 // --- forbidden-word sweep over a stress input with every kind present

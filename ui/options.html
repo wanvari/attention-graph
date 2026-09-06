@@ -1,139 +1,45 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Cognitive Trails Settings</title>
-  <link rel="icon" type="image/png" href="../icon48.png">
-  <link rel="stylesheet" href="shared.css" />
-  <link rel="stylesheet" href="audit.css" />
-  <link rel="stylesheet" href="options.css" />
+  <meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Cognitive Trails · Settings</title>
+  <link rel="icon" href="../icon48.png"><link rel="stylesheet" href="shared.css"><link rel="stylesheet" href="audit.css"><link rel="stylesheet" href="options.css">
 </head>
 <body>
-  <div class="audit-page">
-    <header class="audit-header">
-      <div>
-        <h1>Settings</h1>
-        <div id="status" class="audit-status">Changes apply to the next analysis run.</div>
-      </div>
-      <div class="audit-actions">
-        <a class="btn" href="newtab.html">Home</a>
-        <a class="btn" href="map.html">Map</a>
-        <a class="btn" href="audit.html">Audit</a>
-      </div>
-    </header>
+  <div class="audit-page settings-page">
+    <header class="audit-header"><div><p class="settings-eyebrow">Cognitive Trails</p><h1>Make room for your record.</h1><p class="audit-status">Capture quietly. Group locally. Revisit whenever you need.</p></div><nav class="audit-actions" aria-label="Main"><a class="btn" href="newtab.html">Your trails</a><a class="btn" href="audit.html">Record &amp; privacy</a></nav></header>
     <main>
-      <form id="settings-form">
-        <section class="panel">
-          <h2>Capture</h2>
-          <div class="option-row">
-            <div>
-              <strong>Pause capture</strong>
-              <small>While paused nothing is captured, and history from the paused interval is excluded from analysis.</small>
-            </div>
-            <button type="button" id="pause-toggle" class="btn">Pause capture</button>
-          </div>
-          <label class="option-row">
-            <div>
-              <strong>Excluded sites</strong>
-              <small>One pattern per line. <code>*.bank.com</code> matches subdomains; <code>login.*</code> matches the leftmost label. Pages matching these, or whose path contains /checkout, /payment, /billing, /login, /signin, /password, /reset, are never captured.</small>
-            </div>
-            <textarea name="denylist" rows="8" spellcheck="false"></textarea>
-          </label>
-          <label class="option-row">
-            <div>
-              <strong>LLM chat sites</strong>
-              <small>Pages on these domains are tagged as chat rather than web, which is what convergence reporting compares. One domain per line.</small>
-            </div>
-            <textarea name="llmChatDomains" rows="6" spellcheck="false"></textarea>
-          </label>
-        </section>
-
-        <section class="panel">
-          <h2>Analysis</h2>
-          <label class="option-row">
-            <div>
-              <strong>First-run history window</strong>
-              <small>How far back the very first analysis reads. Later runs are incremental from a watermark.</small>
-            </div>
-            <select name="days">
-              <option value="7">7 days</option>
-              <option value="14">14 days</option>
-              <option value="28">28 days</option>
-              <option value="60">60 days</option>
-            </select>
-          </label>
-          <label class="option-row">
-            <div>
-              <strong>Pages embedded per run</strong>
-              <small>Higher works the machine harder. Pages beyond the cap are queued and retried on later runs until they are done, not dropped.</small>
-            </div>
-            <select name="maxNewPagesPerRun">
-              <option value="150">150 (light)</option>
-              <option value="300">300 (default)</option>
-              <option value="600">600 (heavy)</option>
-            </select>
-          </label>
-          <label class="option-row">
-            <div>
-              <strong>Local model intensity</strong>
-              <small>These models run entirely on the GPU, which has no utilisation limit, so a gentler setting rests between model calls rather than slowing them down. The work takes proportionally longer and the machine stays cooler — which costs nothing for a run that happens while you are away.</small>
-            </div>
-            <select name="dutyCycle">
-              <option value="1">Full speed</option>
-              <option value="0.75">Gentle — busy 75% of the time</option>
-              <option value="0.5">Very gentle — busy 50% of the time</option>
-              <option value="0.25">Background — busy 25% of the time</option>
-            </select>
-          </label>
-          <label class="option-row">
-            <div>
-              <strong>Only run while the machine is idle</strong>
-              <small>On by default. Turning this off means a run of roughly one to four minutes of local GPU work can start while you are working.</small>
-            </div>
-            <input type="checkbox" name="idleGatingEnabled" />
-          </label>
-          <label class="option-row">
-            <div>
-              <strong>Daily notification</strong>
-              <small>Off by default. At most one per day, after a successful run, only when the brief has a revival, dormancy, or convergence item.</small>
-            </div>
-            <input type="checkbox" name="notificationsEnabled" />
-          </label>
-        </section>
-
-        <section class="panel">
-          <h2>Local models</h2>
-          <label class="option-row">
-            <div>
-              <strong>Embedding model</strong>
-              <small>Pulled locally and served through Ollama's /api/embed.</small>
-            </div>
-            <input name="embeddingModel" placeholder="bge-m3:latest" />
-          </label>
-          <label class="option-row">
-            <div>
-              <strong>Chat model</strong>
-              <small>Pulled locally and served through Ollama's /api/chat.</small>
-            </div>
-            <input name="chatModel" placeholder="gemma3:12b" />
-          </label>
-          <p class="stat-note">
-            The endpoint is fixed to <code>http://localhost:11434</code>. This extension never calls a hosted API, and its
-            content security policy allows no other host.
-          </p>
-        </section>
-
-        <div class="option-actions">
-          <button type="submit" class="btn primary">Save settings</button>
-          <button type="button" id="reset-settings" class="btn">Reset to defaults</button>
+      <section class="panel setup-panel" aria-labelledby="setup-title">
+        <div class="setup-heading"><div><h2 id="setup-title">Local grouping</h2><p class="stat-note">Page capture and title search work even when the models are off. Models add suggested topic groups.</p></div><button class="btn" id="check-setup">Check connection</button></div>
+        <p id="setup-status" role="status">Checking the local runtime…</p>
+        <div id="setup-instructions" hidden>
+          <ol class="setup-steps"><li>Install and open <a href="https://ollama.com/download" target="_blank" rel="noopener noreferrer">Ollama</a> on this laptop.</li><li>Download these models in Terminal:</li></ol>
+          <pre class="setup-command">ollama pull bge-m3
+ollama pull qwen3:4b</pre>
+          <p class="stat-note">About 3.7 GB of model downloads. Analysis runs one model at a time, with short pauses and a bounded workload. Your browsing is processed at localhost.</p>
         </div>
+        <div class="option-actions"><button class="btn primary" id="group-now">Group now</button><a class="btn" href="demo.html">Explore a sample record</a></div>
+      </section>
+      <p id="status" class="settings-status" role="status" aria-live="polite"></p>
+      <form id="settings-form">
+        <section class="panel"><h2>Your capture</h2>
+          <div class="option-row"><div><strong>Pause capture</strong><small>Pause stops new capture. Browsing during the paused interval is also excluded from later history imports.</small></div><button type="button" id="pause-toggle" class="btn">Pause capture</button></div>
+          <label class="option-row"><div><strong>Excluded sites</strong><small>One domain pattern per line. For example, *.bank.com excludes the domain and its subdomains. Login and payment routes are excluded automatically. Changes apply to open tabs too.</small></div><textarea name="denylist" rows="7" spellcheck="false"></textarea></label>
+          <details class="settings-details"><summary>Chat sources</summary><label class="option-row"><div><strong>Chat websites</strong><small>These sources are marked as chat in the record. Capture reads visible conversation text, never editable inputs.</small></div><textarea name="llmChatDomains" rows="5" spellcheck="false"></textarea></label></details>
+        </section>
+        <section class="panel"><h2>A quiet background</h2>
+          <label class="option-row"><div><strong>Wait until this laptop is idle</strong><small>Automatic grouping waits for an idle or locked laptop and yields between model calls when you return. Group now starts an explicit run.</small></div><input type="checkbox" name="idleGatingEnabled"></label>
+          <label class="option-row"><div><strong>Work per run</strong><small>Remaining pages stay queued for a later run. They remain searchable while waiting.</small></div><select name="maxNewPagesPerRun"><option value="50">Small · 50 pages</option><option value="100">Standard · 100 pages</option><option value="200">Larger · 200 pages</option></select></label>
+          <label class="option-row"><div><strong>Rest between model calls</strong><small>Pacing reduces sustained compute. It does not cap peak GPU use during an individual call.</small></div><select name="dutyCycle"><option value="0.25">Long rests · 25% duty cycle</option><option value="0.5">Balanced · 50% duty cycle</option><option value="1">No added rests</option></select></label>
+          <label class="option-row"><div><strong>Initial history import</strong><small>Only used for your first analysis. Older pages have titles and history estimates; content capture begins at installation.</small></div><select name="days"><option value="7">7 days</option><option value="14">14 days</option><option value="28">28 days</option><option value="60">60 days</option></select></label>
+          <label class="option-row"><div><strong>Occasional record notification</strong><small>Off by default. At most one a day, when the record contains a returning topic or other observed change.</small></div><input type="checkbox" name="notificationsEnabled"></label>
+          <details class="settings-details"><summary>Model details</summary><p class="stat-note">Embeddings: <span id="embedding-model">bge-m3:latest</span>. Labels: <span id="chat-model">qwen3:4b</span>. The embedding space stays fixed for an existing record. Suggested labels are fallible; source pages remain the evidence.</p></details>
+        </section>
+        <div class="option-actions"><button type="submit" class="btn primary">Save preferences</button><button type="button" id="reset-settings" class="btn">Reset preferences</button></div>
+        <p class="stat-note">Captured text is retained for up to 30 days, with cleanup while Chrome is running. Export and delete controls are in <a href="audit.html">Record &amp; privacy</a>.</p>
       </form>
     </main>
   </div>
-  <script src="../lib/text.js"></script>
-  <script src="../lib/privacy.js"></script>
-  <script src="../lib/store.js"></script>
-  <script src="options.js"></script>
+  <script src="../lib/text.js"></script><script src="../lib/privacy.js"></script><script src="../lib/store.js"></script><script src="../lib/ollama.js"></script><script src="options.js"></script>
 </body>
 </html>

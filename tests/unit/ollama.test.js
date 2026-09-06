@@ -44,11 +44,15 @@ const CTOllama = require('../../lib/ollama.js');
     // of requiring a hand-built "-32k" Modelfile that does not exist.
     assert.ok(!/-32k$/.test(CTOllama.DEFAULTS.chatModel),
       'the default chat model must not depend on a custom Modelfile');
-    assert.strictEqual(body.model, 'gemma3:12b');
+    assert.strictEqual(body.model, 'qwen3:4b');
+    assert.strictEqual(body.think, false, 'background labelling has no unbounded reasoning phase');
+    assert.ok(body.options.num_ctx <= 8192);
+    assert.ok(body.options.num_predict <= 1800);
+    assert.ok(body.format.properties.topics, 'labels use a constrained response schema');
     assert.strictEqual(body.options.num_ctx, CTOllama.DEFAULTS.chatContextTokens);
     assert.strictEqual(body.options.temperature, 0);
     assert.strictEqual(body.stream, false);
-    assert.strictEqual(body.keep_alive, '10m', 'chat keeps the model warm for follow-up calls');
+    assert.strictEqual(body.keep_alive, '2m', 'chat keeps the model warm for follow-up calls');
   })().catch(error => { console.error(error); process.exit(1); });
 }
 
@@ -59,7 +63,7 @@ const CTOllama = require('../../lib/ollama.js');
     const transport = async (url, options) => {
       calls++;
       const body = JSON.parse(options.body);
-      assert.strictEqual(body.keep_alive, '5m', 'embeds unload shortly after, leaving room for chat');
+      assert.strictEqual(body.keep_alive, '2m', 'embeds unload shortly after, leaving room for chat');
       return { embeddings: body.input.map(() => [1, 0, 0]) };
     };
     const client = CTOllama.createClient({ transport, embedBatchSize: 2 });
@@ -96,7 +100,7 @@ const CTOllama = require('../../lib/ollama.js');
   // --- health reporting, including the Chrome-origin 403 case
   {
     const ok = CTOllama.createClient({
-      transport: async () => ({ models: [{ name: 'bge-m3:latest' }, { name: 'gemma3:12b' }] })
+      transport: async () => ({ models: [{ name: 'bge-m3:latest' }, { name: 'qwen3:4b' }] })
     });
     const health = await ok.health();
     assert.strictEqual(health.ok, true);
@@ -108,7 +112,7 @@ const CTOllama = require('../../lib/ollama.js');
     });
     const health = await missing.health();
     assert.strictEqual(health.ok, false);
-    assert.deepStrictEqual(health.missing, ['gemma3:12b']);
+    assert.deepStrictEqual(health.missing, ['qwen3:4b']);
   }
   {
     // 403 means Ollama is running but rejected the extension origin — a
@@ -200,8 +204,8 @@ const CTOllama = require('../../lib/ollama.js');
     }
   });
   await withoutThreads.chatJson('p', 'label_topics');
-  assert.strictEqual(defaultBody.options.num_thread, undefined,
-    'thread count is left to Ollama unless the user asked otherwise');
+  assert.strictEqual(defaultBody.options.num_thread, 4,
+    'default profile bounds CPU parallelism');
 
   console.log('ollama pacing tests passed');
 })().catch(error => { console.error(error); process.exit(1); });

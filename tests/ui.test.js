@@ -138,189 +138,180 @@ function contrastRatio(a, b) {
     `band badges must meet WCAG AA (4.5:1) in both themes:\n${failures.join('\n')}`);
 }
 
-// ------------------------------------------------- newtab render in jsdom
-async function renderNewtab(seed) {
-  const dom = new JSDOM('<!DOCTYPE html><html><body><main id="app"></main></body></html>', {
-    pretendToBeVisual: true,
-    url: 'https://localhost/'
-  });
-  const { window } = dom;
-  global.window = window;
-  global.document = window.document;
-  global.Node = window.Node;
-
-  // Load the libs into this jsdom global the same way the page does.
-  delete require.cache[require.resolve('../lib/text.js')];
-  delete require.cache[require.resolve('../lib/store.js')];
-  delete require.cache[require.resolve('../ui/newtab.js')];
-  const CTText = require('../lib/text.js');
-  const CTStore = require('../lib/store.js');
-  const CTNewtab = require('../ui/newtab.js');
-  global.CTText = CTText;
-  global.CTStore = CTStore;
-
+// ------------------------------------------------- real record journeys
+const CTText = require('../lib/text.js');
+const CTStore = require('../lib/store.js');
+const CTNewtab = require('../ui/newtab.js');
+const at = (day, hour = 12, minute = 0) => new Date(2026, 8, day, hour, minute).getTime();
+const now = at(5, 20);
+const a = 'https://docs.example.test/rust';
+const b = 'https://notes.example.test/async';
+const c = 'https://recipes.example.test/sourdough';
+const tick = () => new Promise(resolve => setTimeout(resolve, 20));
+const click = (window, node) => node.dispatchEvent(new window.MouseEvent('click', { bubbles: true }));
+const textButton = (document, text) => [...document.querySelectorAll('button')].find(node => node.textContent === text);
+async function seed(store) {
+  await store.put('topics', { topicId: 'rust', label: 'Async Rust', state: 'active' });
+  await store.bulkPut('memberships', [{ topicId: 'rust', normalizedUrl: a }, { topicId: 'rust', normalizedUrl: b }]);
+  await store.bulkPut('visits', [
+    { visitId: 'v1', normalizedUrl: a, url: a, title: 'Rust guide', visitTime: at(1), dayKey: '2026-09-01', dwellMs: 60000 },
+    { visitId: 'v2', normalizedUrl: b, url: b, title: 'Async patterns', visitTime: at(1, 12, 10), dayKey: '2026-09-01', dwellMs: 120000 },
+    { visitId: 'v3', normalizedUrl: a, url: a, title: 'Rust guide', visitTime: at(3), dayKey: '2026-09-03', dwellMs: 60000 }
+  ]);
+  await store.put('captures', { captureId: 'fresh', normalizedUrl: c, url: c, title: 'Sourdough hydration', startedAt: at(5), updatedAt: at(5, 12, 2), activeMs: 40000 });
+}
+async function mount(populate, extra = {}) {
+  const dom = new JSDOM('<!doctype html><html><body><main id="app"></main></body></html>', { pretendToBeVisual: true, url: 'https://localhost/ui/newtab.html' });
   const store = CTStore.createStore({ indexedDB: new IDBFactory(), IDBKeyRange });
   await store.open();
-  if (seed) await seed(store, CTText);
-
-  const errors = [];
-  window.addEventListener('error', event => errors.push(event.error));
+  if (populate) await populate(store);
   const searched = [];
-  const result = await CTNewtab.main({
-    store,
-    container: window.document.getElementById('app'),
-    now: new Date(2026, 2, 28, 21, 0, 0).getTime(),
-    onSearch: query => searched.push(query)
-  });
-  return { result, window, errors, store, searched };
+  const result = await CTNewtab.main({ store, container: dom.window.document.getElementById('app'), now, onSearch: q => searched.push(q), ...extra });
+  return { window: dom.window, document: dom.window.document, store, result, searched,
+    async close() { result.dispose(); dom.window.close(); await store.close(); } };
+}
+function search(window, document, query) {
+  document.querySelector('.nt-search-input').value = query;
+  document.querySelector('.nt-search').dispatchEvent(new window.Event('submit', { bubbles: true, cancelable: true }));
 }
 
 (async () => {
-  // --- empty DB renders the onboarding state with no errors
+  // A fresh installation offers useful model-independent next steps.
   {
-    const { result, window, errors } = await renderNewtab(null);
-    assert.strictEqual(errors.length, 0, 'no errors thrown on empty-DB render');
-    assert.strictEqual(result.state, 'empty');
-    const text = window.document.body.textContent;
-    assert.ok(/Cognitive Trails/.test(text), 'empty state names the extension');
-    assert.ok(/ollama pull/i.test(text), 'empty state gives the setup steps');
-    assert.ok(window.document.querySelector('.nt-footer'), 'footer links render in the empty state');
+    const m = await mount(null);
+    assert.equal(m.result.state, 'empty');
+    assert.ok(m.document.body.textContent.includes('Search works before they are installed.'));
+    assert.ok(m.document.querySelector('a[href="demo.html"]'));
+    assert.ok(m.document.querySelector('a[href="options.html"]'));
+    assert.ok(m.document.querySelector('.nt-footer'));
+    assert.equal(m.result.readTransactions, 1);
+    assert.equal(m.document.querySelectorAll('.nt-ring').length, 0);
+    await m.close();
   }
-
-  // --- populated DB renders rings, range card, brief, runs; <= 4 reads
+  // Find a trail, inspect dated evidence, and reopen its actual page URL.
   {
-    const seed = async (store, CTText) => {
-      const days = [];
-      for (let i = 27; i >= 0; i--) {
-        const day = CTText.addDays('2026-03-28', -i);
-        days.push({
-          day,
-          computedAt: Date.now(),
-          activeMs: (150 + i) * 60000,
-          visitCount: 40,
-          categorizedShare: 0.92,
-          topicEntropy: 2.1 + (i % 5) * 0.08,
-          activeTopicCount: 5 + (i % 3),
-          switchesPerActiveHour: 3 + (i % 4) * 0.4,
-          continuityShare: 0.6 + (i % 3) * 0.03,
-          uncoveredTransitions: 2,
-          convergenceCount: i === 0 ? 1 : 0,
-          dormantCount: 0,
-          revivedCount: 0,
-          topTopics: [{ topicId: 't1', label: 'Async Rust Programming', dwellMs: 60 * 60000, share: 0.4 }],
-          runs: i === 0
-            ? [{ topicId: 't1', label: 'Async Rust Programming', startAt: new Date(2026, 2, 28, 9, 30).getTime(), endAt: new Date(2026, 2, 28, 10, 40).getTime(), dwellMs: 70 * 60000, visitCount: 6 }]
-            : [],
-          lowData: false
-        });
-      }
-      await store.bulkPut('daily_metrics', days);
-      await store.bulkPut('baselines', [
-        { metric: 'topicEntropy', windowDays: 28, n: 27, mean: 2.25, std: 0.12, lastDay: '2026-03-28' },
-        { metric: 'activeTopicCount', windowDays: 28, n: 27, mean: 6, std: 0.9, lastDay: '2026-03-28' },
-        { metric: 'switchesPerActiveHour', windowDays: 28, n: 27, mean: 3.6, std: 0.5, lastDay: '2026-03-28' },
-        { metric: 'continuityShare', windowDays: 28, n: 27, mean: 0.63, std: 0.02, lastDay: '2026-03-28' },
-        { metric: 'activeMs', windowDays: 28, n: 27, mean: 160 * 60000, std: 12 * 60000, lastDay: '2026-03-28' }
-      ]);
-      await store.put('briefs', {
-        day: '2026-03-28',
-        generatedAt: new Date(2026, 2, 28, 3, 12).getTime(),
-        runId: 'run-x',
-        items: [
-          { kind: 'revival', text: '*Sourdough Bread Baking Techniques* returned after 18 dormant days.', topicIds: ['t2'], evidence: { topicId: 't2' } },
-          { kind: 'convergence', text: '*Attention and Task Switching Research* appeared in both browsing and LLM chats this week.', topicIds: ['t3'], evidence: { topicId: 't3' } }
-        ],
-        seen: false
-      });
-    };
-    const { result, window, errors, store } = await renderNewtab(seed);
-    assert.strictEqual(errors.length, 0, 'no errors on populated render');
-    assert.strictEqual(result.state, 'rendered');
-    assert.ok(result.readTransactions <= 4,
-      `newtab load must use at most 4 IndexedDB transactions (used ${result.readTransactions})`);
-
-    const doc = window.document;
-    assert.strictEqual(doc.querySelectorAll('.nt-ring').length, 3, 'three rings render');
-    const text = doc.body.textContent;
-    assert.ok(/Spread/.test(text) && /Continuity/.test(text) && /Active/.test(text), 'ring names render');
-    assert.ok(/within your range|outside usual|unusual for you/.test(text), 'z-band captions render');
-    assert.ok(/metrics within your range/.test(text), 'the range summary renders');
-    assert.ok(/returned after 18 dormant days/.test(text), "today's brief renders");
-    assert.ok(/Async Rust Programming/.test(text), 'focused runs render');
-    // Topic labels arrive as *label* and must render as emphasis, not literal asterisks.
-    assert.ok(!/\*Sourdough/.test(text), 'asterisks are converted to emphasis, not shown');
-    assert.ok(doc.querySelector('.nt-brief-list em'), 'topic labels render as <em>');
-
-    // Sparkline expands on click without throwing.
-    const firstRow = doc.querySelector('.nt-metric-row');
-    firstRow.dispatchEvent(new window.Event('click', { bubbles: true }));
-    assert.ok(doc.querySelector('.nt-sparkline-row svg'), 'clicking a metric row expands a sparkline');
-
-    // An interactive row must be operable without a mouse.
-    for (const metricRow of doc.querySelectorAll('.nt-metric-row')) {
-      assert.strictEqual(metricRow.getAttribute('role'), 'button', 'metric rows announce themselves as buttons');
-      assert.strictEqual(metricRow.getAttribute('tabindex'), '0', 'and are reachable by keyboard');
-      assert.ok(metricRow.hasAttribute('aria-expanded'), 'and report their expanded state');
-      assert.ok(metricRow.getAttribute('aria-controls'), 'and name the region they toggle');
-      assert.ok(metricRow.getAttribute('aria-label'), 'and carry a readable label');
-    }
-    const keyboardRow = doc.querySelectorAll('.nt-metric-row')[1];
-    const target = doc.getElementById(keyboardRow.getAttribute('aria-controls'));
-    assert.strictEqual(target.hidden, true, 'starts collapsed');
-    const enter = new window.KeyboardEvent('keydown', { key: 'Enter', bubbles: true });
-    keyboardRow.dispatchEvent(enter);
-    assert.strictEqual(target.hidden, false, 'Enter expands the sparkline');
-    assert.strictEqual(keyboardRow.getAttribute('aria-expanded'), 'true');
-    const space = new window.KeyboardEvent('keydown', { key: ' ', bubbles: true });
-    keyboardRow.dispatchEvent(space);
-    assert.strictEqual(target.hidden, true, 'Space collapses it again');
-    assert.strictEqual(keyboardRow.getAttribute('aria-expanded'), 'false');
+    const m = await mount(seed);
+    assert.equal(m.result.state, 'rendered');
+    assert.equal(m.result.readTransactions, 1);
+    assert.ok(m.document.body.textContent.includes('returned on 1 later day'));
+    assert.ok(m.document.body.textContent.includes('3 visits grouped of 4 recorded'));
+    assert.ok(m.document.body.textContent.includes('Interaction timing available for 1 of 4'));
+    assert.ok(m.document.querySelector('.nt-freshness').textContent.includes('Latest recorded visit'));
+    assert.equal(m.document.querySelectorAll('.nt-ring, .nt-band').length, 0);
+    click(m.window, m.document.querySelector('.nt-trail-title'));
+    assert.equal(m.document.querySelector('.nt-detail-heading h2').textContent, 'Async Rust');
+    assert.equal(m.document.querySelectorAll('.nt-episode').length, 2);
+    const sessions = m.document.querySelectorAll('.nt-episode');
+    assert.equal(sessions[1].querySelectorAll('.nt-visit').length, 2);
+    assert.deepEqual([...sessions[1].querySelectorAll('.nt-page-link')].map(n => n.href), [a, b]);
+    assert.equal(m.document.querySelector('.nt-page-link').rel, 'noopener noreferrer');
+    assert.equal(m.document.querySelector('.nt-page-link').target, '_blank');
+    assert.ok(m.document.querySelector('.nt-method').textContent.includes('not a measure of attention or thinking'));
+    await m.close();
   }
-
-  // --- a day with no run today falls back to the most recent day
+  // Offline model status does not hide freshly captured or ungrouped pages.
   {
-    const seed = async (store) => {
-      await store.put('daily_metrics', {
-        day: '2026-03-27', computedAt: Date.now(), activeMs: 90 * 60000, visitCount: 20,
-        categorizedShare: 0.9, topicEntropy: 1.8, activeTopicCount: 4,
-        switchesPerActiveHour: 2, continuityShare: 0.7, uncoveredTransitions: 0,
-        convergenceCount: 0, dormantCount: 0, revivedCount: 0, topTopics: [], runs: [], lowData: false
-      });
-      await store.bulkPut('captures', [
-        { captureId: 'c1', normalizedUrl: 'https://a.example/x', startedAt: new Date(2026, 2, 28, 10, 0).getTime(), dayKey: '2026-03-28', activeMs: 12 * 60000, extractedText: '', textLength: 0 }
-      ]);
-    };
-    const { result, window } = await renderNewtab(seed);
-    assert.strictEqual(result.staleDay, true, "yesterday's record is shown when today has no run");
-    const text = window.document.textContent || window.document.body.textContent;
-    assert.ok(/has not been analyzed yet/.test(text), 'the stale stamp is explicit');
-    assert.ok(/Today so far \(live, unanalyzed\)/.test(text), "today's live counts show without any analysis");
+    const m = await mount(seed, { statusProvider: () => ({ paused: false, ollama: false }) });
+    await tick();
+    assert.ok(m.document.body.textContent.includes('Local grouping is offline'));
+    search(m.window, m.document, 'Sourdough');
+    assert.equal(m.document.querySelectorAll('.nt-content .nt-visit').length, 1);
+    assert.equal(m.document.querySelector('.nt-content .nt-page-link').href, c);
+    assert.ok(m.document.querySelector('.nt-content').textContent.includes('Recent capture'));
+    assert.deepEqual(m.searched, [], 'record search never submits a web query');
+    search(m.window, m.document, 'notes.example.test');
+    assert.equal(m.document.querySelector('.nt-content .nt-page-link').href, b);
+    search(m.window, m.document, 'Async Rust');
+    assert.equal(m.document.querySelectorAll('.nt-content .nt-visit').length, 3);
+    search(m.window, m.document, 'does not exist');
+    assert.ok(m.document.querySelector('.nt-content').textContent.includes('No pages matched'));
+    await m.close();
   }
-
-  // --- the search box actually submits
-  // It shipped calling chrome.search behind a guard that silently did nothing
-  // when the permission was missing, which is indistinguishable from a dead
-  // input. This covers the DOM half; the boot half now falls back and warns.
+  // Date bounds are inclusive, and inverted bounds cannot silently apply.
   {
-    const { window, searched, errors } = await renderNewtab(null);
-    assert.strictEqual(errors.length, 0, 'rendering the search box threw');
-    const input = window.document.querySelector('.nt-search-input');
-    const form = window.document.querySelector('.nt-search');
-    assert.ok(input, 'no search input rendered');
-    assert.ok(form, 'the search input is not inside a form, so Enter cannot submit it');
-    assert.strictEqual(form.tagName, 'FORM');
-    assert.strictEqual(input.type, 'text');
-
-    input.value = '  sourdough hydration  ';
-    form.dispatchEvent(new window.Event('submit', { bubbles: true, cancelable: true }));
-    assert.deepStrictEqual(searched, ['sourdough hydration'],
-      'submitting the search form did not call onSearch with the trimmed query');
-    assert.strictEqual(input.value, '', 'the input was not cleared after submitting');
-
-    input.value = '   ';
-    form.dispatchEvent(new window.Event('submit', { bubbles: true, cancelable: true }));
-    assert.deepStrictEqual(searched, ['sourdough hydration'], 'an empty query was submitted');
+    const m = await mount(seed);
+    click(m.window, textButton(m.document, 'Filter by date'));
+    const from = m.document.querySelector('input[name="from"]');
+    const through = m.document.querySelector('input[name="through"]');
+    from.value = '2026-09-03'; through.value = '2026-09-03';
+    through.dispatchEvent(new m.window.Event('change', { bubbles: true }));
+    assert.equal(m.document.querySelectorAll('.nt-content .nt-visit').length, 1);
+    assert.equal(m.document.querySelector('.nt-content .nt-page-link').href, a);
+    from.value = '2026-09-04'; from.dispatchEvent(new m.window.Event('change', { bubbles: true }));
+    assert.ok(m.document.querySelector('[role="status"]').textContent.includes('end date on or after'));
+    await m.close();
   }
-
+  // Optional edits survive a reload while the inferred registry stays intact.
+  {
+    const m = await mount(seed);
+    click(m.window, m.document.querySelector('.nt-pin'));
+    await tick();
+    assert.equal((await m.store.get('corrections', 'trail:rust')).value.pinned, true);
+    click(m.window, m.document.querySelector('.nt-trail-title'));
+    const form = m.document.querySelector('.nt-edit-form');
+    form.querySelector('input').value = 'My Rust project';
+    form.querySelector('textarea').value = '<script>alert("x")</script>\nReturn to the async example';
+    form.dispatchEvent(new m.window.Event('submit', { bubbles: true, cancelable: true }));
+    await tick();
+    assert.equal(m.document.querySelector('.nt-detail-heading h2').textContent, 'My Rust project');
+    assert.equal(m.document.querySelector('.nt-personal-note script'), null);
+    assert.ok(m.document.querySelector('.nt-personal-note').textContent.includes('<script>'));
+    assert.equal((await m.store.get('topics', 'rust')).label, 'Async Rust');
+    m.result.dispose();
+    const reloaded = await CTNewtab.main({ store: m.store, container: m.document.getElementById('app'), now });
+    assert.equal(m.document.querySelector('.nt-trail-title').textContent, 'My Rust project');
+    assert.equal(m.document.querySelector('.nt-pin').getAttribute('aria-pressed'), 'true');
+    reloaded.dispose();
+    await m.close();
+  }
+  // A storage failure must not show a successful save or replace the note.
+  {
+    const m = await mount(seed, { onSaveMetadata: async () => { throw new Error('disk failure'); } });
+    click(m.window, m.document.querySelector('.nt-pin')); await tick();
+    assert.equal(m.document.querySelector('.nt-pin').getAttribute('aria-pressed'), 'false');
+    assert.ok(m.document.querySelector('[role="status"]').textContent.includes('Could not save'));
+    assert.equal(m.document.querySelector('.nt-pin').disabled, false);
+    await m.close();
+  }
+  // Native controls and explicit labels support keyboard use; web search is
+  // a separate, intentional action and preserves the chosen query.
+  {
+    const m = await mount(seed);
+    m.document.body.dispatchEvent(new m.window.KeyboardEvent('keydown', { key: '/', bubbles: true }));
+    assert.equal(m.document.activeElement, m.document.querySelector('.nt-search-input'));
+    search(m.window, m.document, '  Rust guide  ');
+    assert.deepEqual(m.searched, []);
+    click(m.window, textButton(m.document, 'Search the web ↗'));
+    assert.deepEqual(m.searched, ['Rust guide']);
+    m.document.querySelector('.nt-search-input').dispatchEvent(new m.window.KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+    assert.equal(m.document.querySelector('.nt-search-input').value, '');
+    assert.ok(m.document.querySelector('.nt-trail-title'));
+    assert.ok(m.document.querySelector('.nt-search-input').getAttribute('aria-label'));
+    assert.equal(m.document.querySelector('.nt-trail-title').tagName, 'BUTTON');
+    assert.equal(m.document.querySelector('.nt-method summary').tagName, 'SUMMARY');
+    await m.close();
+  }
+  // Paused state initializes from the service worker, and its first click
+  // resumes capture rather than accidentally pausing it again.
+  {
+    const calls = [];
+    const m = await mount(seed, { statusProvider: () => ({ paused: true, ollama: false }), onTogglePause: async (_button, paused) => { calls.push(paused); return { paused }; } });
+    await tick();
+    click(m.window, textButton(m.document, 'Resume capture')); await tick();
+    assert.deepEqual(calls, [false]);
+    assert.ok(textButton(m.document, 'Pause capture'));
+    await m.close();
+  }
+  // Sample mode is self-contained, with explicit read-only controls and
+  // supplied navigation instead of links to an unseeded live extension page.
+  {
+    const m = await mount(seed, { readOnly: true, links: { home: '#home', map: '#map', audit: '#audit', settings: '#setup' } });
+    assert.equal(m.document.querySelector('.nt-pin').disabled, true);
+    assert.equal(m.document.querySelector('.nt-nav a').getAttribute('href'), '#map');
+    click(m.window, m.document.querySelector('.nt-trail-title'));
+    assert.equal(m.document.querySelector('.nt-edit-form'), null);
+    assert.ok(m.document.querySelector('.nt-edit').textContent.includes('sample record'));
+    await m.close();
+  }
   console.log('ui tests passed');
 })().catch(error => { console.error(error); process.exit(1); });

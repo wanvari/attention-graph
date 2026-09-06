@@ -57,7 +57,7 @@
       const catShare = recent.reduce((sum, m) => sum + m.categorizedShare * m.activeMs, 0) / (activeMs || 1);
       const uncovered = recent.reduce((sum, m) => sum + (m.uncoveredTransitions || 0), 0);
       coverage.appendChild(statRow('Days on record', data.metrics.length));
-      coverage.appendChild(statRow('Active time (last 14 days)', fmtMinutes(activeMs)));
+      coverage.appendChild(statRow('Estimated browsing time (14 recorded days)', fmtMinutes(activeMs)));
       coverage.appendChild(statRow('Categorized share (dwell-weighted)', fmtPct(catShare)));
       const bar = el('div', 'bar');
       const fill = el('span');
@@ -127,15 +127,13 @@
         if (!a || !b) continue;
         const card = el('div', 'proposal');
         card.appendChild(el('div', null,
-          `“${a.label}” and “${b.label}” both matched the same new pages (scores ${event.detail.scoreA.toFixed(2)} / ${event.detail.scoreB.toFixed(2)}). Merge them?`));
-        const btn = el('button', 'btn', 'Merge these topics');
-        btn.addEventListener('click', () => hooks && hooks.onMergeTopics && hooks.onMergeTopics(event.detail, btn));
-        card.appendChild(btn);
+          `“${a.label}” and “${b.label}” both matched the same new pages (scores ${event.detail.scoreA.toFixed(2)} / ${event.detail.scoreB.toFixed(2)}). They remain separate trails.`));
+
         proposals.appendChild(card);
       }
     } else {
       proposals.appendChild(el('div', 'stat-note',
-        'None. Topic merges are never automatic — proposals appear here and wait for you.'));
+        'No ambiguous matches recorded. Ambiguous candidates remain separate; you can name and annotate trails from Home.'));
     }
 
     // ---- run history --------------------------------------------------
@@ -167,7 +165,7 @@
       }
       runsPanel.appendChild(table);
     } else {
-      runsPanel.appendChild(el('div', 'stat-note', 'No runs yet. Press "Run now" (needs local Ollama).'));
+      runsPanel.appendChild(el('div', 'stat-note', 'No runs yet. Set up local grouping from Settings.'));
     }
 
     // ---- storage & models --------------------------------------------
@@ -176,7 +174,7 @@
     storagePanel.appendChild(statRow('Pages on record', data.pages.length));
     storagePanel.appendChild(statRow('Uncategorized rows', data.uncategorized.length));
     storagePanel.appendChild(statRow('Topics', data.topics.length));
-    const models = `${data.settings.embeddingModel || 'bge-m3:latest'} · ${data.settings.chatModel || 'gemma3:12b'}`;
+    const models = `${data.settings.embeddingModel || 'bge-m3:latest'} · ${data.settings.chatModel || 'qwen3:4b'}`;
     storagePanel.appendChild(statRow('Models (local Ollama only)', models));
     if (hooks && hooks.storageEstimate) {
       Promise.resolve(hooks.storageEstimate()).then(estimate => {
@@ -213,39 +211,7 @@ if (typeof chrome !== 'undefined' && chrome.runtime && chrome.runtime.id &&
       const data = await CTAudit.loadData(store);
       CTAudit.render(data, document, {
         storageEstimate: () => navigator.storage && navigator.storage.estimate ? navigator.storage.estimate() : null,
-        runningModels: () => CTOllama.createClient({}).runningModels(),
-        onMergeTopics: async (detail, button) => {
-          button.disabled = true;
-          // A user-confirmed merge: fold topicB into topicA.
-          const [a, b] = [await store.get('topics', detail.topicA), await store.get('topics', detail.topicB)];
-          if (!a || !b) return;
-          const memberships = await store.byIndex('memberships', 'byTopic', detail.topicB);
-          // Move, not copy: leaving the absorbed topic's rows behind would
-          // membership every page twice and double-count its dwell.
-          const moved = memberships.map(m => ({ ...m, topicId: detail.topicA }));
-          const removed = memberships.map(m => [detail.topicB, m.normalizedUrl]);
-          await store.registryCommit({
-            removeMemberships: removed,
-            topics: [
-              { ...a, userCorrected: true, totalDwellMs: (a.totalDwellMs || 0) + (b.totalDwellMs || 0) },
-              { ...b, state: 'retired' }
-            ],
-            memberships: moved,
-            events: [{
-              topicId: detail.topicA, day: CTText.dayKeyFromMs(Date.now()), runId: 'user',
-              type: 'merged', detail: { proposal: false, executedBy: 'user', absorbed: detail.topicB }
-            }]
-          });
-          await store.put('corrections', {
-            correctionId: `merge:${detail.topicA}|${detail.topicB}`,
-            kind: 'merge_topics',
-            targetId: `${detail.topicA}|${detail.topicB}`,
-            value: detail.topicA,
-            pageUrls: [],
-            createdAt: Date.now()
-          });
-          refresh();
-        }
+        runningModels: () => CTOllama.createClient({}).runningModels()
       });
       const lastOk = (data.runs || []).filter(r => r.status === 'ok').sort((a, b) => b.startedAt - a.startedAt)[0];
       status.textContent = lastOk
@@ -260,7 +226,7 @@ if (typeof chrome !== 'undefined' && chrome.runtime && chrome.runtime.id &&
         if (chrome.runtime.lastError || !response || response.started === false) {
           status.textContent = `Run not started: ${response ? response.reason : chrome.runtime.lastError.message}. ` +
             (response && response.reason === 'ollama-unavailable'
-              ? 'Start Ollama (ollama serve) and pull bge-m3 + gemma3:12b.'
+              ? 'Start Ollama (ollama serve) and pull bge-m3 + qwen3:4b.'
               : '');
           return;
         }
@@ -281,12 +247,7 @@ if (typeof chrome !== 'undefined' && chrome.runtime && chrome.runtime.id &&
 
     document.getElementById('export-json').addEventListener('click', async () => {
       // Full DB minus extractedText (spec §7.9: exports carry no page text).
-      const dump = {};
-      for (const name of ['visits', 'pages', 'topics', 'memberships', 'topic_events', 'daily_metrics', 'baselines', 'runs', 'briefs', 'transitions', 'uncategorized', 'corrections', 'settings']) {
-        dump[name] = await store.getAll(name);
-      }
-      dump.captures = (await store.getAll('captures')).map(({ extractedText, ...rest }) => rest);
-      dump.topics = dump.topics.map(({ centroid, ...rest }) => rest);
+      const dump = await store.readSnapshot(['visits', 'captures', 'pages', 'topics', 'memberships', 'topic_events', 'daily_metrics', 'baselines', 'runs', 'briefs', 'transitions', 'uncategorized', 'corrections', 'settings']);
       const blob = new Blob([JSON.stringify(dump, null, 1)], { type: 'application/json' });
       const a = document.createElement('a');
       a.href = URL.createObjectURL(blob);
@@ -308,9 +269,10 @@ if (typeof chrome !== 'undefined' && chrome.runtime && chrome.runtime.id &&
         });
       });
       status.textContent = result && result.ok
-        ? 'Everything deleted.'
-        : `Deletion failed: ${result ? result.error : 'no response'}. Nothing was partially removed.`;
-      refresh();
+        ? 'Record deleted. Capture is paused; earlier history will not be imported again.'
+        : `Deletion failed: ${result ? result.error : 'no response'}. Capture remains paused where possible; retry deletion from this page.`;
+      await refresh();
+      if (result?.ok) status.textContent = 'Record deleted. Capture is paused; resume it in Settings.';
     });
   });
 }

@@ -12,6 +12,9 @@
   const MAX_WALK_NODES = 20000;
   const LATE_RENDER_RECHECK_MS = 10 * 1000;
   const MIN_INITIAL_TEXT = 200;
+  const CHAT_REFRESH_MS = 60 * 1000;
+  const MAX_CHAT_REFRESHES = 12;
+  const CHAT_REFRESH_WINDOW_MS = 60 * 60 * 1000;
 
   let settings = { paused: false, denylist: null, llmChatDomains: null };
   let capture = null;
@@ -21,6 +24,13 @@
   let tickTimer = null;
   let lastSentAt = 0;
   let lastHref = location.href;
+  let lastMeasuredAt = performance.now();
+  let wasEligible = false;
+  let contentDirty = false;
+  let chatRefreshes = 0;
+  let lastExtractedAt = 0;
+  let chatWindowStartedAt = 0;
+  let contentObserver = null;
 
   // ---- text extraction (§2.6) -----------------------------------------
 
@@ -58,33 +68,43 @@
     };
 
     const parts = [];
+    let tail = '';
     let total = 0;
     let visited = 0;
-    const walk = node => {
-      if (total >= MAX_TEXT_CHARS * 2 || visited >= MAX_WALK_NODES) return;
+    const chat = CTPrivacy.sourceForUrl(location.href, settings.llmChatDomains) === 'llm_chat';
+    // Iterative traversal avoids stack overflow on deeply nested documents.
+    const pending = [root];
+    while (pending.length && visited < MAX_WALK_NODES) {
+      const node = pending.pop();
+      if (!chat && total >= MAX_TEXT_CHARS * 2) break;
       visited++;
       if (node.nodeType === Node.TEXT_NODE) {
-        const value = node.nodeValue.replace(/\s+/g, ' ').trim();
+        const raw = node.nodeValue;
+        // Bound work even for a page containing one enormous text node.
+        const sample = raw.length <= MAX_TEXT_CHARS * 2 ? raw : raw.slice(0, MAX_TEXT_CHARS) + '\n' + raw.slice(-MAX_TEXT_CHARS);
+        const value = sample.replace(/\s+/g, ' ').trim();
         if (value) {
-          parts.push(value);
-          total += value.length + 1;
+          if (total < MAX_TEXT_CHARS) parts.push(value);
+          tail = (tail + '\n' + value).slice(-MAX_TEXT_CHARS);
+          total += Math.max(value.length, raw.length) + 1;
         }
-        return;
+        continue;
       }
-      if (node.nodeType !== Node.ELEMENT_NODE) return;
+      if (node.nodeType !== Node.ELEMENT_NODE) continue;
       const element = node;
-      if (SKIP_TAGS.has(element.tagName)) return;
-      if (element.getAttribute('aria-hidden') === 'true' || element.hasAttribute('hidden')) return;
+      if (SKIP_TAGS.has(element.tagName)) continue;
+      if (element.getAttribute('aria-hidden') === 'true' || element.hasAttribute('hidden')) continue;
       // Never read editable or form content — form contents are not content.
-      if (element.isContentEditable) return;
-      if (element.childElementCount > 3 && element.textContent.length > 400 && isHiddenBlock(element)) return;
-      for (let child = node.firstChild; child; child = child.nextSibling) walk(child);
-    };
-    walk(root);
+      if (element.isContentEditable || element.hasAttribute('contenteditable')) continue;
+      if (element.childElementCount > 3 && isHiddenBlock(element)) continue;
+      for (let child = node.lastChild; child && pending.length < MAX_WALK_NODES; child = child.previousSibling) pending.push(child);
+    }
     const joined = parts.join('\n');
     return {
-      text: joined.slice(0, MAX_TEXT_CHARS),
-      textLength: joined.length,
+      text: chat && total > MAX_TEXT_CHARS
+        ? joined.slice(0, 2000) + '\n[…]\n' + tail.slice(-(MAX_TEXT_CHARS - 2005))
+        : joined.slice(0, MAX_TEXT_CHARS),
+      textLength: total,
       extractionMs: performance.now() - started
     };
   }
@@ -92,10 +112,16 @@
   // ---- capture lifecycle ----------------------------------------------
 
   function newCapture(isSpaNavigation) {
-    const url = location.href;
+    const url = CTText.sanitizeUrl(location.href);
     const extraction = extractText();
     textSent = false;
     reExtracted = false;
+    contentDirty = false;
+    chatRefreshes = 0;
+    lastExtractedAt = Date.now();
+    chatWindowStartedAt = Date.now();
+    lastMeasuredAt = performance.now();
+    wasEligible = false;
     return {
       captureId: CTText.uuid(),
       url,
@@ -106,6 +132,7 @@
       startedAt: Date.now(),
       endedAt: null,
       activeMs: 0,
+      activityMethod: 'visible-focused-recent-input',
       maxScrollDepth: currentScrollDepth(),
       textHash: CTText.hashString(extraction.text),
       extractedText: extraction.text,
@@ -137,8 +164,31 @@
     }
   }
 
+  function refreshChat(final) {
+    if (Date.now() - chatWindowStartedAt >= CHAT_REFRESH_WINDOW_MS) {
+      chatWindowStartedAt = Date.now();
+      chatRefreshes = 0;
+    }
+    if (!capture || capture.source !== 'llm_chat' || !contentDirty || chatRefreshes >= MAX_CHAT_REFRESHES) return;
+    if (!final && Date.now() - lastExtractedAt < CHAT_REFRESH_MS) return;
+    if (!capturable(location.href) || CTText.normalizeUrl(location.href) !== capture.normalizedUrl) return;
+    chatRefreshes++;
+    lastExtractedAt = Date.now();
+    contentDirty = false;
+    const extraction = extractText();
+    const hash = CTText.hashString(extraction.text);
+    if (hash === capture.textHash) return;
+    capture.extractedText = extraction.text;
+    capture.textHash = hash;
+    capture.textLength = extraction.textLength;
+    capture.extractionMs = Math.round(extraction.extractionMs * 100) / 100;
+    capture.title = CTText.cleanTitle(document.title, capture.url);
+    textSent = false;
+  }
+
   function send(final) {
     if (!capture) return;
+    if (final) refreshChat(true);
     if (final) capture.endedAt = Date.now();
     // How far this capture has actually watched. The dwell downgrade in
     // lib/history.js needs it: activeMs is only evidence about the span the
@@ -157,7 +207,9 @@
     // and the text is the one field that is never resent on its own schedule.
     const onReply = reply => {
       if (chrome.runtime.lastError) return false;
-      if (reply && reply.textStored) textSent = true;
+      // A delayed acknowledgement belongs to its capture AND text revision.
+      // An old SPA/page update must not suppress the successor's text.
+      if (reply && reply.textStored && capture?.captureId === payload.captureId && capture.textHash === payload.textHash) textSent = true;
       return true;
     };
     const trySend = (retriesLeft) => {
@@ -176,6 +228,7 @@
   }
 
   function finalizeAndRestart(isSpaNavigation) {
+    measureActiveTime(true);
     send(true);
     // The destination gets the same scrutiny a fresh page load would get: an
     // SPA can route from an allowed view straight to /login or /payment.
@@ -184,6 +237,7 @@
       return;
     }
     capture = newCapture(isSpaNavigation);
+    observeContent();
     send(false); // the successor announces itself right away (carries its text)
   }
 
@@ -197,46 +251,68 @@
   // directions: stop an in-flight capture, and let a tab that loaded while
   // paused start once capture resumes.
   function applySettingsChange() {
-    if (capture && !capturable(capture.url)) {
+    if (capture && (!capturable(capture.url) || !capturable(location.href))) {
+      measureActiveTime(true);
       send(true);
       capture = null;
+      contentObserver?.disconnect();
       return;
     }
     if (!capture && capturable(location.href)) {
       capture = newCapture(false);
-      lastInputAt = Date.now();
+      observeContent();
       send(false);
     }
   }
 
   // ---- active-time tick (§2.3) ----------------------------------------
 
+  function measureActiveTime(ending) {
+    const clock = performance.now();
+    const now = Date.now();
+    const elapsed = Math.max(0, Math.min(clock - lastMeasuredAt, 2000));
+    const visibleFocused = document.visibilityState === 'visible' && document.hasFocus();
+    const eligible = visibleFocused && lastInputAt > 0 && now - lastInputAt <= ACTIVE_INPUT_WINDOW_MS;
+    if (capture && wasEligible && (visibleFocused || ending)) {
+      // Count elapsed observed time, bounded across throttling/sleep; a timer
+      // firing is not evidence that a whole away-gap was active.
+      const measured = Math.min(elapsed, Math.max(0, lastInputAt + ACTIVE_INPUT_WINDOW_MS - (now - elapsed)));
+      capture.activeMs = Math.min(capture.activeMs + measured, ACTIVE_CAP_MS);
+    }
+    lastMeasuredAt = clock;
+    wasEligible = eligible;
+  }
+
+  function observeContent() {
+    contentObserver?.disconnect();
+    if (!capture || capture.source !== 'llm_chat' || !document.body) return;
+    // A mutation only marks dirty: streamed tokens never trigger extraction
+    // or IPC themselves. At most 12 bounded refreshes occur per hour.
+    contentObserver = new MutationObserver(() => { contentDirty = true; });
+    contentObserver.observe(findRoot(), { childList: true, characterData: true, subtree: true });
+  }
+
   function tick() {
-    if (!capture) return;
     // SPA navigation detection: URL changed without a full page load.
     if (location.href !== lastHref) {
       lastHref = location.href;
-      if (CTText.normalizeUrl(location.href) !== capture.normalizedUrl) {
+      if (!capture || CTText.normalizeUrl(location.href) !== capture.normalizedUrl) {
         finalizeAndRestart(true);
         return;
       }
-      capture.url = location.href;
-      if (!capturable(capture.url)) {
+      if (!capturable(location.href)) {
         send(true);
         capture = null;
         return;
       }
+      capture.url = CTText.sanitizeUrl(location.href);
     }
-    const active =
-      document.visibilityState === 'visible' &&
-      document.hasFocus() &&
-      (Date.now() - lastInputAt) <= ACTIVE_INPUT_WINDOW_MS;
-    if (active && capture.activeMs < ACTIVE_CAP_MS) {
-      capture.activeMs = Math.min(capture.activeMs + 1000, ACTIVE_CAP_MS);
-    }
+    if (!capture) return;
+    measureActiveTime(false);
     const depth = currentScrollDepth();
     if (depth > capture.maxScrollDepth) capture.maxScrollDepth = depth;
     reExtractIfThin();
+    if (document.visibilityState === 'visible') refreshChat(false);
     // Cadence gate is visibility, not activity: a visible-but-idle page still
     // reports its scroll depth, and a hidden tab stays silent (its timers are
     // throttled anyway).
@@ -263,15 +339,30 @@
     });
 
     document.addEventListener('visibilitychange', () => {
+      measureActiveTime(true);
       if (document.visibilityState === 'hidden') send(false);
     });
     window.addEventListener('pagehide', () => {
+      measureActiveTime(true);
       send(true);
       if (tickTimer) clearInterval(tickTimer);
+      contentObserver?.disconnect();
     });
+    window.addEventListener('pageshow', event => {
+      if (!event.persisted) return;
+      capture = null;
+      lastInputAt = 0;
+      tickTimer = setInterval(tick, 1000);
+      applySettingsChange();
+    });
+    window.addEventListener('blur', () => measureActiveTime(true));
+    window.addEventListener('focus', () => measureActiveTime(false));
 
-    const noteInput = () => {
+    const noteInput = event => {
+      if (event?.isTrusted === false) return;
+      measureActiveTime(false);
       lastInputAt = Date.now();
+      wasEligible = document.visibilityState === 'visible' && document.hasFocus();
       if (capture) {
         const depth = currentScrollDepth();
         if (depth > capture.maxScrollDepth) capture.maxScrollDepth = depth;
@@ -285,7 +376,7 @@
     if (!capturable(location.href)) return;
 
     capture = newCapture(false);
-    lastInputAt = Date.now(); // the load itself counts as engagement
+    observeContent();
     // First message carries the text right away.
     send(false);
   }

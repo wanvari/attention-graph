@@ -1,62 +1,25 @@
 # Privacy
 
-Cognitive Trails reads a lot: every page you visit, and the text on it. That is only defensible if the data never leaves your machine and you can verify that claim yourself. This document is the verification procedure.
+Cognitive Trails stores eligible browsing locally in your Chrome profile. It does not send browsing history, text, metrics, or notes to a hosted service. Local grouping sends titles and short excerpts to your own Ollama process at `http://localhost:11434`. Installing models is a separate download from Ollama; opening an original page or explicitly choosing web search makes the normal browser request to that destination.
 
-## The trust boundary
+## Stored data
 
-The extension's content security policy permits exactly three connect targets:
+IndexedDB `cognitive-trails` contains sanitized URLs, titles, visit times, approximate dwell, interaction timing, scroll depth, bounded main-content text, embeddings, suggested topic groups, memberships, model run logs, derived metrics, and personal trail names/notes. `chrome.storage.local` mirrors pause state and exclusion preferences for content scripts. There is no analytics SDK, remote logging, or hosted inference fallback.
 
-```
-connect-src 'self' http://localhost:11434 http://127.0.0.1:11434
-```
+Content scripts run on top-level http(s) pages. They do not read input, textarea, select, or editable values. The default exclusion list covers many financial, health, authentication, password-manager, and mail services. Sensitive paths and route/query selectors are checked after repeated decoding, including hash-based routes. Tracking parameters and ordinary fragment anchors are removed. Content parameters such as video IDs are preserved. Known credential query parameters cause capture rejection.
 
-There is no analytics, no error reporting, no update ping, no CDN. A change that adds any remote host is a change to the product's premise, not a detail.
+**These rules cannot identify every sensitive page or URL parameter.** Displayed text on an otherwise eligible page can contain personal information. Review the exclusion list in Settings and pause capture when needed. Adding an exclusion affects subsequent capture/import; it does not retrospectively erase previously stored material. Incognito captures are rejected by the worker. There is no cross-browser or cross-device collection.
 
-## What is stored, and where
+## Retention and controls
 
-Everything lives in one IndexedDB database, `cognitive-trails`, in your Chrome profile. Nothing is written anywhere else except a few flags in `chrome.storage.local` (pause state and the denylist, which the content script needs to read cheaply on every page load).
+- Main-content text is bounded at 8,000 characters per capture and removed after 30 days during startup, scheduled maintenance, or a pipeline run. Chrome must be running for scheduled cleanup. Chat excerpts use a bounded head and tail and limited refreshes.
+- Unused embeddings older than 45 days are pruned when they are not needed by current topic memberships. Visit metadata, notes, topics, and derived records remain until deletion.
+- Pause stops new capture, closes the current measurement interval, and prevents importing history from paused intervals. Search remains available.
+- **Record & privacy → Export JSON** creates a metadata snapshot without extracted page text, embedding vectors, or topic centroids. URLs, titles, personal notes, and derived data remain in the export; handle it as private browsing history.
+- **Delete everything** stops writers before deleting. On success the only retained controls are pause state and a history import cutoff. Capture remains paused until resumed; pre-deletion history is not imported again. Previously exported files and Ollama model downloads are outside the extension's database and are not deleted.
 
-| Store | Contents |
-|---|---|
-| `visits` | One row per Chrome visit event: url, title, time, estimated dwell. |
-| `captures` | Per page load: active time, scroll depth, text hash, and up to 8,000 characters of page text. |
-| `pages`, `topics`, `memberships`, `topic_events` | The topic registry and its history. |
-| `embeddings` | Local vectors from your own Ollama, keyed by content hash. |
-| `daily_metrics`, `baselines`, `transitions`, `uncategorized`, `briefs`, `runs` | Derived record. |
+## Verify
 
-## What is never captured
+Run `npm run e2e` in a disposable Chrome profile to check form exclusion, sensitive URLs, SPA routes, pause, final-write persistence, and deletion. `npm run e2e:pipeline` checks the extension/offscreen/local-model lifecycle. Inspect extension network requests during a run: inference calls should use localhost:11434. The manifest restricts extension `connect-src` to self and localhost/127.0.0.1 on that port. The Origin rewrite is restricted to this extension, not arbitrary websites.
 
-Evaluated in the content script **before** anything is collected — excluded pages send no message at all:
-
-- **Form contents.** The extractor never reads `input`, `textarea`, `select`, or `contenteditable` values. Verified by an end-to-end test that loads a page containing a known secret string in an input and asserts it is absent from the stored capture.
-- **Denylisted sites**, seeded with banks and brokerages, health portals (`*mychart*`), password managers, auth providers, and webmail. Editable in Settings.
-- **Sensitive URL paths**: any path containing `/checkout`, `/payment`, `/billing`, `/login`, `/signin`, `/password`, `/reset`.
-- **Incognito.** Content scripts do not run in incognito unless you explicitly enable it — don't. The service worker also drops any capture arriving from an incognito tab as a second line of defence.
-- **Anything while paused.** The pause switch stops capture *and* records the interval, so history from that window is excluded from analysis too. It is not merely a UI toggle.
-
-## Retention
-
-- Page **text** is deleted from captures older than **30 days**. The embedding is already computed and cached, so the text has no further use. Aggregates (active time, scroll depth, hash) are kept.
-- **Embeddings** unused for 45 days *and* belonging to no current topic membership are pruned.
-- **Delete everything** in Settings wipes the IndexedDB database and `chrome.storage.local`, behind a two-step confirmation.
-- **Export JSON** deliberately omits `extractedText` and the raw centroid vectors.
-
-## Verifying it yourself
-
-1. **Watch the network.** Open `chrome://net-export/`, start logging, trigger a run from the Audit page, stop, and inspect the capture. The only destination should be `localhost:11434`.
-2. **Grep the source.**
-   ```bash
-   grep -rn "https://" lib/ ui/ content/ background.js offscreen/
-   ```
-   Expect only the CSP line, `xmlns` SVG namespace declarations, and fixture URLs — no request targets.
-3. **Check an export.** Audit → Export JSON, then search the file for a sentence you know was on a page you visited. It should not be there.
-4. **Check a delete.** Audit → Delete everything, then look at DevTools → Application → IndexedDB and Local Storage. Both should be empty.
-5. **Confirm form data is absent.** `npm run e2e` includes this as an assertion, or do it by hand: type a distinctive string into a form, then search the `captures` store for it in DevTools.
-
-## Where the risk actually is
-
-Being straight about this:
-
-- The extension holds host permissions for all http(s) sites. That is a real capability, and the reason to read the source rather than take the README's word.
-- Page text sits unencrypted in IndexedDB for up to 30 days. Anyone with access to your unlocked machine and profile can read it. It is exactly as protected as your browser history already is — no more.
-- Local models are still models. Page text is sent to Ollama on your own machine; if you have configured Ollama to forward elsewhere, that is outside this extension's control and its guarantees.
+Local storage is not separately encrypted. Someone with access to your unlocked browser profile can read it. Browser/OS backups can retain copies according to their own policies. The extension controls its own requests; a separately modified local inference service is outside that boundary.

@@ -17,27 +17,27 @@
       description: 'Consecutive visits stayed inside one topic.'
     },
     adjacent_topic_jump: {
-      label: 'Related continuation',
+      label: 'Similar page subjects',
       color: '#7c8fe0',
-      description: 'Movement to a related topic that may be part of the same task.'
+      description: 'Consecutive visits between topics with similar page embeddings. Similarity does not establish a shared task.'
     },
     topic_switch: {
-      label: 'Context switch',
+      label: 'Between topics',
       color: '#a9a2c9',
-      description: 'Movement to a less-related topic or different task context.'
+      description: 'Consecutive recorded visits in different topic groups.'
     }
   };
 
   const ATTENTION_BANDS = {
     primary: {
-      label: 'Primary attention',
+      label: 'Highest estimated time',
       color: '#4356d6',
       description: 'One of the highest-time topics in the selected window.'
     },
     secondary: {
-      label: 'Secondary attention',
+      label: 'Middle estimated time',
       color: '#7c8fe0',
-      description: 'A meaningful topic, but not one of the dominant attention areas.'
+      description: 'Ranked 4–10 by estimated time, or at least 3.5% of grouped estimated time.'
     },
     long_tail: {
       label: 'Long-tail topic',
@@ -318,7 +318,7 @@
         }, {})
       },
       warnings: [
-        `Topic claims cover ${Math.round((activeMs ? categorizedMs / activeMs : 0) * 100)}% of estimated active time in this window.`,
+        `Topic claims cover ${Math.round((activeMs ? categorizedMs / activeMs : 0) * 100)}% of estimated browsing time in this window.`,
         uncoveredTransitions
           ? `${uncoveredTransitions} transitions touched a page with no topic and are excluded from the flow counts.`
           : null,

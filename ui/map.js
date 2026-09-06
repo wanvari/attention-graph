@@ -4,6 +4,8 @@ class TopicMapVisualizer {
   // `deps.store` is the seam a headless render test drives this through; the
   // extension page passes nothing and gets the real IndexedDB store.
   constructor(deps) {
+    this.recordNow = deps && deps.now;
+    this.isDemo = !!(deps && deps.isDemo);
     this.store = (deps && deps.store) || CTStore.createStore({});
     this.svg = null;
     this.g = null;
@@ -124,14 +126,14 @@ class TopicMapVisualizer {
     this.setHealth('checking', forceRefresh ? 'Analyzing locally' : 'Loading');
     try {
       await this.store.open();
-      const analysis = await CTMapData.build(this.store, { windowDays: this.windowDays || 30 });
+      const analysis = await CTMapData.build(this.store, { windowDays: this.windowDays || 30, now: this.recordNow });
       analysis.corrections = await this.store.getAll('corrections');
       if (!analysis.ok) {
         this.renderUnavailable(analysis);
         return;
       }
       this.analysis = analysis;
-      this.setHealth('ok', `Registry · last run ${timeAgo(analysis.generatedAt)}`);
+      this.setHealth('ok', this.isDemo ? 'Recorded sample' : `Registry · last run ${timeAgo(analysis.generatedAt)}`);
       this.renderAnalysis(analysis);
       this.setLoading(false);
       this.checkStaleness(analysis);
@@ -148,7 +150,7 @@ class TopicMapVisualizer {
   // If the stored analysis is being shown but the user has browsed since it
   // was generated, offer a re-run instead of silently serving stale claims.
   async checkStaleness(analysis) {
-    if (typeof chrome === 'undefined' || !chrome.history) return;
+    if (this.isDemo || typeof chrome === 'undefined' || !chrome.history) return;
     const since = (analysis.coverage && analysis.coverage.endTime) || Date.parse(analysis.generatedAt);
     try {
       const items = await new Promise(resolve =>
@@ -201,11 +203,11 @@ class TopicMapVisualizer {
         <h2>Nothing mapped yet</h2>
         <p>
           This map draws the persistent topic registry, so it stays empty until an analysis run has
-          finished. Runs happen on their own when the machine is idle, or overnight.
+          finished. Runs happen on their own when the machine is idle.
         </p>
         <div class="setup-box">
           <div>To run one now, open <a href="audit.html">Audit</a> and press <strong>Run now</strong>.</div>
-          <div>That needs local Ollama at <code>http://localhost:11434</code> with <code>bge-m3:latest</code> and <code>gemma3:12b</code> pulled.</div>
+          <div>That needs local Ollama at <code>http://localhost:11434</code> with <code>bge-m3:latest</code> and <code>qwen3:4b</code> pulled.</div>
           <div>If topics exist but are older than this window, widen it to 90 days.</div>
         </div>
       </div>
@@ -219,7 +221,7 @@ class TopicMapVisualizer {
     this.renderLegend();
     this.renderGraph(this.graphData);
     this.renderDefaultEvidence(analysis);
-    const when = analysis.generatedAt ? ` Analyzed ${timeAgo(analysis.generatedAt)}.` : '';
+    const when = this.isDemo ? ' Synthetic sample, March 2026.' : analysis.generatedAt ? ` Analyzed ${timeAgo(analysis.generatedAt)}.` : '';
     this.setStatus(`${analysis.topics.length} topics mapped from ${analysis.coverage.visitsExpanded} expanded visits.${when}`);
   }
 
@@ -234,12 +236,11 @@ class TopicMapVisualizer {
       : rankedTopics.slice(0, Number(topicLimitValue));
     const visibleTopicIds = new Set(visibleTopics.map(topic => topic.id));
     this.visibleTopicCount = visibleTopics.length;
-    // Circle area encodes estimated attention: dwell time plus a small floor
-    // per visit so visit-heavy, low-dwell topics stay visible.
-    const attentionMass = topic => topic.estimatedDwellMs + topic.visitCount * 45000;
+    // Circle area follows estimated browsing time, with a minimum visible radius.
+    const attentionMass = topic => topic.estimatedDwellMs;
     const topicRadius = d3.scaleSqrt()
       .domain([0, d3.max(visibleTopics, attentionMass) || 1])
-      .range([14, 54]);
+      .range([0, 54]);
     const topicNodes = visibleTopics.map((topic, index) => ({
       id: topic.id,
       type: 'topic',
@@ -248,7 +249,7 @@ class TopicMapVisualizer {
       color: topic.color,
       attentionBand: topic.attentionBand,
       attentionRank: topic.attentionRank,
-      radius: Math.max(18, topicRadius(attentionMass(topic))),
+      radius: Math.max(12, topicRadius(attentionMass(topic))),
       index
     }));
 
@@ -497,13 +498,13 @@ class TopicMapVisualizer {
       </div>
     `;
     strip.innerHTML = `
-      ${metric(`${this.visibleTopicCount || analysis.topics.length} / ${analysis.topics.length}`, 'topics shown', 'Shown topics are the highest estimated active-time topics selected by the Topics control.')}
+      ${metric(`${this.visibleTopicCount || analysis.topics.length} / ${analysis.topics.length}`, 'topics shown', 'Shown topics are the highest estimated-time topics selected by the Topics control.')}
       ${metric(coverage.visitsExpanded, 'visits read', 'Individual Chrome visit records expanded from the History API. Repeated visits are counted separately.')}
-      ${metric(`${categorized.estimatedActiveMinutes || 0}m`, 'mapped active time', 'Estimated active time represented by the analyzed topic pages. Dwell is estimated from gaps and capped at 30 minutes.')}
+      ${metric(`${categorized.estimatedActiveMinutes || 0}m`, 'mapped estimated time', 'Estimated browsing time represented by the analyzed topic pages. Dwell is estimated from gaps and capped at 30 minutes.')}
       ${metric(visibleFlows.length, 'flow lines shown', 'Each line is an aggregated pair of consecutive topic visits currently visible in the graph.')}
-      ${metric(contextSwitches, 'context switches', 'Observed consecutive visits where the next topic looked like a different task or context.')}
-      ${metric(`${switches.switchesPerActiveHour}/hr`, 'switch rate', 'Context switches divided by estimated active browsing hours.')}
-      <div class="summary-note">Topic coverage: ${formatPercent(categorized.activeTimeCoverage || 0)} of estimated active time, ${formatPercent(categorized.visitCoverage || 0)} of visits.</div>
+      ${metric(contextSwitches, 'between-topic visits', 'Consecutive visits between page groups below the similarity threshold.')}
+      ${metric(`${switches.switchesPerActiveHour}/hr`, 'changes per est. hour', 'Between-topic visits divided by estimated browsing hours.')}
+      <div class="summary-note">Topic coverage: ${formatPercent(categorized.activeTimeCoverage || 0)} of grouped estimated time, ${formatPercent(categorized.visitCoverage || 0)} of visits.</div>
     `;
   }
 
@@ -547,7 +548,7 @@ class TopicMapVisualizer {
         <strong>Flow color</strong>
         ${flowLegend || '<span class="legend-empty">No cross-topic flows shown</span>'}
       </div>
-      <div class="legend-note">Circle area = estimated attention time. Line thickness = observed consecutive visits.</div>
+      <div class="legend-note">Circle area follows estimated browsing time, with a minimum visible size. Line thickness = observed consecutive visits.</div>
     `;
   }
 
@@ -563,11 +564,11 @@ class TopicMapVisualizer {
           <button type="button" id="evidence-collapse-toggle" class="collapse-toggle" title="${collapsed ? 'Expand' : 'Collapse'}" aria-expanded="${!collapsed}">${collapsed ? '+' : '−'}</button>
         </div>
         <div id="evidence-collapsible" class="evidence-collapsible" ${collapsed ? 'hidden' : ''}>
-          <p>This map groups high-attention history pages into topics and connects topics that appeared in consecutive visits.</p>
+          <p>This map groups recorded pages into suggested topics and connects topics that appeared in consecutive visits.</p>
           <div class="metric-list">
             <div><strong>Time range</strong><span>${formatDate(analysis.coverage.startTime)} - ${formatDate(analysis.coverage.endTime)}</span></div>
             <div><strong>Graph sectors</strong><span>${this.visibleTopicCount || analysis.topics.length} of ${analysis.topics.length} topics shown</span></div>
-            <div><strong>Topic coverage</strong><span>${formatPercent(analysis.categorizedCoverage?.activeTimeCoverage || 1)} active time · ${formatPercent(analysis.categorizedCoverage?.visitCoverage || 1)} visits</span></div>
+            <div><strong>Topic coverage</strong><span>${formatPercent(analysis.categorizedCoverage?.activeTimeCoverage || 1)} estimated time · ${formatPercent(analysis.categorizedCoverage?.visitCoverage || 1)} visits</span></div>
             <div><strong>Top topic</strong><span>${topTopic ? `${escapeHtml(topTopic.label)} (${topTopic.estimatedDwellMinutes}m est.)` : 'None'}</span></div>
             <div><strong>Uncategorized</strong><span>${uncategorized.pageCount ? `${uncategorized.pageCount} pages (${uncategorized.estimatedDwellMinutes}m est.) too ambiguous to label` : 'None'}</span></div>
             <div><strong>Analyzed</strong><span>${analysis.generatedAt ? `${formatDate(new Date(analysis.generatedAt).getTime())} (${timeAgo(analysis.generatedAt)})` : 'n/a'}</span></div>
@@ -590,44 +591,21 @@ class TopicMapVisualizer {
       <div class="evidence-section">
         <div class="panel-kicker">Topic Cluster</div>
         <h2>${escapeHtml(topic.label)}</h2>
-        ${confidenceBar(topic.confidence)}
+        <p>Suggested topic. Check its pages to judge the grouping.</p>
         <p>${escapeHtml(topic.rationale)}</p>
         <div class="metric-list">
-          <div><strong>Attention rank</strong><span>#${topic.attentionRank || 'n/a'} · ${escapeHtml(topic.attentionBandLabel || 'Unranked')}</span></div>
-          <div><strong>Attention share</strong><span>${formatPercent(topic.attentionShare || 0)} of estimated active time</span></div>
+          <div><strong>Time rank</strong><span>#${topic.attentionRank || 'n/a'} · ${escapeHtml(topic.attentionBandLabel || 'Unranked')}</span></div>
+          <div><strong>Estimated time share</strong><span>${formatPercent(topic.attentionShare || 0)} of grouped estimated time</span></div>
           <div><strong>Visits</strong><span>${topic.visitCount}</span></div>
           <div><strong>Estimated time</strong><span>${topic.estimatedDwellMinutes}m</span></div>
           <div><strong>Top domains</strong><span>${topic.topDomains.map(d => escapeHtml(d.domain)).join(', ')}</span></div>
         </div>
         <h3>Evidence pages</h3>
         ${pageList(topic.topPages)}
-        <form id="topic-correction" class="correction-form">
-          <label>Correct topic label</label>
-          <input name="label" value="${escapeAttribute(topic.label)}" />
-          <button type="submit">Save correction</button>
-        </form>
+        <p><a class="secondary-btn" href="${this.isDemo ? `demo.html?trail=${encodeURIComponent(topic.id)}` : `newtab.html?trail=${encodeURIComponent(topic.id)}`}">Open this trail on Home</a></p>
       </div>
     `;
-    document.getElementById('topic-correction').addEventListener('submit', async event => {
-      event.preventDefault();
-      const label = new FormData(event.currentTarget).get('label').toString().trim();
-      if (!label) return;
-      // Topic ids are stable across runs in v4, so the correction applies
-      // directly to the registry row instead of being re-matched by pages.
-      await this.store.put('corrections', {
-        correctionId: `topic_label:${topic.id}`,
-        kind: 'topic_label',
-        targetId: topic.id,
-        value: label,
-        pageUrls: (topic.pageUrls || []).slice(0, 100),
-        createdAt: Date.now()
-      });
-      const row = await this.store.get('topics', topic.id);
-      if (row) await this.store.put('topics', { ...row, label, labelSource: 'user', userCorrected: true });
-      topic.label = label;
-      this.renderAnalysis(this.analysis);
-      this.selectTopic(topic);
-    });
+
   }
 
   selectTransition(transition) {
@@ -639,7 +617,7 @@ class TopicMapVisualizer {
         <div class="panel-kicker">Topic Flow</div>
         <h2>${escapeHtml(transition.sourceLabel)} -> ${escapeHtml(transition.targetLabel)}</h2>
         <div class="flow-type" style="border-color:${transition.color}">${escapeHtml(transition.label)}</div>
-        ${confidenceBar(transition.confidence)}
+
         <p>${escapeHtml(transition.rationale)}</p>
         <div class="metric-list">
           <div><strong>Observed transitions</strong><span>${transition.visitCount}</span></div>
@@ -648,36 +626,10 @@ class TopicMapVisualizer {
         </div>
         <h3>When these movements happened</h3>
         ${hourHistogram(transition.hourCounts)}
-        <form id="transition-correction" class="correction-form">
-          <label>Correct flow label</label>
-          <select name="type">
-            ${Object.keys(FLOW_COLORS).map(type => `<option value="${type}" ${type === transition.type ? 'selected' : ''}>${FLOW_COLORS[type].label}</option>`).join('')}
-          </select>
-          <button type="submit">Save correction</button>
-        </form>
+        <p>Lines describe consecutive recorded visits between topics. They do not establish a relationship between ideas or explain why you switched.</p>
       </div>
     `;
-    document.getElementById('transition-correction').addEventListener('submit', async event => {
-      event.preventDefault();
-      const type = new FormData(event.currentTarget).get('type').toString();
-      await this.store.put('corrections', {
-        correctionId: `transition_type:${transition.sourceTopicId}->${transition.targetTopicId}`,
-        kind: 'transition_type',
-        targetId: `${transition.sourceTopicId}->${transition.targetTopicId}`,
-        value: type,
-        pageUrls: [],
-        createdAt: Date.now()
-      });
-      for (const day of transition.days || []) {
-        const row = await this.store.get('transitions', [day, transition.sourceTopicId, transition.targetTopicId]);
-        if (row) await this.store.put('transitions', { ...row, type, userCorrected: true });
-      }
-      transition.type = type;
-      transition.label = FLOW_COLORS[type].label;
-      transition.color = FLOW_COLORS[type].color;
-      this.renderAnalysis(this.analysis);
-      this.selectTransition(transition);
-    });
+
   }
 
   selectPage(page, topicId) {
@@ -830,7 +782,7 @@ class TopicMapVisualizer {
   }
 
   topicTooltip(topic) {
-    return `<strong>${escapeHtml(topic.label)}</strong><br>#${topic.attentionRank || '?'} ${escapeHtml(topic.attentionBandLabel || 'topic')}<br>${topic.visitCount} visits · ${topic.estimatedDwellMinutes}m estimated<br>${formatPercent(topic.attentionShare || 0)} of mapped active time<br>${topic.pageCount} pages of evidence`;
+    return `<strong>${escapeHtml(topic.label)}</strong><br>#${topic.attentionRank || '?'} ${escapeHtml(topic.attentionBandLabel || 'topic')}<br>${topic.visitCount} visits · ${topic.estimatedDwellMinutes}m estimated<br>${formatPercent(topic.attentionShare || 0)} of grouped estimated time<br>${topic.pageCount} pages of evidence`;
   }
 
   pageTooltip(page) {
@@ -965,16 +917,25 @@ if (typeof module !== 'undefined' && module.exports) {
   globalThis.CTMap = { TopicMapVisualizer };
 }
 
-// ---- extension-page boot -------------------------------------------------
-// The demo page renders these surfaces itself against a recorded store,
-// so the live boot path must not also run there.
-if (typeof chrome !== 'undefined' && chrome.runtime && chrome.runtime.id &&
-    typeof document !== 'undefined' && !globalThis.__CT_DEMO__) {
-  document.addEventListener('DOMContentLoaded', () => {
-    if (typeof d3 === 'undefined') {
-      document.getElementById('loading').textContent = 'D3.js library not loaded. Reload the extension.';
-      return;
-    }
-    new TopicMapVisualizer();
+// Extension and read-only sample boot use the same map renderer.
+if (typeof document !== 'undefined' && (typeof module === 'undefined' || !module.exports) && !globalThis.__CT_DEMO__) {
+  document.addEventListener('DOMContentLoaded', async () => {
+    if (typeof d3 === 'undefined') { document.getElementById('loading').textContent = 'Map library unavailable. Reload this page.'; return; }
+    if (new URLSearchParams(location.search).get('demo') !== '1') { new TopicMapVisualizer(); return; }
+    try {
+      const response = await fetch('../fixtures/current/snapshot.json');
+      if (!response.ok) throw new Error('Sample record is unavailable.');
+      const snapshot = await response.json();
+      const store = { open: async () => {}, getAll: async name => snapshot[name] || [],
+        get: async (name, key) => (snapshot[name] || []).find(r => r.key === key) || null,
+        getSettingsMap: async () => Object.fromEntries((snapshot.settings || []).map(r => [r.key, r.value])),
+        range: (lower, upper) => ({ lower, upper }),
+        byIndex: async (name, index, query) => (snapshot[name] || []).filter(r => !query || (r.dayKey >= query.lower && r.dayKey <= query.upper)) };
+      const lastDay = (snapshot.daily_metrics || []).map(r => r.day).sort().pop();
+      for (const a of document.querySelectorAll('.buttons a')) {
+        a.href = a.textContent === 'Audit' ? 'demo.html?view=audit' : a.textContent === 'Settings' ? 'demo.html?view=setup' : 'demo.html';
+      }
+      new TopicMapVisualizer({ store, now: CTText.dayKeyToNoonMs(lastDay) + 9 * 3600000, isDemo: true });
+    } catch (error) { document.getElementById('loading').textContent = error.message; }
   });
 }

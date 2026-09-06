@@ -1,45 +1,14 @@
-# CLAUDE.md
+# Cognitive Trails development contract
 
-This repository is **Cognitive Trails v4**: a Manifest V3 Chrome extension that keeps a passive, longitudinal, local-only record of where browsing attention went, surfaced on the new-tab page. There is no build system; development is vanilla JavaScript, HTML, CSS, D3, Chrome extension APIs, IndexedDB, and local Ollama. The authoritative build spec lives in the repo history; this file describes the current architecture and the rules that must not regress.
+This repository is Cognitive Trails v5, a Manifest V3 Chrome extension. It uses vanilla UMD JavaScript, HTML/CSS, D3, IndexedDB, and local Ollama; there is no bundler or hosted backend. See README.md, ARCHITECTURE.md, and PRIVACY.md for the current product and contracts.
 
-## Development Commands
-
-```bash
-npm test                      # unit + protocol + copy + ui tests (Node, no Ollama, no Chrome)
-node tools/validate.js        # accuracy/consistency validation on fixtures (needs live Ollama)
-node tools/bench.js           # per-stage timing budget (needs live Ollama)
-node tools/embedFixtures.js   # regenerate fixtures/embeddings.bin (needs live Ollama)
-node tools/recordGolden.js    # re-record fixtures/golden/ chat transcripts (needs live Ollama)
-```
-
-Load the extension through `chrome://extensions/` with Developer mode enabled. Playwright e2e suites live in `tests/e2e/` and run manually on the development machine.
-
-## Architecture (v4)
-
-- **Sensor:** `content/capture.js` runs on every http(s) page, measures active time (visible + focused + input in last 60 s), extracts ≤ 8,000 chars of main-content text, and streams idempotent capture upserts to `background.js`. Denylisted domains/paths and paused intervals capture nothing.
-- **Service worker:** `background.js` only routes messages, buffers captures, manages `chrome.alarms` (`daily` hourly gate, `flush` every 2 min), and spins up the offscreen document. It never runs the pipeline.
-- **Pipeline:** `offscreen/analysis.js` hosts `lib/pipeline.js`, which orchestrates staged, transactional runs: ingest → embed → cluster → label → adjudicate → registry → transitions → metrics. Failed runs never move the watermark and never partially write `topics`.
-- **Relevance:** `lib/relevance.js` classifies pages that are mechanisms rather than subjects — SSO/OAuth hand-offs, vendor download pages, interstitials, error pages. Matched on whole path segments (never substrings), identity host labels, and anchored whole-title status phrases, with a content-container guard so `/wiki/Authorization` stays an article. Excluded before embedding, reported in the uncategorized bucket as `utility_page`. Distinct from the privacy denylist: that one refuses to record at all, this one records the visit but keeps it out of topics.
-- **Registry:** `lib/registry.js` maintains persistent topic identity across runs (`topicId` stable forever), with lifecycle states active/dormant/retired and events (created, dormant, revived, merged-proposal, retired, relabeled). Every metric is computed over the registry, not per-run snapshots.
-- **Storage:** `lib/store.js` wraps IndexedDB `cognitive-trails` v4 (visits, captures, pages, embeddings, topics, memberships, topic_events, daily_metrics, baselines, runs, briefs, transitions, uncategorized, corrections, settings). Loadable in Node with fake-indexeddb.
-- **Surfaces:** `ui/newtab.html` (default new tab; rings + baseline card + daily brief + focused runs; renders < 100 ms from IndexedDB, never triggers Ollama), `ui/map.html` (topic-sector map over the registry), `ui/audit.html` (trust audit: runs, coverage, registry stats, uncategorized by reason, Run now, export, delete), `ui/options.html` (settings incl. denylist, pause, LLM-chat domains).
-- Every `lib/*.js` module uses the UMD wrapper pattern so it loads in the extension and in Node tests. No bundler.
-
-## Product Constraints (do not regress)
-
-- **Local-only.** Models: `bge-m3:latest` via `/api/embed`, `gemma3:12b` via `/api/chat`, endpoint fixed at `http://localhost:11434`. The manifest CSP `connect-src` allows only self + localhost:11434 / 127.0.0.1:11434. Any change adding a remote host is wrong.
-- **No normative scores.** Every displayed number is descriptive or a deviation from the user's own 28-day baseline (z-band: "within your range" / "outside usual" / "unusual"). No green/red valence, no "focus score", no good/bad copy — enforced by `tests/copy.test.js` and the CSS hue test.
-- **No goal inference, no synthesis.** The system reports dormancy/revival/convergence facts; it never interprets, recommends, or claims topic X relates to topic Y.
-- **Mechanisms are not subjects.** Authentication hand-offs, download pages, and interstitials are excluded from topics and reported as `utility_page` in the uncategorized bucket. The classification is factual — is this page a destination or a step? — never a judgement about whether the time was worthwhile. The filter is deliberately conservative: a merely boring page is still a page the user chose. Existing memberships for newly-classified utility pages are pruned so a topic named after an SSO screen loses its evidence and gets retired.
-- **Uncertainty defaults to exclusion.** Self-consistency adjudication (two passes, order reversed, split-grouping Jaccard ≥ 0.60) decides keep/split/uncategorized; disagreement always lands pages in the uncategorized bucket with a reason. There is no manual review queue.
-- **Order-invariant clustering.** Average-linkage agglomerative over cosine distance; assignment to existing registry centroids first (threshold 0.78), remainder clustered at 0.70. Shuffling input must not change partitions.
-- **Compute caps.** Per run: ≤ 300 embeds, ≤ 2 label calls, ≤ 8 adjudication calls, ≤ 2 transition calls, all sequential. Embed model `keep_alive: '5m'` and unloaded before chat calls; both models never resident longer than needed. Idle-gated scheduling.
-- **Privacy.** Content capture never reads form fields; denylist covers banks/health/auth/mail plus sensitive paths; `extractedText` is deleted after 30 days; export contains no page text; delete-everything wipes IndexedDB and `chrome.storage.local`.
-- **Dwell honesty.** Gap-based dwell capped at 30 min; session-ending visits get a 1-minute allowance; capture-measured active time upgrades dwell via `min(activeMs, gap dwell)` and can only lower it. One exception: a capture that has not yet measured anything — `activeMs === 0` with an observed span under `captureMinObservedMs` — is absence of evidence, not evidence of absence, and lowers nothing. Every capture is created with `activeMs: 0` and written the instant the page loads, so without that carve-out the first upsert erases the visit. Silence *after* a capture has reported is different and must still cut dwell down: the content script sends on `visibilitychange`→hidden and on `pagehide`, so a quiet capture means a hidden tab, which is known to be inattentive.
-- **Coverage honesty.** Categorized share, uncovered transitions, and the uncategorized bucket (by reason) are always shown next to the claims they qualify.
-
-## Testing Notes
-
-`npm test` runs everything under `tests/` except `tests/e2e/`. Key invariants the suites protect: repeated visits stay separate events; session-ending visits never inherit away-gaps; same-domain pages are not automatically related; fenced JSON parses; adjudication agreement/disagreement/error semantics and the per-run cap; split-grouping Jaccard boundaries; registry match-score boundaries and lifecycle day-exact transitions; entropy/baseline/z-score math; brief priority order and forbidden-word list; migration from v3 preserves embeddings and drops the old snapshot analysis; watermark never moves on failed runs; utility pages never reach the registry and stale utility memberships are evicted; the dwell carve-out above, including that a capture which watched and measured nothing still zeroes the visit.
-
-`tests/map.test.js` renders `ui/map.js` headlessly against a seeded registry — the map shipped broken for all of v4 because nothing executed it.
+- Preserve user records. Checkpoint before major changes. Database schema remains version 4; migration gates are idempotent settings.
+- Record page observations, never infer cognition, goals, productivity, mental health, or scientific validity from browsing. Primary metrics are counts and qualified time estimates. Source pages and ungrouped records remain accessible.
+- Keep every inference request on localhost:11434. Never add remote inference or analytics. Keep Origin rewriting restricted to this extension's initiator ID.
+- Respect default laptop budgets: bge-m3 embeddings, qwen3:4b labels, 100 pages, 12 new topics, batches 8/6, 8192 context, 1800 output, 50% pacing, four CPU threads, idle checks, short residency and explicit unloading. A model change must be measured; compatibility of vector spaces must be checked.
+- Pipeline classification and downstream metrics work are durable and retryable. Batch embeddings are retained on interruption. Registry commits are atomic; page memberships have one current owner. Replay and overlaps cannot inflate totals or invent revivals.
+- Worker writes share a deletion barrier. Preferences and trail metadata go through worker messages; do not add direct UI writes that can race deletion. Personal labels/notes overlay inferred labels.
+- Home reads a metadata snapshot and never calls a model. Keep it useful before model installation. Use local search, trail sessions, pins and optional notes. Never expose self-rated model confidence as a probability.
+- Keep all modules Node-loadable and extension-loadable. HTML dependencies must be present in the proper order, including relevance and trails modules.
+- Run `npm test`, relevant `npm run e2e:*` suites, and `npm run check:laptop` when changing inference behavior. Current full transcripts live under fixtures/current. A changed prompt must fail exact replay, not receive a substituted reply. Legacy fixtures/reports are historical evidence only.
+- User-facing copy is neutral, concrete, and qualified. Automated copy/CSS checks are guardrails, not proof that a product avoids unsupported claims.

@@ -1,13 +1,13 @@
 /* Shared theme tokens for v4 surfaces. One neutral accent hue; no red/green
    valence anywhere (spec D4; enforced by tests/ui.test.js hue check). */
 :root {
-  --bg: #f4f4f8;
+  --bg: #f6f5f2;
   --panel: #ffffff;
-  --panel-2: #ececf4;
-  --text: #24242e;
-  --text-dim: #6a6a7a;
-  --line: #d8d8e4;
-  --accent: #5b6ee0;          /* hue ~231 */
+  --panel-2: #efeeea;
+  --text: #292c30;
+  --text-dim: #62666d;
+  --line: #dedfdd;
+  --accent: #465c82;          /* hue ~231 */
   --accent-soft: #aab4ef;
   --accent-faint: #e3e6fb;
   /* Band badges carry a background AND a text colour so both themes reach
@@ -28,13 +28,13 @@
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --bg: #101014;
-    --panel: #18181f;
-    --panel-2: #20202a;
-    --text: #e4e4ec;
-    --text-dim: #8f8f9f;
-    --line: #2c2c38;
-    --accent: #7285e8;
+    --bg: #171a1e;
+    --panel: #1e2227;
+    --panel-2: #20252b;
+    --text: #e6e8ed;
+    --text-dim: #a7adb7;
+    --line: #353c46;
+    --accent: #adc3eb;
     --accent-soft: #4a5490;
     --accent-faint: #23263a;
     --band-within: #6a7288;
@@ -45,7 +45,7 @@
     --band-outside-bg: #2c3566;
     --band-outside-fg: #a9b8f2;
     --band-unusual-bg: #98a8f5;
-    --band-unusual-fg: #101014;
+    --band-unusual-fg: #171a1e;
     --ring-track: #26262f;
   }
 }
@@ -61,3 +61,5 @@ body {
 }
 a { color: var(--accent); text-decoration: none; }
 a:hover { text-decoration: underline; }
+
+@media (prefers-color-scheme: dark) { body .btn.primary, body .demo-tab.active { color: #172133; } }

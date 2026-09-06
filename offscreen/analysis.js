@@ -31,16 +31,29 @@
   async function runPipeline(trigger, force) {
     if (running) return;
     running = true;
+    let ollama;
     try {
       const store = CTStore.createStore({});
       await store.open();
       const settings = await store.getSettingsMap();
-      const ollama = CTOllama.createClient({
-        embeddingModel: settings.embeddingModel || 'bge-m3:latest',
-        chatModel: settings.chatModel || 'gemma3:12b',
+      const deadline = Date.now() + 3 * 60000;
+      ollama = CTOllama.createClient({
+        embeddingModel: settings.embeddingModel || CTOllama.DEFAULTS.embeddingModel,
+        chatModel: settings.chatModel || CTOllama.DEFAULTS.chatModel,
         // How hard the local model is allowed to work (see lib/ollama.js).
-        dutyCycle: Number(settings.dutyCycle) || 1,
-        numThread: settings.numThread || null
+        dutyCycle: Number(settings.dutyCycle) || CTOllama.DEFAULTS.dutyCycle,
+        numThread: settings.numThread || CTOllama.DEFAULTS.numThread,
+        beforeCall: async () => {
+          const current = await store.getSettingsMap();
+          const paused = (current.pauseIntervals || []).some(i => i.end == null);
+          const idle = trigger === 'alarm' && settings.idleGatingEnabled !== false
+            ? await swCall('GET_IDLE_STATE', {}) : null;
+          if (Date.now() >= deadline || paused || (idle && !['idle', 'locked'].includes(idle.state))) {
+            const error = new Error(paused ? 'Capture is paused; remaining work is saved.' : 'Remaining grouping work is saved for the next idle run.');
+            error.code = 'deferred';
+            throw error;
+          }
+        }
       });
       const pipeline = CTPipeline.createPipeline({
         store,
@@ -55,6 +68,10 @@
     } catch (error) {
       console.error('pipeline failed', error);
     } finally {
+      if (ollama) {
+        await ollama.unloadEmbedModel();
+        await ollama.unloadChatModel();
+      }
       running = false;
       window.close(); // release the offscreen document
     }

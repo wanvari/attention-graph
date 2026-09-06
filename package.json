@@ -1,13 +1,18 @@
 {
   "name": "cognitive-trails",
-  "version": "4.0.0",
+  "version": "5.0.0",
   "private": true,
-  "description": "Cognitive Trails v4 - passive, local-only, longitudinal record of where browsing attention went",
+  "description": "Local browsing capture, searchable trails, and bounded laptop inference",
   "scripts": {
     "test": "node tools/runTests.js",
     "validate": "node tools/validate.js",
     "bench": "node tools/bench.js",
-    "e2e": "node tests/e2e/capture.e2e.mjs"
+    "e2e": "node tests/e2e/capture.e2e.mjs",
+    "demo": "node tools/serveDemo.js",
+    "e2e:trails": "node tests/e2e/trails.e2e.mjs",
+    "e2e:pipeline": "node tests/e2e/pipeline.e2e.mjs",
+    "check:laptop": "node tools/laptopCheck.js",
+    "package": "node tools/package.js"
   },
   "devDependencies": {
     "fake-indexeddb": "^6.2.5",

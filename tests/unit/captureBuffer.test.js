@@ -132,6 +132,48 @@ async function freshStore() {
   {
     const store = await freshStore();
     const buffer = CTCaptureBuffer.createCaptureBuffer({ store });
+    const start = capture('final');
+    await buffer.submit(start);
+    const ending = { ...start, updatedAt: start.startedAt + 120000, endedAt: start.startedAt + 120000, activeMs: 100000 };
+    delete ending.extractedText;
+    await buffer.submit(ending, { final: true });
+    assert.strictEqual(buffer.size, 0, 'terminal text-free updates are durable before acknowledgement');
+    assert.strictEqual((await store.get('captures', 'final')).endedAt, ending.endedAt);
+    await buffer.submit({ ...start, updatedAt: start.startedAt + 1000, activeMs: 0 });
+    const stored = await store.get('captures', 'final');
+    assert.strictEqual(stored.activeMs, 100000, 'late retry cannot roll back cumulative activity');
+    assert.strictEqual(stored.endedAt, ending.endedAt, 'late retry cannot reopen the capture');
+  }
+
+  // --- deletion drains the actual in-flight write before storage is wiped
+  {
+    const store = await freshStore();
+    let release, entered;
+    const gate = new Promise(resolve => { release = resolve; });
+    const writing = new Promise(resolve => { entered = resolve; });
+    const bulkPut = store.bulkPut.bind(store);
+    store.bulkPut = async (...args) => { entered(); await gate; return bulkPut(...args); };
+    const buffer = CTCaptureBuffer.createCaptureBuffer({ store });
+    const submitted = buffer.submit(capture('in-flight'));
+    await writing;
+    let drained = false;
+    const draining = buffer.discardAndDrain().then(() => { drained = true; });
+    await Promise.resolve();
+    assert.strictEqual(drained, false, 'drain waits for persistence, unlike clear');
+    assert.strictEqual(buffer.add(capture('late')), false, 'new writes are refused during deletion');
+    release();
+    await Promise.all([submitted, draining]);
+    await store.wipe();
+    await buffer.flush();
+    assert.strictEqual((await store.getAll('captures')).length, 0, 'no capture reappears after wiping');
+    buffer.resume();
+    assert.strictEqual(buffer.add(capture('fresh')), true);
+  }
+
+  // --- the pending cap forces a flush even without text
+  {
+    const store = await freshStore();
+    const buffer = CTCaptureBuffer.createCaptureBuffer({ store });
     for (let i = 0; i < CTCaptureBuffer.FLUSH_AT_PENDING; i++) {
       const row = capture(`bulk-${i}`);
       delete row.extractedText;

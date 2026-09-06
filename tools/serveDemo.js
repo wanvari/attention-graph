@@ -18,14 +18,15 @@ const TYPES = {
 };
 
 http.createServer((req, res) => {
-  const urlPath = decodeURIComponent(req.url.split('?')[0]);
+  let urlPath;
+  try { urlPath = decodeURIComponent(req.url.split('?')[0]); } catch { res.writeHead(400); res.end(); return; }
   const target = urlPath === '/' ? '/ui/demo.html' : urlPath;
   const full = path.join(root, target);
-  if (!full.startsWith(root) || !fs.existsSync(full) || fs.statSync(full).isDirectory()) {
+  if (!full.startsWith(root + path.sep) || !fs.existsSync(full) || fs.statSync(full).isDirectory()) {
     res.writeHead(404, { 'Content-Type': 'text/plain' });
     res.end('not found');
     return;
   }
   res.writeHead(200, { 'Content-Type': TYPES[path.extname(full)] || 'application/octet-stream' });
   res.end(fs.readFileSync(full));
-}).listen(port, () => console.log(`Demo at http://localhost:${port}/ui/demo.html`));
+}).listen(port, '127.0.0.1', () => console.log(`Demo at http://localhost:${port}/ui/demo.html`));

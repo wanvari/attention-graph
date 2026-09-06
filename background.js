@@ -1,7 +1,7 @@
 // Service worker: message routing, capture buffering, alarms, offscreen
 // lifecycle (spec §1.2-§1.3, §2.4). The pipeline NEVER runs here — the SW is
 // killed after ~30 s idle; all analysis happens in the offscreen document.
-importScripts('lib/text.js', 'lib/privacy.js', 'lib/store.js', 'lib/ollamaRules.js', 'lib/captureBuffer.js');
+importScripts('lib/text.js', 'lib/privacy.js', 'lib/store.js', 'lib/ollama.js', 'lib/ollamaRules.js', 'lib/captureBuffer.js', 'lib/trails.js');
 
 const store = CTStore.createStore({});
 
@@ -10,10 +10,25 @@ const RETENTION_ALARM = 'retention';
 const DAILY_ALARM = 'daily';
 const RUN_MIN_INTERVAL_MS = 20 * 3600 * 1000;   // condition 1a
 const RUN_NEW_VISIT_TRIGGER = 150;              // condition 1b
-const IDLE_STARVATION_MS = 36 * 3600 * 1000;    // never starve a busy machine
 const HEARTBEAT_FRESH_MS = 60 * 1000;
 const HEARTBEAT_ABANDONED_MS = 10 * 60 * 1000;
 const OLLAMA_BASE = 'http://localhost:11434';
+
+// All worker-owned writes and pipeline starts share this barrier. Deletion
+// closes the gate synchronously, then drains work already in flight before
+// closing the offscreen writer and wiping storage. A check before an await
+// alone does not protect against a start/retention/capture racing a wipe.
+let deletionInProgress = false;
+let deletionPromise = null;
+let writerChain = Promise.resolve();
+// Cover the short interval before the offscreen document writes its first run row.
+let pipelineLaunchUntil = 0;
+function withWriter(work, blocked = { ok: false, reason: 'deletion-in-progress' }) {
+  if (deletionInProgress) return Promise.resolve(blocked);
+  const task = writerChain.then(() => deletionInProgress ? blocked : work());
+  writerChain = task.catch(() => {});
+  return task;
+}
 
 // ---- scoped Ollama origin rewrite -------------------------------------
 
@@ -46,13 +61,35 @@ async function handleCaptureUpdate(message, sender) {
   if (sender && sender.tab && sender.tab.incognito) return { ok: false, textStored: false };
   if (deletionInProgress) return { ok: false, textStored: false };
   await store.open();
-  return captures.submit(message.capture);
+  const incoming = message.capture;
+  if (!incoming || !incoming.captureId || !Number.isFinite(incoming.startedAt)) return { ok: false, textStored: false };
+  const settings = await store.getSettingsMap();
+  if (CTPrivacy.isExcluded(incoming.url, settings.denylist) || CTPrivacy.isFilteredDomain(incoming.url)) return { ok: false, textStored: false };
+  if (incoming.startedAt < (settings.historyImportAfter || 0) || CTPrivacy.inPauseInterval(incoming.startedAt, settings.pauseIntervals)) return { ok: false, textStored: false };
+  const paused = (settings.pauseIntervals || []).find(i => i.end == null);
+  if (paused && !message.final) return { ok: false, textStored: false };
+  const safeUrl = CTText.sanitizeUrl(incoming.url);
+  const cutoff = Math.min(Date.now(), paused?.start ?? Infinity);
+  const capture = {
+    ...incoming,
+    url: safeUrl,
+    normalizedUrl: CTText.normalizeUrl(safeUrl),
+    domain: CTPrivacy.hostnameOf(safeUrl),
+    source: CTPrivacy.sourceForUrl(safeUrl, settings.llmChatDomains),
+    title: CTText.cleanTitle(incoming.title, incoming.url).slice(0, 1000),
+    updatedAt: Math.min(Number(incoming.updatedAt) || cutoff, cutoff),
+    activeMs: Math.max(0, Math.min(Number(incoming.activeMs) || 0, 30 * 60 * 1000, cutoff - incoming.startedAt))
+  };
+  if (incoming.extractedText !== undefined) capture.extractedText = String(incoming.extractedText).slice(0, 8000);
+  if (message.final) capture.endedAt = Math.min(Number(incoming.endedAt) || cutoff, cutoff);
+  return captures.submit(capture, { final: !!message.final });
 }
 
 // ---- pause switch (§2.7) ----------------------------------------------
 
 async function setCapturePaused(paused) {
   await store.open();
+  await flushCaptures();
   const intervals = (await store.getSetting('pauseIntervals')) || [];
   const now = Date.now();
   if (paused) {
@@ -85,35 +122,36 @@ async function mirrorSettingsForContentScripts() {
 // ---- Ollama health (condition 3) --------------------------------------
 
 async function ollamaHealthy() {
+  return (await ollamaHealth()).ready;
+}
+
+async function ollamaHealth() {
+  let timer;
   try {
     await store.open();
     const settings = await store.getSettingsMap();
-    const embedModel = settings.embeddingModel || 'bge-m3:latest';
-    const chatModel = settings.chatModel || 'gemma3:12b';
+    const embedModel = settings.embeddingModel || CTOllama.DEFAULTS.embeddingModel;
+    const chatModel = settings.chatModel || CTOllama.DEFAULTS.chatModel;
     const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), 4000);
+    timer = setTimeout(() => controller.abort(), 4000);
     const response = await fetch(`${OLLAMA_BASE}/api/tags`, { signal: controller.signal });
-    clearTimeout(timer);
-    if (!response.ok) return false;
+    if (!response.ok) return { ready: false, reachable: true, originRejected: response.status === 403, models: [], missing: [], error: `HTTP ${response.status}` };
     const data = await response.json();
     const models = (data.models || []).map(m => m.name || m.model);
-    return models.includes(embedModel) && models.includes(chatModel);
-  } catch {
-    return false;
+    const missing = [embedModel, chatModel].filter(name => !models.includes(name));
+    return { ready: missing.length === 0, reachable: true, originRejected: false, models, missing, error: null };
+  } catch (error) {
+    return { ready: false, reachable: false, originRejected: false, models: [], missing: [], error: error.name === 'AbortError' ? 'Connection timed out' : 'Ollama is not reachable' };
+  } finally {
+    clearTimeout(timer);
   }
 }
 
 // ---- offscreen lifecycle (§1.2) ---------------------------------------
 
-// Set while a wipe is running so nothing writes underneath it.
-let deletionInProgress = false;
-
 async function closeOffscreenDocument() {
-  try {
-    if (await offscreenExists()) await chrome.offscreen.closeDocument();
-  } catch (error) {
-    console.warn('could not close offscreen document', error);
-  }
+  if (await offscreenExists()) await chrome.offscreen.closeDocument();
+  if (await offscreenExists()) throw new Error('Analysis is still running; storage was not deleted.');
 }
 
 async function offscreenExists() {
@@ -147,7 +185,7 @@ async function startPipeline(trigger, force) {
   // A service-worker restart does not fire onStartup, so sweep here too:
   // this is the moment a stale `running` row actually matters.
   await markAbandonedRuns();
-  if (await pipelineIsRunning()) {
+  if (Date.now() < pipelineLaunchUntil || await pipelineIsRunning()) {
     await store.put('runs', {
       runId: `run-${Date.now().toString(36)}-skip`,
       startedAt: Date.now(),
@@ -162,6 +200,8 @@ async function startPipeline(trigger, force) {
   if (!(await ollamaHealthy())) {
     return { started: false, reason: 'ollama-unavailable' };
   }
+  const flushed = await flushCaptures();
+  if (flushed.error) return { started: false, reason: 'capture-write-failed' };
   try {
     await chrome.offscreen.createDocument({
       url: 'offscreen/analysis.html',
@@ -172,7 +212,9 @@ async function startPipeline(trigger, force) {
     // Document already exists: fine, message it instead.
     if (!(await offscreenExists())) throw error;
   }
-  await chrome.runtime.sendMessage({ type: 'RUN_PIPELINE', trigger, force: !!force });
+  pipelineLaunchUntil = Date.now() + HEARTBEAT_FRESH_MS;
+  try { await chrome.runtime.sendMessage({ type: 'RUN_PIPELINE', trigger, force: !!force }); }
+  catch (error) { pipelineLaunchUntil = 0; throw error; }
   return { started: true };
 }
 
@@ -207,21 +249,22 @@ async function dailyAlarmFired() {
   const dueByTime = !lastOk || now - lastOk.startedAt > RUN_MIN_INTERVAL_MS;
   let dueByVolume = false;
   if (!dueByTime) {
-    dueByVolume = (await newVisitCountSinceWatermark()) >= RUN_NEW_VISIT_TRIGGER;
+    // A bounded run can leave deliberate pending work. The next hourly idle
+    // gate should drain it without waiting another 20 hours or spinning.
+    const pages = await store.getAll('pages');
+    dueByVolume = pages.some(page => page.needsEmbedding || page.needsClassification) ||
+      (await newVisitCountSinceWatermark()) >= RUN_NEW_VISIT_TRIGGER;
   }
   if (!dueByTime && !dueByVolume) return;
 
-  // Condition 2: user idle, or the quiet overnight window, unless disabled or starved.
+  // Idle means Chrome reports idle/locked, at any hour. Never override an
+  // enabled gate because the clock is late or a busy laptop stayed busy.
   const idleGating = settings.idleGatingEnabled !== false;
-  const hour = new Date().getHours();
-  const nightWindow = hour >= 2 && hour < 5;
   const idleState = await queryIdleState(120);
   const machineIdle = idleState === 'idle' || idleState === 'locked';
-  if (idleGating && !machineIdle && !nightWindow) {
-    const blockedSince = settings.runBlockedSince || now;
+  if (idleGating && !machineIdle) {
     if (!settings.runBlockedSince) await store.setSetting('runBlockedSince', now);
-    if (now - blockedSince < IDLE_STARVATION_MS) return;
-    console.warn('idle gating starved for >36h; running anyway');
+    return;
   }
   await store.setSetting('runBlockedSince', null);
 
@@ -279,87 +322,140 @@ async function runRetention() {
   }
 }
 
+function deleteEverything() {
+  if (deletionPromise) return deletionPromise;
+  deletionInProgress = true;
+  deletionPromise = (async () => {
+    // Stop sensors immediately; outstanding messages are rejected by the gate.
+    await chrome.storage.local.set({ ctPaused: true });
+    await writerChain;
+    await captures.discardAndDrain();
+    await closeOffscreenDocument();
+    await store.open();
+    await store.wipe();
+    pipelineLaunchUntil = 0;
+    const deletedAt = Date.now();
+    // These are privacy controls, not retained browsing data. The cutoff
+    // prevents a future history import from silently restoring deleted pages.
+    await store.setSetting('historyImportAfter', deletedAt);
+    await store.setSetting('pauseIntervals', [{ start: deletedAt, end: null }]);
+    await chrome.storage.local.clear();
+    await chrome.storage.local.set({ ctPaused: true, ctDenylist: [], ctLlmChatDomains: [] });
+    return { ok: true, paused: true, historyImportAfter: deletedAt };
+  })().finally(() => {
+    captures.resume();
+    deletionInProgress = false;
+    deletionPromise = null;
+  });
+  return deletionPromise;
+}
+
+function maintenance() {
+  return withWriter(async () => {
+    await markAbandonedRuns();
+    const settings = await store.getSettingsMap();
+    if (!settings.laptopProfileVersion) {
+      const rows = [{ key: 'laptopProfileVersion', value: 1 }];
+      if (settings.chatModel === 'gemma3:12b') rows.push(
+        { key: 'previousChatModel', value: settings.chatModel }, { key: 'chatModel', value: CTOllama.DEFAULTS.chatModel });
+      if (Number(settings.maxNewPagesPerRun) > 200) rows.push({ key: 'maxNewPagesPerRun', value: 100 });
+      await store.bulkPut('settings', rows);
+    }
+    await runRetention();
+    await mirrorSettingsForContentScripts();
+  });
+}
+
 chrome.runtime.onInstalled.addListener(() => {
   installOllamaOriginRules();
   ensureAlarms();
-  markAbandonedRuns();
-  runRetention();
-  mirrorSettingsForContentScripts();
+  maintenance();
 });
 
 chrome.runtime.onStartup.addListener(() => {
   installOllamaOriginRules();
   ensureAlarms();
-  markAbandonedRuns();
-  runRetention();
-  mirrorSettingsForContentScripts();
+  maintenance();
 });
 
 chrome.alarms.onAlarm.addListener(alarm => {
-  if (alarm.name === FLUSH_ALARM) flushCaptures();
-  if (alarm.name === DAILY_ALARM) dailyAlarmFired();
-  if (alarm.name === RETENTION_ALARM) runRetention();
+  if (alarm.name === FLUSH_ALARM) withWriter(flushCaptures);
+  if (alarm.name === DAILY_ALARM) withWriter(dailyAlarmFired);
+  if (alarm.name === RETENTION_ALARM) withWriter(runRetention);
 });
 
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   switch (message && message.type) {
     case 'CAPTURE_UPDATE':
-      handleCaptureUpdate(message, sender).then(sendResponse, error => {
+      withWriter(() => handleCaptureUpdate(message, sender), { ok: false, textStored: false }).then(sendResponse, error => {
         console.warn('capture update failed', error);
         sendResponse({ ok: false, textStored: false });
       });
       return true;
     case 'RUN_PIPELINE_MANUAL':
       // Manual run bypasses freshness and idle gating, not the Ollama check.
-      startPipeline('manual', true).then(sendResponse, error => sendResponse({ started: false, reason: String(error) }));
+      withWriter(() => startPipeline('manual', true), { started: false, reason: 'deletion-in-progress' }).then(sendResponse, error => sendResponse({ started: false, reason: String(error) }));
       return true;
     case 'RUN_COMPLETE':
-      flushCaptures();
-      maybeNotify(message.brief);
-      sendResponse({ ok: true });
-      return false;
+      pipelineLaunchUntil = 0;
+      withWriter(async () => {
+        await flushCaptures();
+        await maybeNotify(message.brief);
+        return { ok: true };
+      }).then(sendResponse, error => sendResponse({ ok: false, error: String(error) }));
+      return true;
     case 'SET_CAPTURE_PAUSED':
-      setCapturePaused(!!message.paused).then(sendResponse, error => sendResponse({ error: String(error) }));
+      withWriter(() => setCapturePaused(!!message.paused)).then(sendResponse, error => sendResponse({ error: String(error) }));
       return true;
     case 'SETTINGS_UPDATED':
-      mirrorSettingsForContentScripts().then(() => sendResponse({ ok: true }));
+      withWriter(mirrorSettingsForContentScripts).then(() => sendResponse({ ok: true }), error => sendResponse({ ok: false, error: String(error) }));
       return true;
+    case 'SAVE_TRAIL_METADATA':
+      withWriter(async () => {
+        const row = message.row;
+        if (!row || row.kind !== 'trail_metadata' || typeof row.targetId !== 'string') throw new Error('Invalid trail note');
+        await store.open();
+        if (!await store.get('topics', row.targetId)) throw new Error('Trail no longer exists');
+        const previous = await store.get('corrections', `trail:${row.targetId}`);
+        await store.put('corrections', CTTrails.makeCorrection(row.targetId, row.value || {}, Date.now(), previous));
+        return { ok: true };
+      }).then(sendResponse, error => sendResponse({ ok: false, error: error.message }));
+      return true;
+    case 'SAVE_PREFERENCES':
+      withWriter(async () => {
+        await store.open(); await store.saveEditableSettings(message.values);
+        await mirrorSettingsForContentScripts(); return { ok: true };
+      }).then(sendResponse, error => sendResponse({ ok: false, error: error.message }));
+      return true;
+    case 'GET_STATUS':
     case 'GET_CAPTURE_STATUS': {
       store.open()
         .then(async () => {
           const intervals = (await store.getSetting('pauseIntervals')) || [];
-          const healthy = await ollamaHealthy();
+          const health = await ollamaHealth();
+          const runs = await store.getAll('runs');
+          const pages = await store.getAll('pages');
           sendResponse({
             paused: intervals.some(i => i.end == null),
-            ollama: healthy,
-            buffered: captures.size
+            ollama: health.ready,
+            health,
+            buffered: captures.size,
+            lastRun: runs.sort((a, b) => b.startedAt - a.startedAt)[0] || null,
+            pending: pages.filter(page => page.needsEmbedding || page.needsClassification).length
           });
         })
         .catch(error => sendResponse({ error: String(error) }));
       return true;
     }
+    case 'GET_IDLE_STATE':
+      queryIdleState(120).then(state => sendResponse({ state }), error => sendResponse({ error: String(error) }));
+      return true;
     case 'DELETE_EVERYTHING': {
-      // Order matters: refuse new work, discard what is in flight, and only
-      // then wipe. Otherwise a buffered capture or a running pipeline writes
-      // data back moments after the user asked for it all to be gone.
-      (async () => {
-        deletionInProgress = true;
-        try {
-          captures.clear();
-          await closeOffscreenDocument();
-          await store.open();
-          await store.wipe();
-          await new Promise(resolve => chrome.storage.local.clear(resolve));
-          captures.clear(); // anything that arrived while we were wiping
-          return { ok: true };
-        } finally {
-          deletionInProgress = false;
-        }
-      })().then(sendResponse, error => sendResponse({ ok: false, error: String(error) }));
+      deleteEverything().then(sendResponse, error => sendResponse({ ok: false, error: String(error) }));
       return true;
     }
     case 'FLUSH_CAPTURES':
-      flushCaptures().then(() => sendResponse({ ok: true }));
+      withWriter(flushCaptures).then(result => sendResponse({ ok: !result?.error && result?.ok !== false }), error => sendResponse({ ok: false, error: String(error) }));
       return true;
     case 'HISTORY_SEARCH':
       // History proxy for the offscreen document (it cannot call
@@ -371,14 +467,16 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       return true;
     case 'TEST_FIRE_ALARM': {
       // Exposed only in test mode for the e2e suite (§7.7).
-      store.open()
+      withWriter(() => store.open()
         .then(() => store.getSetting('testMode'))
-        .then(testMode => {
-          if (!testMode) return sendResponse({ ok: false, reason: 'not in test mode' });
-          if (message.alarm === FLUSH_ALARM) return flushCaptures().then(() => sendResponse({ ok: true }));
-          return dailyAlarmFired().then(() => sendResponse({ ok: true }));
-        })
-        .catch(error => sendResponse({ ok: false, reason: String(error) }));
+        .then(async testMode => {
+          if (!testMode) return { ok: false, reason: 'not in test mode' };
+          if (message.alarm === FLUSH_ALARM) await flushCaptures();
+          else if (message.alarm === RETENTION_ALARM) await runRetention();
+          else await dailyAlarmFired();
+          return { ok: true };
+        }))
+        .then(sendResponse, error => sendResponse({ ok: false, reason: String(error) }));
       return true;
     }
     case 'TEST_SET_SETTING': {
@@ -389,7 +487,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         sendResponse({ ok: false, reason: 'key not allowed' });
         return false;
       }
-      store.open().then(() => store.setSetting(message.key, message.value))
+      withWriter(() => store.open().then(() => store.setSetting(message.key, message.value)))
         .then(() => sendResponse({ ok: true }), error => sendResponse({ ok: false, reason: String(error) }));
       return true;
     }

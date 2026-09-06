@@ -45,38 +45,25 @@ function makeCluster(overrides) {
   };
 }
 
-// --- match score boundaries: overlap 0 so score = 0.7 * cosine.
-// score 0.79/0.80/0.81 <=> cosine ~ 1.1286/1.1429/... impossible with pure
-// cosine, so boundary tests inject overlap via memberships instead.
+// New clusters have no membership overlap in production. The full cosine
+// scale must be reachable without manufacturing overlap in the test.
 {
-  // cosine such that 0.7*cos = target - 0.3*overlapShare. Use overlap 1.0
-  // (both cluster pages in recent memberships): score = 0.7*cos + 0.3.
-  const memberships = [
-    { topicId: 'topic-a', normalizedUrl: 'https://new.example/1', lastDay: '2026-03-09' },
-    { topicId: 'topic-a', normalizedUrl: 'https://new.example/2', lastDay: '2026-03-09' }
-  ];
-  const scoreCase = (targetScore) => {
-    const cos = (targetScore - 0.3) / 0.7;
-    const decisions = CTRegistry.matchNewClusters(
-      [makeCluster({ centroid: vecAt(cos) })],
-      [makeTopic()],
-      memberships,
-      { today: '2026-03-10' }
-    );
-    return decisions[0];
-  };
-  assert.strictEqual(scoreCase(0.79).action, 'create', 'score 0.79 must not merge');
-  assert.ok(scoreCase(0.79).nearMiss, 'score 0.79 records a near-miss');
-  assert.strictEqual(scoreCase(0.801).action, 'merge', 'score just above 0.80 merges');
-  assert.strictEqual(scoreCase(0.81).action, 'merge');
-  assert.strictEqual(scoreCase(0.66).action, 'create');
-  assert.ok(scoreCase(0.66).nearMiss, 'score 0.66 is a near-miss create');
+  const scoreCase = score => CTRegistry.matchNewClusters(
+    [makeCluster({ centroid: vecAt(score) })], [makeTopic()], [], { today: '2026-03-10' }
+  )[0];
+  assert.strictEqual(scoreCase(0.79).action, 'create');
+  assert.ok(scoreCase(0.79).nearMiss);
+  assert.strictEqual(scoreCase(0.801).action, 'merge');
+  assert.strictEqual(scoreCase(0.99).action, 'merge', 'new URLs can join an existing subject');
+  assert.ok(scoreCase(0.651).nearMiss);
+  assert.ok(!scoreCase(0.64).nearMiss);
   assert.deepStrictEqual(scoreCase(0.66).lineageParents, ['topic-a']);
-  assert.strictEqual(scoreCase(0.64).action, 'create');
-  assert.ok(!scoreCase(0.64).nearMiss, 'score 0.64 is a plain create');
-  // exact boundaries
-  assert.strictEqual(scoreCase(0.80).action, 'merge', 'score exactly 0.80 merges (>=)');
-  assert.ok(scoreCase(0.65).nearMiss, 'score exactly 0.65 is a near-miss (>=)');
+  const overlap = new Map([['topic-a', new Set(makeCluster().pages.map(p => p.normalizedUrl))]]);
+  const cfg = CTRegistry.DEFAULTS;
+  const withOverlap = CTRegistry.matchScore(makeCluster({ centroid: vecAt(0.75) }), makeTopic(), overlap, cfg);
+  assert.ok(Math.abs(withOverlap - 0.825) < 1e-6, 'overlap is a bounded boost');
+  assert.strictEqual(CTRegistry.matchNewClusters([makeCluster()], [makeTopic({ state: 'retired' })], [], {})[0].action,
+    'create', 'retired identities never absorb a cluster');
 }
 
 // --- two new clusters -> one existing topic: both merge, one absorption event
@@ -341,4 +328,25 @@ function makeCluster(overrides) {
   assert.strictEqual(fallback[0].dwellMs, 10 * 60000, 'falls back to the page object when no totals are supplied');
 }
 
+// An overlapping rerun with no additional dwell cannot shift a centroid.
+{
+  const topic = makeTopic();
+  const cluster = makeCluster({ centroid: Float32Array.from([0, 1]) });
+  const memberships = new Map(cluster.pages.map(p => [CTRegistry.membershipKey(topic.topicId, p.normalizedUrl),
+    { ...p, topicId: topic.topicId }]));
+  const result = CTRegistry.applyMatches([{ action: 'merge', topicId: topic.topicId, cluster }],
+    new Map([[topic.topicId, topic]]), memberships, { today: '2026-03-10', now: 1000 });
+  assert.deepStrictEqual(Array.from(result.topicRows[0].centroid), Array.from(topic.centroid));
+}
+
 console.log('registry tests passed');
+
+// Finishing a backlog is not evidence that a dormant subject was revisited.
+{
+  const dormant = makeTopic({ state: 'dormant', lastActiveDay: '2026-03-14' });
+  const result = CTRegistry.applyMatches(
+    [{ action: 'merge', topicId: dormant.topicId, cluster: makeCluster() }],
+    new Map([[dormant.topicId, dormant]]), new Map(), { today: '2026-03-28', runId: 'backlog' });
+  assert.equal(result.topicRows[0].state, 'dormant');
+  assert.ok(!result.events.some(e => e.type === 'revived'));
+}
