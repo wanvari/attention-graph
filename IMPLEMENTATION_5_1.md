@@ -1,10 +1,10 @@
 # Cognitive Trails 5.1 implementation and resume checklist
 
-Branch: `v4` → `origin/v4` (GitHub: wanvari/attention-graph). Push each verified milestone. Baseline: `396929f`; pre-rebuild checkpoint: `58cf412`. No merge into main is requested.
+Branch: `main` → `origin/main` (GitHub: wanvari/attention-graph). The user requested promotion to main on September 8, 2026. The verified release through `73fda68` was fast-forwarded from `v4`, preserving all commits. Push subsequent verified milestones to main. Baseline: `396929f`; pre-rebuild checkpoint: `58cf412`.
 
 ## Resume here
 
-Status: implementation and installed verification complete. Release 5.1.0 is installed; database schema 5 and evidence-repair version 2 applied. Implementation commit cd76c5a is pushed to origin/v4; a final verification/copy checkpoint follows. The actual Claude Status record is repaired: 35s recorded interaction, 211 navigation entries preserved, 129 unknown-duration entries explicitly labeled, no automatic membership. Final runtime edits clarify unknown versus zero time and call passive visit groups “episodes” to distinguish optional sessions. No outstanding implementation blocker. Future work should start from this checkpoint and the documented pilot limitations, not restart the build.
+Status: implementation and installed verification complete. Release 5.1.0 is installed; database schema 5 and evidence-repair version 2 applied. Implementation commit `cd76c5a` and final verification/copy checkpoint `73fda68` are included on main. The actual Claude Status record is repaired: 35s recorded interaction, 211 navigation entries preserved, 129 unknown-duration entries explicitly labeled, no automatic membership. Final runtime edits clarify unknown versus zero time and call passive visit groups “episodes” to distinguish optional sessions. No outstanding implementation blocker. Future work should start from this checkpoint and the documented pilot limitations, not restart the build.
 
 ## Accepted product decisions
 
@@ -75,3 +75,8 @@ Status: implementation and installed verification complete. Release 5.1.0 is ins
 - Live read-only diagnostics confirm **schema 5**, stored page and visit totals **35,000ms**, **211 original status-page entries**, and **empty automatic membership**. The normal Home page drawer independently shows **35s**, explicitly labels unknown visit duration, and discloses **129 unknown-duration entries**. Missing history gaps are excluded rather than presented as observed zeros.
 - Home/rings load against the live record. A final copy pass distinguishes passive recorded **episodes** from opt-in **sessions**, keeps sub-minute evidence in seconds, and labels unknown durations in search and evidence lists. Added a DOM regression; UI/copy checks pass. Backend/inference are unchanged by this final copy pass.
 - All six implementation milestones are complete. Private diagnostic backups remain ignored locally; the distributed archive contains only runtime assets and a synthetic sample. Release documents retain the actual limits: one measured M3 Pro, mixed-page grouping weaknesses, no human-quality validation or store publication.
+
+### Main promotion (September 8, 2026)
+
+- Promoted the verified 5.1 release from v4 to main by fast-forward, preserving the full commit history. No merge conflicts or runtime changes.
+- Updated this resume checklist to track main going forward. Validation remains the completed 33 test files and capture, live pipeline, and packaged-product E2E checks; this promotion changes only the branch and checklist.
