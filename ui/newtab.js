@@ -10,12 +10,7 @@
   'use strict';
   const number = value => Number(value || 0).toLocaleString();
   const count = (value, noun) => `${number(value)} ${noun}${value === 1 ? '' : 's'}`;
-  function duration(ms) {
-    if (!ms) return '0m';
-    const minutes = Math.round(ms / 60000);
-    if (!minutes) return '<1m';
-    return minutes >= 60 ? `${Math.floor(minutes / 60)}h${minutes % 60 ? ` ${minutes % 60}m` : ''}` : `${minutes}m`;
-  }
+  const duration = CTDailyView.duration;
   const clock = at => new Date(at).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
   const date = (at, full) => new Date(at).toLocaleDateString(undefined, { month: full ? 'long' : 'short', day: 'numeric', year: full ? 'numeric' : undefined });
 
@@ -228,7 +223,7 @@
       const heading = el('h3');
       const open = button(trail.label, 'nt-trail-title', () => openTrail(trail.id, true));
       heading.appendChild(open); card.appendChild(heading);
-      card.appendChild(el('p', 'nt-trail-meta', `${count(trail.pageCount, 'page')} · ${count(trail.sourceCount, 'website')} · ${trail.returnDays ? `returned on ${count(trail.returnDays, 'later day')}` : 'first recorded day'}${trail.dayCount > 1 ? ` · ${count(trail.episodes.length, 'session')}` : ''}`));
+      card.appendChild(el('p', 'nt-trail-meta', `${count(trail.pageCount, 'page')} · ${count(trail.sourceCount, 'website')} · ${trail.returnDays ? `returned on ${count(trail.returnDays, 'later day')}` : 'first recorded day'}${trail.dayCount > 1 ? ` · ${count(trail.episodes.length, 'episode')}` : ''}`));
       if (trail.personal.note) card.appendChild(el('p', 'nt-card-note', trail.personal.note));
       const previews = el('div', 'nt-previews');
       const seen = new Set();
@@ -280,7 +275,7 @@
       content.appendChild(button('Start session in this trail', 'nt-secondary-button', () => dailyView.startSession(trail)));
       const sessionHeading = el('div', 'nt-section-heading nt-recent-heading');
       sessionHeading.appendChild(el('h3', null, 'The pages along this trail'));
-      content.append(sessionHeading, el('p', 'nt-help', 'Sessions start after a 30-minute gap between visits in this trail, or on a new day. Pages are ordered by visit time.'));
+      content.append(sessionHeading, el('p', 'nt-help', 'Recorded episodes start after a 30-minute gap between visits in this trail, or on a new day. Pages are ordered by visit time.'));
       const sessions = trail.episodes.slice().reverse();
       for (const session of sessions.slice(0, limit)) {
         const block = el('section', 'nt-episode');
@@ -288,7 +283,7 @@
         header.append(el('h4', null, date(session.firstAt, true)), el('span', null, `${clock(session.firstAt)}${session.events.length > 1 ? ` – ${clock(session.lastAt)}` : ''} · ${count(session.events.length, 'visit')}`));
         block.appendChild(header); drawVisitList(session.events, block, false); content.appendChild(block);
       }
-      if (sessions.length > limit) content.appendChild(button('Show earlier sessions', 'nt-secondary-button nt-load-more', () => { limit += 20; drawContent(); }));
+      if (sessions.length > limit) content.appendChild(button('Show earlier episodes', 'nt-secondary-button nt-load-more', () => { limit += 20; drawContent(); }));
     }
     function drawVisitList(events, target, paginate) {
       const list = el('ol', 'nt-visit-list');
@@ -301,7 +296,7 @@
         meta.querySelector('time').dateTime = new Date(event.time).toISOString();
         if (!event.topicIds.length) meta.appendChild(el('span', 'nt-ungrouped', 'No topic yet'));
         if (event.pending) meta.appendChild(el('span', 'nt-ungrouped', 'Recent capture'));
-        meta.appendChild(el('span', 'nt-visit-time', `${duration(event.dwellMs)} estimated · this visit`));
+        meta.appendChild(el('span', 'nt-visit-time', event.timingMethod.endsWith('unknown') ? 'Duration unknown · this visit' : `${duration(event.dwellMs)} estimated · this visit`));
         body.appendChild(meta);
         body.appendChild(button('Inspect page & grouping', 'nt-text-button', () => dailyView.openPage(event)));
         row.appendChild(body);
@@ -340,7 +335,7 @@
       if (summary.pendingCount) card.appendChild(el('p', 'nt-help', `${count(summary.pendingCount, 'recent capture')} included before history processing.`));
       const method = el('details', 'nt-method'); method.appendChild(el('summary', null, 'What these numbers mean'));
       method.appendChild(el('p', null, 'Visits are recorded page openings. Repeated visits remain separate. A returned day is a date after the first recorded date, using this device’s local time. Websites count distinct hostnames.'));
-      method.appendChild(el('p', null, 'Timestamped activity preserves breaks and revisits. Older interaction totals and history gaps have estimated placement. Gaps are capped at 30 minutes, with a one-minute allowance at a session end. Overlapping tabs count once across the whole record.'));
+      method.appendChild(el('p', null, 'Timestamped activity preserves breaks and revisits. Older interaction totals and history gaps have estimated placement. Gaps are capped at 30 minutes, with a one-minute allowance after the last visit in a browsing sequence. Overlapping tabs count once across the whole record.'));
       method.appendChild(el('p', null, 'These are browser observations, not a measure of attention or thinking. Other apps and devices, private browsing, paused intervals, and excluded pages are outside this record. Silent reading can be undercounted.'));
       card.appendChild(method); aside.appendChild(card);
       const local = el('section', 'nt-local-card');

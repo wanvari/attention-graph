@@ -4,7 +4,7 @@ Branch: `v4` → `origin/v4` (GitHub: wanvari/attention-graph). Push each verifi
 
 ## Resume here
 
-Status: release verification complete; GitHub push and installed-extension update remain. Implemented dashboard, sessions, corrections, shared evidence/Map/Audit, operational-page timing fix and schema 5. The installed Claude Status case was diagnosed on a private read-only copy: ~805m in history-gap totals versus 35s of captured interaction; repair retains 35s and removes automatic membership. Private originals are preserved under ignored .tmp/private-diagnostics. Next: commit/push all public changes, reload the installed extension, verify schema/version/35s/no membership without changing raw visits, and record the result here. Do not restart completed work.
+Status: implementation and installed verification complete. Release 5.1.0 is installed; database schema 5 and evidence-repair version 2 applied. Implementation commit cd76c5a is pushed to origin/v4; a final verification/copy checkpoint follows. The actual Claude Status record is repaired: 35s recorded interaction, 211 navigation entries preserved, 129 unknown-duration entries explicitly labeled, no automatic membership. Final runtime edits clarify unknown versus zero time and call passive visit groups “episodes” to distinguish optional sessions. No outstanding implementation blocker. Future work should start from this checkpoint and the documented pilot limitations, not restart the build.
 
 ## Accepted product decisions
 
@@ -22,7 +22,7 @@ Status: release verification complete; GitHub push and installed-extension updat
 - [x] 3. Daily analysis: pure daily signals, same-clock comparisons and quartiles, minimum evidence, coverage/evidence, deterministic continuation.
 - [x] 4. Sessions/backend: schema migration, serial worker messages, durable start/end/reconciliation, alarms, generic notifications, deletion/pause integration, recap.
 - [x] 5. UI: dashboard/rings/comparisons/drawers; precise time scopes and corrections; session controls/recap; responsive and keyboard access; sample record.
-- [ ] 6. Validation/release: full unit/protocol/UI tests, extension E2E, inference/laptop checks, performance, visual QA, documentation/version/package, final commit/push.
+- [x] 6. Validation/release: full unit/protocol/UI tests, extension E2E, inference/laptop checks, performance, visual QA, documentation/version/package, final commit/push.
 
 ## Verification ledger
 
@@ -32,7 +32,7 @@ Status: release verification complete; GitHub push and installed-extension updat
 ## Investigation notes / limitations
 
 - Source investigation found status.claude.com not treated specially; direct assignment only tests centroid cosine >= .78 and bypasses singleton evidence floor. These are verified code behaviors, not a confirmed root cause of the installed 805-minute value.
-- The exact ~805-minute instance was inspected on September 7 using a copy of the installed schema-4 database. Its 211 history entries sum to ~805 minutes; capture totals are 35 seconds. Repeated entries are consistent with background refresh but do not establish visible browsing time. Current calculations exclude unmeasured operational-page gaps and require measured evidence for operational grouping. Applying repair to the installed database still remains.
+- The exact ~805-minute instance was inspected on September 7 using a copy of the installed schema-4 database. Its 211 history entries sum to ~805 minutes; capture totals are 35 seconds. Repeated entries are consistent with background refresh but do not establish visible browsing time. Current calculations exclude unmeasured operational-page gaps and require measured evidence for operational grouping. The installed extension was reloaded to 5.1.0 and live schema-5 diagnostics confirm the repair.
 - All work is local. User data or browser records must not be committed. Use synthetic/minimized regressions; private diagnostic output goes under ignored `.tmp/` only if necessary.
 
 ### Foundation checkpoint
@@ -68,3 +68,10 @@ Status: release verification complete; GitHub push and installed-extension updat
 - Release version **5.1.0** built in `dist/cognitive-trails` and `dist/cognitive-trails-v5.1.0.zip` (~0.34 MiB). Archive checked for private diagnostics, .git, node_modules and model recordings: none included.
 - Latest targeted dashboard test passes. Final full test **33/33** and exact packaged-product E2E **pass**, recorded in `.tmp/tests-5.1.log` and `.tmp/package-5.1.log`; no new model run is needed for these UI/baseline display checks.
 - Only remaining implementation steps: commit/push this milestone, update installed extension, verify live evidence, and mark final checklist. Store publication and independent human/hardware evaluation are outside the authorized local build and remain documented pilot limitations.
+
+### Completed installed verification
+
+- GitHub milestone **cd76c5a** pushed to `origin/v4`. Installed extension was still manifest version 4.0; reloaded through its own Chrome extension controls and verified **5.1.0**. No user history was deleted or replaced with fixtures.
+- Live read-only diagnostics confirm **schema 5**, stored page and visit totals **35,000ms**, **211 original status-page entries**, and **empty automatic membership**. The normal Home page drawer independently shows **35s**, explicitly labels unknown visit duration, and discloses **129 unknown-duration entries**. Missing history gaps are excluded rather than presented as observed zeros.
+- Home/rings load against the live record. A final copy pass distinguishes passive recorded **episodes** from opt-in **sessions**, keeps sub-minute evidence in seconds, and labels unknown durations in search and evidence lists. Added a DOM regression; UI/copy checks pass. Backend/inference are unchanged by this final copy pass.
+- All six implementation milestones are complete. Private diagnostic backups remain ignored locally; the distributed archive contains only runtime assets and a synthetic sample. Release documents retain the actual limits: one measured M3 Pro, mixed-page grouping weaknesses, no human-quality validation or store publication.

@@ -176,6 +176,18 @@ function search(window, document, query) {
 }
 
 (async () => {
+  // Unknown operational durations must not appear as observed zero time.
+  {
+    const m = await mount(async store => {
+      await store.put('visits', { visitId: 'status', url: 'https://status.example.test/', normalizedUrl: 'https://status.example.test/', title: 'Service Status', visitTime: at(5), dwellMs: 1800000 });
+    });
+    search(m.window, m.document, 'Service Status');
+    assert.equal(m.document.querySelector('.nt-content .nt-visit-time').textContent, 'Duration unknown · this visit');
+    click(m.window, textButton(m.document, 'Inspect page & grouping'));
+    assert.ok(m.document.querySelector('dialog').textContent.includes('This visit: duration unknown.'));
+    assert.ok(m.document.querySelector('dialog').textContent.includes('have unknown duration and contribute no time'));
+    await m.close();
+  }
   // A fresh installation offers useful model-independent next steps.
   {
     const m = await mount(null);

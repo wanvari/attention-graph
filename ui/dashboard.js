@@ -9,7 +9,7 @@
   const labels = { continuity: 'Continuity', top: 'Top trail', return: 'Return share', time: 'Estimated time recorded' };
   const percent = value => value === null ? '—' : `${Math.round(value * 100)}%`;
   const minutes = ms => `${Math.round(ms / 60000 * 10) / 10}m`;
-  const duration = ms => ms === 0 ? '0m' : ms < 60000 ? '<1m' : ms < 3600000 ? `${Math.round(ms / 60000)}m` : `${Math.floor(ms / 3600000)}h ${Math.floor(ms / 60000) % 60}m`;
+  const duration = ms => ms === 0 ? '0m' : ms < 1000 ? '<1s' : ms < 60000 ? `${Math.floor(ms / 1000)}s` : ms < 3600000 ? `${Math.round(ms / 60000)}m` : `${Math.floor(ms / 3600000)}h ${Math.floor(ms / 60000) % 60}m`;
   const stamp = at => new Date(at).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
   function mount(container, initial, options = {}) {
     const doc = container.ownerDocument;
@@ -61,7 +61,7 @@
         list.textContent = '';
         for (const e of events.slice(0, limit)) {
           const li = el('li'); li.append(link(e));
-          paragraph(li, `${stamp(e.time)} · this visit: ${duration(T.estimateMs([e], bounds))} estimated · ${e.timingMethod === 'observed-intervals' ? 'timestamped activity' : e.measured ? 'interaction total; placement estimated' : e.timingMethod.endsWith('unknown') ? 'duration unknown' : 'history gap estimate'}`);
+          paragraph(li, `${stamp(e.time)} · this visit: ${e.timingMethod.endsWith('unknown') ? 'duration unknown' : `${duration(T.estimateMs([e], bounds))} estimated`} · ${e.timingMethod === 'observed-intervals' ? 'timestamped activity' : e.measured ? 'interaction total; placement estimated' : e.timingMethod.endsWith('unknown') ? 'duration unknown' : 'history gap estimate'}`);
           li.append(button('Inspect page', 'nt-text-button', () => openPage(e))); list.append(li);
         }
         more.hidden = events.length <= limit;
@@ -165,7 +165,9 @@
       const box = open('Page evidence'); box.append(link(event));
       const visits = record.events.filter(e => e.normalizedUrl === event.normalizedUrl);
       paragraph(box, `${event.domain} · recorded ${stamp(event.time)}`, 'nt-scope');
-      paragraph(box, `This visit: ${duration(event.dwellMs)} estimated. This page across ${visits.length} recorded visit${visits.length === 1 ? '' : 's'}: ${duration(T.estimateMs(visits))} estimated.`, 'nt-drawer-lead');
+      paragraph(box, `This visit: ${event.timingMethod.endsWith('unknown') ? 'duration unknown' : `${duration(event.dwellMs)} estimated`}. This page across ${visits.length} recorded visit${visits.length === 1 ? '' : 's'}: ${duration(T.estimateMs(visits))} estimated.`, 'nt-drawer-lead');
+      const unknown = visits.filter(e => e.timingMethod.endsWith('unknown')).length;
+      if (unknown) paragraph(box, `${unknown} of this page’s ${visits.length} recorded visits have unknown duration and contribute no time to the page total.`);
       for (const id of event.topicIds) {
         const trail = record.trails.find(t => t.id === id);
         if (trail) paragraph(box, `Entire trail “${trail.label}”: ${duration(trail.estimatedMs)} across all recorded dates (${stamp(trail.firstAt)} – ${stamp(trail.lastAt)}). This includes other pages.`);
