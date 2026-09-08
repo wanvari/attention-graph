@@ -1,0 +1,9 @@
+{
+  "generatedAt": "2026-09-07T19:39:34.117Z",
+  "scope": "Synthetic 20,000 visits / 1,000 pages / 100 trails. Node computation only; excludes IndexedDB IO and DOM rendering.",
+  "visits": 20000,
+  "recordMs": 293,
+  "signalsMs": 133,
+  "estimatedMs": 800000000,
+  "todayMs": 30373688
+}

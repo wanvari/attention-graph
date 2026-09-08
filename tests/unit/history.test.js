@@ -55,7 +55,7 @@ function visit(id, visitTime, transition) {
   assert.strictEqual(mk(2100).length, 2, '2.1 s apart stays two events');
 }
 
-// --- same-domain rapid pair also collapses -------------------------------
+// --- same-domain rapid browsing remains separate -------------------------------
 {
   const events = CTHistory.buildVisitEvents(
     [
@@ -68,7 +68,8 @@ function visit(id, visitTime, transition) {
     },
     {}
   );
-  assert.strictEqual(events.length, 1, 'same-domain sub-2s pair collapses even without auto transition');
+  assert.strictEqual(events.length, 2, 'same-domain sub-2s browsing is not evidence of a redirect');
+  assert.strictEqual(events[0].dwellMs, 1000, 'the brief first page retains its own bounded time');
 }
 
 // --- capture-based dwell; ±90 s matching window -------------------------

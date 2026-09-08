@@ -4,10 +4,10 @@
 // are aggregated transitions, and topic ids are stable so corrections attach
 // directly instead of being re-matched by page overlap.
 (function(root, factory) {
-  const api = factory();
+  const api = typeof module !== 'undefined' && module.exports ? factory(require('../lib/text'), require('../lib/trails'), require('../lib/dashboard')) : factory(root.CTText, root.CTTrails, root.CTDashboard);
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   root.CTMapData = api;
-})(typeof globalThis !== 'undefined' ? globalThis : this, function() {
+})(typeof globalThis !== 'undefined' ? globalThis : this, function(CTText, Trails, Dashboard) {
   'use strict';
 
   const TRANSITION_TYPES = {
@@ -64,32 +64,22 @@
     const today = CTText.dayKeyFromMs(now);
     const fromDay = CTText.addDays(today, -(windowDays - 1));
 
-    const [topicRows, memberships, transitionRows, pageRows, metricRows, uncategorizedRows, runRows, visitRows] = await Promise.all([
-      store.getAll('topics'),
-      store.getAll('memberships'),
-      store.getAll('transitions'),
-      store.getAll('pages'),
-      store.getAll('daily_metrics'),
-      store.getAll('uncategorized'),
-      store.getAll('runs'),
-      store.byIndex('visits', 'byDay', store.range(fromDay, today))
-    ]);
-
-    // A membership row carries the page's LIFETIME dwell and visit totals, so
-    // summing those for a 7-day window reported months of attention as if it
-    // happened this week. Window figures come from the visits actually inside
-    // the window instead; memberships only say which topic a page belongs to.
+    const snapshot = await Trails.loadData(store);
+    const record = Trails.buildRecord(snapshot, { now });
+    const [year, month, day] = fromDay.split('-').map(Number);
+    const measured = Dashboard.measure(record, { from: new Date(year, month - 1, day).getTime(), to: now });
+    const topicRows = (snapshot.topics || []).map(t => ({ ...t, label: record.trails.find(r => r.id === t.topicId)?.label || t.label }));
+    const runRows = snapshot.runs || [];
+    const pageRows = [...new Map(record.events.map(e => [e.normalizedUrl, { normalizedUrl: e.normalizedUrl, url: e.url, title: e.title, domain: e.domain, source: e.source }])).values()];
+    const memberships = [...new Map(record.events.filter(e => e.topicIds.length).map(e => [e.normalizedUrl, { normalizedUrl: e.normalizedUrl, topicId: e.topicIds[0] }])).values()];
+    const visitRows = measured.events;
     const windowStatsByUrl = new Map();
-    for (const visit of visitRows) {
-      const entry = windowStatsByUrl.get(visit.normalizedUrl) ||
-        { dwellMs: 0, visitCount: 0, firstSeen: visit.visitTime, lastSeen: visit.visitTime };
-      entry.dwellMs += visit.dwellMs || 0;
-      entry.visitCount++;
-      entry.firstSeen = Math.min(entry.firstSeen, visit.visitTime);
-      entry.lastSeen = Math.max(entry.lastSeen, visit.visitTime);
-      windowStatsByUrl.set(visit.normalizedUrl, entry);
+    for (const event of measured.events) {
+      const entry = windowStatsByUrl.get(event.normalizedUrl) || { dwellMs: 0, visitCount: 0, firstSeen: event.time, lastSeen: event.time };
+      entry.visitCount++; entry.firstSeen = Math.min(entry.firstSeen, event.time); entry.lastSeen = Math.max(entry.lastSeen, event.time);
+      windowStatsByUrl.set(event.normalizedUrl, entry);
     }
-
+    for (const slice of measured.slices) windowStatsByUrl.get(slice.event.normalizedUrl).dwellMs += slice.end - slice.start;
     const pageByUrl = new Map(pageRows.map(p => [p.normalizedUrl, p]));
     // Only memberships whose page was actually visited inside the window.
     const windowMemberships = memberships.filter(m => windowStatsByUrl.has(m.normalizedUrl));
@@ -125,7 +115,7 @@
     }
 
     const visibleTopics = topicRows
-      .filter(topic => topic.state !== 'retired' && evidenceByTopic.has(topic.topicId))
+      .filter(topic => evidenceByTopic.has(topic.topicId))
       .map(topic => {
         const evidence = evidenceByTopic.get(topic.topicId);
         evidence.pages.sort((a, b) =>
@@ -176,72 +166,33 @@
       topic.color = BAND_PALETTES[band][(rank - 1) % BAND_PALETTES[band].length];
     });
 
-    // Aggregate the window's per-day transition rows into edges.
+    // Edges are repeated observed sequences, recomputed after corrections.
+    // A lone sequence stays in the timeline; it is not a stable connection.
     const topicById = new Map(visibleTopics.map(t => [t.id, t]));
     const edges = new Map();
-    for (const row of transitionRows) {
-      if (row.day < fromDay) continue;
-      if (!topicById.has(row.sourceTopicId) || !topicById.has(row.targetTopicId)) continue;
-      const key = `${row.sourceTopicId}->${row.targetTopicId}`;
-      const existing = edges.get(key);
-      if (!existing) {
-        edges.set(key, {
-          id: `transition-${CTText.hashString(key)}`,
-          sourceTopicId: row.sourceTopicId,
-          targetTopicId: row.targetTopicId,
-          sourceLabel: topicById.get(row.sourceTopicId).label,
-          targetLabel: topicById.get(row.targetTopicId).label,
-          similarity: row.similarity ?? 0,
-          type: row.type,
-          label: (TRANSITION_TYPES[row.type] || TRANSITION_TYPES.topic_switch).label,
-          color: (TRANSITION_TYPES[row.type] || TRANSITION_TYPES.topic_switch).color,
-          confidence: row.confidence,
-          rationale: row.uncertain
-            ? 'Local labels disagreed between passes; showing the similarity-based estimate instead.'
-            : 'Observed consecutive visits between these topics.',
-          visitCount: row.visitCount || 0,
-          verified: !!row.verified,
-          uncertain: !!row.uncertain,
-          llmLabeled: !!row.llmLabeled,
-          hourCounts: (row.hourCounts || new Array(24).fill(0)).slice(),
-          representativeVisits: [],
-          days: [row.day]
-        });
-        continue;
-      }
-      existing.visitCount += row.visitCount || 0;
-      existing.days.push(row.day);
-      for (let hour = 0; hour < 24; hour++) {
-        existing.hourCounts[hour] += (row.hourCounts || [])[hour] || 0;
-      }
-      // A day marked uncertain keeps the aggregate honest.
-      if (row.uncertain) existing.uncertain = true;
-      if (row.verified) existing.verified = true;
+    for (const pair of measured.flow.pairs) {
+      const sourceTopicId = pair.from.topicIds[0], targetTopicId = pair.to.topicIds[0];
+      if (!topicById.has(sourceTopicId) || !topicById.has(targetTopicId)) continue;
+      const id = `${sourceTopicId}->${targetTopicId}`, type = pair.same ? 'same_topic_flow' : 'topic_switch';
+      const edge = edges.get(id) || { id, sourceTopicId, targetTopicId, sourceLabel: topicById.get(sourceTopicId).label,
+        targetLabel: topicById.get(targetTopicId).label, type, label: TRANSITION_TYPES[type].label, color: TRANSITION_TYPES[type].color,
+        confidence: 1, similarity: 0, visitCount: 0, days: [], hourCounts: Array(24).fill(0), examples: [],
+        rationale: 'Repeated consecutive recorded visits; this does not establish a shared task.', verified: false, uncertain: false };
+      edge.visitCount++; edge.hourCounts[new Date(pair.to.time).getHours()]++;
+      if (!edge.days.includes(pair.to.day)) edge.days.push(pair.to.day);
+      edge.examples.push({ from: { title: pair.from.title, url: pair.from.url }, to: { title: pair.to.title, url: pair.to.url }, at: pair.to.time });
+      edges.set(id, edge);
     }
-    const transitions = Array.from(edges.values())
-      .sort((a, b) => b.visitCount - a.visitCount || b.confidence - a.confidence);
-
-    // Coverage over the window, from the stored daily metrics.
-    const windowMetrics = metricRows.filter(m => m.day >= fromDay);
-    const activeMs = windowMetrics.reduce((sum, m) => sum + (m.activeMs || 0), 0);
-    const categorizedMs = windowMetrics.reduce((sum, m) => sum + (m.activeMs || 0) * (m.categorizedShare || 0), 0);
-    const visitCount = windowMetrics.reduce((sum, m) => sum + (m.visitCount || 0), 0);
-    const uncoveredTransitions = windowMetrics.reduce((sum, m) => sum + (m.uncoveredTransitions || 0), 0);
-    const windowUncategorized = uncategorizedRows.filter(u => u.day >= fromDay);
+    const transitions = [...edges.values()].filter(e => e.visitCount >= 2).sort((a, b) => b.visitCount - a.visitCount || a.id.localeCompare(b.id));
+    const singleTransitions = [...edges.values()].filter(e => e.visitCount < 2).length;
+    const activeMs = measured.totalMs, categorizedMs = measured.groupedMs, visitCount = measured.coverage.visits;
+    const uncoveredTransitions = measured.flow.uncovered;
     const lastOkRun = runRows.filter(r => r.status === 'ok').sort((a, b) => b.startedAt - a.startedAt)[0] || null;
-
-    const uncategorizedPages = windowUncategorized.map(row => {
-      const page = pageByUrl.get(row.normalizedUrl);
-      return {
-        id: row.normalizedUrl,
-        title: page ? page.title : row.normalizedUrl,
-        url: page ? page.url : row.normalizedUrl,
-        domain: page ? page.domain : '',
-        reason: row.reason,
-        visitCount: page ? page.visitCount : 0,
-        estimatedDwellMs: row.dwellMs || 0,
-        estimatedDwellMinutes: msToMinutes(row.dwellMs)
-      };
+    const ungroupedUrls = new Set(measured.events.filter(e => !e.topicIds.length).map(e => e.normalizedUrl));
+    const uncategorizedPages = [...ungroupedUrls].map(url => {
+      const page = pageByUrl.get(url), stats = windowStatsByUrl.get(url), event = measured.events.find(e => e.normalizedUrl === url);
+      return { id: url, title: page.title, url: page.url, domain: page.domain, reason: event.groupingReason, visitCount: stats.visitCount,
+        estimatedDwellMs: stats.dwellMs, estimatedDwellMinutes: msToMinutes(stats.dwellMs) };
     });
 
     // Flow aggregates over exactly the edges this window drew, so the summary
@@ -261,8 +212,8 @@
 
     return {
       ok: visibleTopics.length > 0,
-      version: 'cognitive-trails-v4',
-      source: 'registry',
+      version: 'cognitive-trails-v5.1',
+      source: 'corrected recorded visits',
       metrics: {
         switching: {
           switchCount,
@@ -276,17 +227,17 @@
       generatedAt: lastOkRun ? new Date(lastOkRun.startedAt).toISOString() : new Date(now).toISOString(),
       fromCache: true,
       windowDays,
-      models: { embedding: 'bge-m3:latest', chat: 'gemma3:12b' },
+      models: { embedding: 'bge-m3:latest', chat: 'qwen3:4b' },
       topics: ranked,
-      transitions,
+      transitions, singleTransitions,
       coverage: {
         days: windowDays,
         visitsExpanded: visitCount,
         estimatedActiveMs: activeMs,
         estimatedActiveMinutes: msToMinutes(activeMs),
-        startTime: windowMetrics.length ? CTText.dayKeyToNoonMs(windowMetrics[0].day) : null,
-        endTime: lastOkRun ? lastOkRun.startedAt : now,
-        dwellMethod: 'estimated from gaps between visits (capped at 30 minutes; session-ending visits count 1 minute), lowered by measured active time when a capture matches'
+        startTime: measured.bounds.from,
+        endTime: now,
+        dwellMethod: 'Timestamped activity where available; older totals and history gaps have estimated placement. Overlapping tabs count once across the record.'
       },
       categorizedCoverage: (() => {
         // Two genuinely different ratios. Reporting the time figure under both
@@ -323,7 +274,7 @@
           ? `${uncoveredTransitions} transitions touched a page with no topic and are excluded from the flow counts.`
           : null,
         uncategorizedPages.length
-          ? `${uncategorizedPages.length} pages were too ambiguous to label and are reported as uncategorized instead of being forced into a topic.`
+          ? `${uncategorizedPages.length} pages are ungrouped; inspect their recorded evidence for the reason.`
           : null
       ].filter(Boolean)
     };

@@ -47,3 +47,13 @@ for (const [zone, date] of [['America/Los_Angeles', '2026-03-09T12:00:00'], ['Am
 const started = performance.now(); for (let i = 0; i < 3; i++) D.buildDailySignals(record);
 assert.ok((performance.now() - started) / 3 < 100, 'daily computation fits the 100ms fixture budget');
 console.log('daily signals, comparisons, boundaries and recap tests passed');
+
+// A day consisting solely of unknown status-page gaps is not a zero-minute
+// comparison day: it has no usable timing evidence.
+{
+  const T = require('../../lib/trails'), D = require('../../lib/dashboard');
+  const now = new Date(2026, 8, 7, 12).getTime();
+  const record = T.buildRecord({ visits: [{ visitId: 'unknown', url: 'https://status.example.test/', title: 'Service status', visitTime: now - 60000, dwellMs: 60000 }] }, { now });
+  const signals = D.buildDailySignals(record);
+  assert.equal(signals.totalMs, 0); assert.equal(signals.time.eligible, false);
+}

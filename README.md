@@ -19,6 +19,20 @@ Search matches titles, website names, suggested topics, personal notes, and date
 
 **Try the recorded sample:** `npm run demo`, then open `http://localhost:8912/ui/demo.html`. It uses the same interface with a committed synthetic record produced by the current local models. It requires neither Ollama nor an extension installation and makes no persistent changes.
 
+## Today and optional sessions
+
+Home shows estimated recorded time and three literal rings. Select any ring to see its formula, counts, contributing pages, timing coverage and comparison details. The continuation card opens your last page or starts an optional session in a selected trail.
+
+| Ring | Calculation | How to use it |
+| --- | --- | --- |
+| Continuity | Same-trail transitions ÷ classified within-session transitions | Inspect where the recorded sequence stayed within a trail or changed trails. |
+| Top trail | Largest trail's estimated minutes ÷ grouped estimated minutes | Identify the subject with the most grouped time and return to its pages. |
+| Return share | Grouped minutes in trails first seen before today ÷ grouped minutes | Find earlier trails that you revisited. |
+
+Comparisons use the preceding 28 local calendar days, each through the same clock time as today. The middle 50% (Tukey quartiles) and median require at least seven eligible days. Continuity requires three classified transitions; time shares require ten grouped minutes. Below (ochre), within (blue) and above (plum) are directions relative to your own record, with no preferred direction. Gray means insufficient evidence. Reloads, repeated URLs, day boundaries, gaps over 30 minutes and ungrouped endpoints do not enter the Continuity denominator.
+
+Sessions are optional: 25, 50 or 90 minutes, or untimed, plus a private next-step note. One session can run at a time. Timed sessions survive a closed tab or worker restart; a generic browser notification opens the recap. The recap shows selected-trail, other-trail and ungrouped estimated time alongside elapsed wall time. Pausing capture ends the session. Corrections can update its grouping later. No session action loads a model.
+
 ## Useful measurements
 
 | Measure | What it actually counts |
@@ -27,15 +41,23 @@ Search matches titles, website names, suggested topics, personal notes, and date
 | Distinct pages | Sanitized page identities. Content query parameters are preserved; different video IDs stay separate. |
 | Websites | Distinct hostnames, not companies or ideas. |
 | Days returned | Local calendar dates after the first recorded visit to a trail. |
-| Sessions | Visits within a trail separated by less than 30 minutes, on the same date. |
-| Estimated browsing time | History gaps capped at 30 minutes and a one-minute allowance at session ends. Available interaction measurements can lower the estimate. Overlapping intervals are counted once on Home. |
+| Recorded episodes | Visits within a trail separated by less than 30 minutes, on the same date. These differ from sessions you explicitly start. |
+| Estimated browsing time | Timestamped activity where available; older interaction totals have estimated placement. Otherwise history gaps are capped at 30 minutes, with a one-minute session-end allowance. Unmeasured status-page gaps remain unknown and contribute no time. Overlaps count once across Home, Map, Audit and recaps. |
 | Coverage | Grouped visits and visits with interaction measurements, each alongside the recorded-visit denominator. |
 
-Time is approximate. Visible, focused pages with recent input are observable; silent reading, other apps, other devices, private browsing, excluded pages, and capture gaps are not. Topic membership can be wrong. Model self-ratings are not calibrated probabilities and are not shown as confidence percentages. The former entropy rings and personal deviation judgments are removed from Home and notifications. Legacy derived fields remain in the database/export for compatibility.
+Time is approximate. Visible, focused pages with recent input are observable; silent reading, other apps, other devices, private browsing, excluded pages, and capture gaps are not. Topic membership can be wrong. Model self-ratings are not calibrated probabilities and are not shown as confidence percentages. There is no composite score or inferred cognitive state. Legacy derived fields remain in the database/export for compatibility.
+
+## Correct an unexpected result
+
+Select **Inspect page & grouping** on a recorded visit. It separates that visit's estimated time, all visits to the page, and the entire trail's time across recorded dates. Move the page to another trail or keep it ungrouped; your choice survives automatic analysis. A trail with no current pages remains available for reassignment.
+
+**Record & privacy → Inspect a page** compares stored totals with the current evidence calculation without changing the database, including legacy schema-4 records. **Recalculate evidence** rebuilds derived time and memberships while preserving raw history and personal corrections. Repeated status-page navigations can be background refreshes, so repetition alone cannot qualify them for grouping. Map lines require at least two recorded sequences in the selected period; a single sequence remains available in the timeline.
+
+Version 5.1 upgrades the database to schema 5. Reload the extension in `chrome://extensions` after updating; older open extension pages can block migration. Reopen Home after reloading. The release uses the existing permissions.
 
 ## Laptop profile
 
-The default is `bge-m3:latest` for embeddings and `qwen3:4b` for short structured labels. Downloads total roughly 3.7 GB. The [current validation report](validation/report-2026-09-05.md) records measured performance on an **M3 Pro with 18 GiB RAM**, including model residency, stage times, backlog completion, and fixture quality.
+The default is `bge-m3:latest` for embeddings and `qwen3:4b` for short structured labels. Downloads total roughly 3.7 GB. The [current validation report](validation/report-2026-09-07.md) records measured performance on an **M3 Pro with 18 GiB RAM**, including model residency, stage times, backlog completion, and fixture quality.
 
 - 100 pending pages and at most 12 new topics per run; configurable page budget is bounded at 200.
 - Embeddings use batches of 8. Labeling uses at most two batches of 6 with four short page excerpts per topic.

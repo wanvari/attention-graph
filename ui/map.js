@@ -501,10 +501,10 @@ class TopicMapVisualizer {
       ${metric(`${this.visibleTopicCount || analysis.topics.length} / ${analysis.topics.length}`, 'topics shown', 'Shown topics are the highest estimated-time topics selected by the Topics control.')}
       ${metric(coverage.visitsExpanded, 'visits read', 'Individual Chrome visit records expanded from the History API. Repeated visits are counted separately.')}
       ${metric(`${categorized.estimatedActiveMinutes || 0}m`, 'mapped estimated time', 'Estimated browsing time represented by the analyzed topic pages. Dwell is estimated from gaps and capped at 30 minutes.')}
-      ${metric(visibleFlows.length, 'flow lines shown', 'Each line is an aggregated pair of consecutive topic visits currently visible in the graph.')}
+      ${metric(visibleFlows.length, 'flow lines shown', 'Each line represents at least two observed sequences between these trails in the selected period.')}
       ${metric(contextSwitches, 'between-topic visits', 'Consecutive visits between page groups below the similarity threshold.')}
       ${metric(`${switches.switchesPerActiveHour}/hr`, 'changes per est. hour', 'Between-topic visits divided by estimated browsing hours.')}
-      <div class="summary-note">Topic coverage: ${formatPercent(categorized.activeTimeCoverage || 0)} of grouped estimated time, ${formatPercent(categorized.visitCoverage || 0)} of visits.</div>
+      <div class="summary-note">Topic coverage: ${formatPercent(categorized.activeTimeCoverage || 0)} of estimated recorded time, ${formatPercent(categorized.visitCoverage || 0)} of visits.</div>
     `;
   }
 
@@ -548,7 +548,7 @@ class TopicMapVisualizer {
         <strong>Flow color</strong>
         ${flowLegend || '<span class="legend-empty">No cross-topic flows shown</span>'}
       </div>
-      <div class="legend-note">Circle area follows estimated browsing time, with a minimum visible size. Line thickness = observed consecutive visits.</div>
+      <div class="legend-note">Circle area follows estimated browsing time, with a minimum visible size. Line thickness = repeated consecutive visits. Single sequences stay in the timeline.</div>
     `;
   }
 
@@ -564,11 +564,11 @@ class TopicMapVisualizer {
           <button type="button" id="evidence-collapse-toggle" class="collapse-toggle" title="${collapsed ? 'Expand' : 'Collapse'}" aria-expanded="${!collapsed}">${collapsed ? '+' : '−'}</button>
         </div>
         <div id="evidence-collapsible" class="evidence-collapsible" ${collapsed ? 'hidden' : ''}>
-          <p>This map groups recorded pages into suggested topics and connects topics that appeared in consecutive visits.</p>
+          <p>This map groups recorded pages into suggested topics and connects topics with at least two recorded consecutive sequences in this period.</p>
           <div class="metric-list">
             <div><strong>Time range</strong><span>${formatDate(analysis.coverage.startTime)} - ${formatDate(analysis.coverage.endTime)}</span></div>
             <div><strong>Graph sectors</strong><span>${this.visibleTopicCount || analysis.topics.length} of ${analysis.topics.length} topics shown</span></div>
-            <div><strong>Topic coverage</strong><span>${formatPercent(analysis.categorizedCoverage?.activeTimeCoverage || 1)} estimated time · ${formatPercent(analysis.categorizedCoverage?.visitCoverage || 1)} visits</span></div>
+            <div><strong>Topic coverage</strong><span>${formatPercent(analysis.categorizedCoverage?.activeTimeCoverage ?? 0)} estimated time · ${formatPercent(analysis.categorizedCoverage?.visitCoverage ?? 0)} visits</span></div>
             <div><strong>Top topic</strong><span>${topTopic ? `${escapeHtml(topTopic.label)} (${topTopic.estimatedDwellMinutes}m est.)` : 'None'}</span></div>
             <div><strong>Uncategorized</strong><span>${uncategorized.pageCount ? `${uncategorized.pageCount} pages (${uncategorized.estimatedDwellMinutes}m est.) too ambiguous to label` : 'None'}</span></div>
             <div><strong>Analyzed</strong><span>${analysis.generatedAt ? `${formatDate(new Date(analysis.generatedAt).getTime())} (${timeAgo(analysis.generatedAt)})` : 'n/a'}</span></div>
@@ -595,9 +595,9 @@ class TopicMapVisualizer {
         <p>${escapeHtml(topic.rationale)}</p>
         <div class="metric-list">
           <div><strong>Time rank</strong><span>#${topic.attentionRank || 'n/a'} · ${escapeHtml(topic.attentionBandLabel || 'Unranked')}</span></div>
-          <div><strong>Estimated time share</strong><span>${formatPercent(topic.attentionShare || 0)} of grouped estimated time</span></div>
+          <div><strong>Estimated time share</strong><span>${formatPercent(topic.attentionShare || 0)} of estimated recorded time</span></div>
           <div><strong>Visits</strong><span>${topic.visitCount}</span></div>
-          <div><strong>Estimated time</strong><span>${topic.estimatedDwellMinutes}m</span></div>
+          <div><strong>Estimated time</strong><span>${topic.estimatedDwellMinutes}m · entire trail in this period</span></div>
           <div><strong>Top domains</strong><span>${topic.topDomains.map(d => escapeHtml(d.domain)).join(', ')}</span></div>
         </div>
         <h3>Evidence pages</h3>
@@ -622,8 +622,10 @@ class TopicMapVisualizer {
         <div class="metric-list">
           <div><strong>Observed transitions</strong><span>${transition.visitCount}</span></div>
           <div><strong>Days observed</strong><span>${(transition.days || []).length}</span></div>
-          <div><strong>Topic similarity</strong><span>${(transition.similarity || 0).toFixed(2)}</span></div>
+
         </div>
+        <h3>Recorded page sequences</h3>
+        ${transitionExamples(transition.examples?.slice(0, 20))}
         <h3>When these movements happened</h3>
         ${hourHistogram(transition.hourCounts)}
         <p>Lines describe consecutive recorded visits between topics. They do not establish a relationship between ideas or explain why you switched.</p>
@@ -642,7 +644,7 @@ class TopicMapVisualizer {
         <div class="metric-list">
           <div><strong>Domain</strong><span>${escapeHtml(page.domain)}</span></div>
           <div><strong>Visits</strong><span>${page.visitCount}</span></div>
-          <div><strong>Estimated time</strong><span>${page.estimatedDwellMinutes}m</span></div>
+          <div><strong>Estimated time</strong><span>${page.estimatedDwellMinutes}m · this page in this period</span></div>
           <div><strong>Last visit</strong><span>${formatDate(page.lastVisitTime)}</span></div>
         </div>
         <a class="evidence-link" href="${escapeAttribute(page.url)}" target="_blank" rel="noreferrer">${escapeHtml(page.url)}</a>
@@ -782,7 +784,7 @@ class TopicMapVisualizer {
   }
 
   topicTooltip(topic) {
-    return `<strong>${escapeHtml(topic.label)}</strong><br>#${topic.attentionRank || '?'} ${escapeHtml(topic.attentionBandLabel || 'topic')}<br>${topic.visitCount} visits · ${topic.estimatedDwellMinutes}m estimated<br>${formatPercent(topic.attentionShare || 0)} of grouped estimated time<br>${topic.pageCount} pages of evidence`;
+    return `<strong>${escapeHtml(topic.label)}</strong><br>#${topic.attentionRank || '?'} ${escapeHtml(topic.attentionBandLabel || 'topic')}<br>${topic.visitCount} visits · ${topic.estimatedDwellMinutes}m estimated<br>${formatPercent(topic.attentionShare || 0)} of estimated recorded time<br>${topic.pageCount} pages of evidence`;
   }
 
   pageTooltip(page) {

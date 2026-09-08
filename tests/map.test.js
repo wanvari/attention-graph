@@ -257,6 +257,23 @@ async function renderMap() {
     assert.ok(/Highest estimated time/.test(legend), 'legend did not render');
   }
 
+  // Repeated edges show actual examples; correcting one page removes stale
+  // connections and transfers exactly its time to the ungrouped denominator.
+  {
+    const { viz, store, window } = await renderMap();
+    const edge = viz.analysis.transitions[0];
+    assert.ok(edge && edge.visitCount >= 2);
+    viz.selectTransition(edge);
+    assert.ok(window.document.getElementById('evidence-panel').textContent.includes(edge.examples[0].from.title));
+    const before = viz.analysis.coverage.estimatedActiveMs;
+    const url = 'https://docs.rs/tokio';
+    await require('../lib/integrity').repair(store, { correction: { correctionId: `page:${url}`, kind: 'page_membership', targetId: url, value: { topicId: null }, updatedAt: Date.now() } });
+    const after = await global.CTMapData.build(store, { windowDays: 30 });
+    assert.equal(after.coverage.estimatedActiveMs, before);
+    assert.equal(after.transitions.length, 0);
+    assert.ok(after.uncategorized.pages.some(p => p.id === url));
+  }
+
   // ---- empty registry takes the honest path, not the failure path ------
   {
     const dom = freshDom();

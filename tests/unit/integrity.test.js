@@ -30,6 +30,9 @@ const seed = () => ({ visits: [
   assert.equal((await store.getAll('memberships')).some(m => m.normalizedUrl === a), false, 'late model commit cannot override the user');
   await I.repair(store, { now });
   assert.equal((await store.get('topics', 'trail')).totalDwellMs, 180000);
+  await I.repair(store, { now, correction: { ...correction, value: { topicId: 'trail' }, updatedAt: now + 1 } });
+  assert.equal((await store.get('pages', a)).classificationReason, null, 'reassignment clears stale exclusions');
+  assert.equal((await store.get('pages', a)).classificationStatus, 'categorized');
   const brief = { url: status, normalizedUrl: status, title: 'Claude Status', visitCount: 1, dwellMs: 8000, activeMs: 8000, embedding: [1, 0] };
   const cfg = { memberVectorsByTopic: new Map([['x', [[1, 0], [1, 0]]]]) };
   const topics = [{ topicId: 'x', state: 'active', centroid: [1, 0] }];
@@ -47,5 +50,15 @@ const seed = () => ({ visits: [
     { visitId: 'old', url: a, visitTime: start, dwellMs: 10000 }, { visitId: 'new', url: b, visitTime: start + 5000, dwellMs: 10000 }
   ] }, { now });
   assert.equal(overlap.estimatedMs, 15000); assert.equal(overlap.events.reduce((n, e) => n + e.dwellMs, 0), 15000);
+  const refreshes = seed();
+  refreshes.visits = Array.from({ length: 211 }, (_, i) => ({ visitId: `refresh-${i}`, normalizedUrl: status, url: status, title: 'Claude Status', visitTime: start - i * 3600000, dwellMs: 1800000, transition: 'link' }));
+  refreshes.captures = [{ captureId: 'active-total', url: status, normalizedUrl: status, startedAt: start, activeMs: 35000 }];
+  const refreshed = T.buildRecord(refreshes, { now });
+  assert.equal(refreshed.estimatedMs, 35000, 'repeated operational gaps have unknown duration; legacy unfinished active totals are retained');
+  assert.equal(refreshed.events.filter(e => e.timingMethod === 'operational-duration-unknown').length, 210);
+  assert.equal(refreshed.trails.length, 0, 'repetition from operational refreshes cannot satisfy grouping evidence');
+  const overlapping = seed(); overlapping.visits[1].visitTime = start + 1000; overlapping.visits[2].visitTime = start + 2000;
+  const constrained = T.buildRecord(overlapping, { now });
+  assert.equal(constrained.events.find(e => e.id === 'a').topicIds.length, 0, 'grouping uses time left after overlap allocation');
   await store.close(); console.log('evidence integrity and correction regression tests passed');
 })().catch(e => { console.error(e); process.exit(1); });

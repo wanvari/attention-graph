@@ -34,7 +34,8 @@
       await CTNewtab.main({ store, container: document.getElementById('app'), now, readOnly: true,
         trailId: new URLSearchParams(location.search).get('trail'),
         links: { home: 'demo.html', map: 'map.html?demo=1', audit: 'demo.html?view=audit', settings: 'demo.html?view=setup', demo: 'demo.html' } });
-      CTAudit.render(await CTAudit.loadData(store), document, {});
+      const audit = await CTAudit.loadData(store); audit.record = CTTrails.buildRecord(snapshot, { now });
+      CTAudit.render(audit, document, {});
       try {
         const index = await fetch('../validation/index.json').then(r => r.json());
         const report = await fetch(`../validation/${index.latest}`).then(r => r.text());

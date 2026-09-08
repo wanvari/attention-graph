@@ -51,7 +51,7 @@ async function flushAndReadCaptures(extPage) {
     chrome.runtime.sendMessage({ type: 'FLUSH_CAPTURES' }, resolve)
   ));
   return extPage.evaluate(() => new Promise((resolve, reject) => {
-    const request = indexedDB.open('cognitive-trails', 4);
+    const request = indexedDB.open('cognitive-trails');
     request.onsuccess = () => {
       const db = request.result;
       const tx = db.transaction('captures', 'readonly');

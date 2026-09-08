@@ -6,7 +6,6 @@
   if (window.top !== window) return; // all_frames: false, defensive double-check
 
   const ACTIVE_INPUT_WINDOW_MS = 60 * 1000;
-  const ACTIVE_CAP_MS = 30 * 60 * 1000;
   const SEND_INTERVAL_MS = 15 * 1000;
   const MAX_TEXT_CHARS = 8000;
   const MAX_WALK_NODES = 20000;

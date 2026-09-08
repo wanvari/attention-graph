@@ -60,7 +60,7 @@ const send = (page, message) => page.evaluate(
 );
 
 const readStore = (page, storeName) => page.evaluate(name => new Promise((resolve, reject) => {
-  const request = indexedDB.open('cognitive-trails', 4);
+  const request = indexedDB.open('cognitive-trails');
   request.onsuccess = () => {
     const db = request.result;
     const tx = db.transaction(name, 'readonly');
@@ -72,7 +72,7 @@ const readStore = (page, storeName) => page.evaluate(name => new Promise((resolv
 }), storeName);
 
 const writeRun = (page, run) => page.evaluate(row => new Promise((resolve, reject) => {
-  const request = indexedDB.open('cognitive-trails', 4);
+  const request = indexedDB.open('cognitive-trails');
   request.onsuccess = () => {
     const db = request.result;
     const tx = db.transaction('runs', 'readwrite');
@@ -127,7 +127,7 @@ async function main() {
     await check('alarm-triggered run completes; offscreen closes; data lands', async () => {
       const fired = await send(ext, { type: 'TEST_FIRE_ALARM', alarm: 'daily' });
       assert.ok(fired && fired.ok, `alarm fire refused: ${JSON.stringify(fired)}`);
-      // Poll for the run to finish (live gemma labeling can take a minute).
+      // Poll for the run to finish (live local labeling can take a minute).
       let runs = [];
       for (let i = 0; i < 90; i++) {
         await ext.waitForTimeout(2000);
@@ -155,7 +155,7 @@ async function main() {
       assert.ok(topics.length + uncategorized.length >= 1,
         'every ingested page is either in a topic or accounted for as uncategorized');
       const embeddings = await readStore(ext, 'embeddings');
-      assert.ok(embeddings.length >= 3, 'pages were embedded through local Ollama');
+      assert.equal(embeddings.length, 0, 'one-off brief pages are excluded before consuming local embedding work');
 
       // Offscreen document should have closed itself.
       await ext.waitForTimeout(2000);
@@ -163,6 +163,33 @@ async function main() {
         chrome.runtime.getContexts({ contextTypes: ['OFFSCREEN_DOCUMENT'] })
       );
       assert.strictEqual(contexts.length, 0, 'offscreen document closed after the run');
+    });
+
+    await check('revisited pages reach live inference through the offscreen host', async () => {
+      for (const target of ['article.html', 'longpage.html', 'chat.html']) {
+        const host = target === 'chat.html' ? 'claude.ai' : 'news.fixture.test';
+        const page = await context.newPage();
+        await page.goto(`http://${host}:${PORT}/${target}`); await page.mouse.move(100, 100);
+        await page.waitForTimeout(1200); await page.close();
+      }
+      await send(ext, { type: 'FLUSH_CAPTURES' });
+      const before = new Set((await readStore(ext, 'runs')).map(r => r.runId));
+      assert.equal((await send(ext, { type: 'RUN_PIPELINE_MANUAL' })).started, true);
+      let run;
+      for (let i = 0; i < 90; i++) {
+        await ext.waitForTimeout(2000);
+        run = (await readStore(ext, 'runs')).find(r => !before.has(r.runId) && r.status !== 'running');
+        if (run) break;
+      }
+      assert.equal(run?.status, 'ok', run?.error || 'live repeated-page run did not finish');
+      assert.ok((await readStore(ext, 'embeddings')).length >= 3, `supported pages embed through real Ollama: ${JSON.stringify({counts:run.counts,pages:(await readStore(ext, 'pages')).map(p=>({url:p.url,n:p.visitCount,reason:p.classificationReason,pending:p.needsClassification}))})}`);
+      let remaining;
+      for (let i = 0; i < 25; i++) {
+        remaining = await ext.evaluate(() => chrome.runtime.getContexts({ contextTypes: ['OFFSCREEN_DOCUMENT'] }));
+        if (!remaining.length) break;
+        await ext.waitForTimeout(200);
+      }
+      assert.equal(remaining.length, 0, 'offscreen host closes after durable run completion');
     });
 
     await check('stale running row is marked abandoned and does not block a rerun', async () => {

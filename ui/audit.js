@@ -2,10 +2,10 @@
 // honesty, uncategorized by reason, storage, Run now / Export / Delete.
 // Exposed as CTAudit so tests and the demo can drive it with injected data.
 (function(root, factory) {
-  const api = factory();
+  const api = typeof module !== 'undefined' && module.exports ? factory(require('../lib/trails'), require('../lib/dashboard')) : factory(root.CTTrails, root.CTDashboard);
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   root.CTAudit = api;
-})(typeof globalThis !== 'undefined' ? globalThis : this, function() {
+})(typeof globalThis !== 'undefined' ? globalThis : this, function(Trails, Dashboard) {
   'use strict';
 
   function el(tag, className, text) {
@@ -32,16 +32,9 @@
   }
 
   async function loadData(store) {
-    return {
-      runs: await store.getAll('runs'),
-      topics: await store.getAll('topics'),
-      events: await store.getAll('topic_events'),
-      metrics: await store.getAll('daily_metrics'),
-      uncategorized: await store.getAll('uncategorized'),
-      pages: await store.getAll('pages'),
-      corrections: await store.getAll('corrections'),
-      settings: await store.getSettingsMap()
-    };
+    const snapshot = await store.readSnapshot([...Trails.TABLES, 'topic_events', 'daily_metrics', 'uncategorized']);
+    return { ...snapshot, events: snapshot.topic_events, metrics: snapshot.daily_metrics,
+      record: Trails.buildRecord(snapshot), settings: Object.fromEntries(snapshot.settings.map(row => [row.key, row.value])) };
   }
 
   function render(data, doc, hooks) {
@@ -52,7 +45,18 @@
     const coverage = byId('coverage-content');
     coverage.textContent = '';
     const recent = data.metrics.slice().sort((a, b) => b.day.localeCompare(a.day)).slice(0, 14);
-    if (recent.length) {
+    if (data.record) {
+      const end = data.record.now, from = new Date(end); from.setHours(0, 0, 0, 0); from.setDate(from.getDate() - 13);
+      const detail = Dashboard.measure(data.record, { from: from.getTime(), to: end });
+      coverage.appendChild(statRow('Estimated recorded time (14 calendar days)', fmtMinutes(detail.totalMs)));
+      coverage.appendChild(statRow('Grouped share of estimated time', detail.totalMs ? fmtPct(detail.groupedMs / detail.totalMs) : 'No timed evidence'));
+      coverage.appendChild(statRow('Visits with interaction timing', `${detail.coverage.measuredVisits} of ${detail.coverage.visits}`));
+      coverage.appendChild(statRow('Visits with timestamped activity', `${detail.coverage.exactTimingVisits} of ${detail.coverage.visits}`));
+      coverage.appendChild(statRow('Transitions with ungrouped endpoints', detail.flow.uncovered));
+      coverage.appendChild(el('div', 'stat-note', 'Shared with Home and Map: overlapping time counts once. History gaps and older interaction totals remain estimates; missing past measurements cannot be recovered.'));
+      const audit = data.settings.evidenceAudit;
+      if (audit) coverage.appendChild(el('div', 'stat-note', `Last evidence recalculation: ${new Date(audit.checkedAt).toLocaleString()}. Updated ${audit.changedPages} page totals, ${audit.changedVisits} visit totals and removed ${audit.removedMemberships} automatic memberships.`));
+    } else if (recent.length) {
       const activeMs = recent.reduce((sum, m) => sum + m.activeMs, 0);
       const catShare = recent.reduce((sum, m) => sum + m.categorizedShare * m.activeMs, 0) / (activeMs || 1);
       const uncovered = recent.reduce((sum, m) => sum + (m.uncoveredTransitions || 0), 0);
@@ -95,7 +99,11 @@
     const uncategorized = byId('uncategorized-content');
     uncategorized.textContent = '';
     const byReason = new Map();
-    for (const row of data.uncategorized) {
+    const ungrouped = data.record ? [...new Set(data.record.events.filter(e => !e.topicIds.length).map(e => e.normalizedUrl))].map(url => {
+      const events = data.record.events.filter(e => e.normalizedUrl === url);
+      return { reason: events[0].groupingReason, dwellMs: Trails.estimateMs(events) };
+    }) : data.uncategorized;
+    for (const row of ungrouped) {
       const entry = byReason.get(row.reason) || { count: 0, dwellMs: 0 };
       entry.count++;
       entry.dwellMs += row.dwellMs || 0;
@@ -103,7 +111,7 @@
     }
     if (byReason.size) {
       for (const [reason, entry] of [...byReason.entries()].sort((a, b) => b[1].count - a[1].count)) {
-        uncategorized.appendChild(statRow(reason.replace(/_/g, ' '), `${entry.count} pages · ${fmtMinutes(entry.dwellMs)}`));
+        uncategorized.appendChild(statRow(reason.replace(/[_-]/g, ' '), `${entry.count} pages · ${fmtMinutes(entry.dwellMs)}`));
       }
       uncategorized.appendChild(el('div', 'stat-note',
         'These pages are excluded from every topic claim instead of being forced into one.'));
@@ -245,15 +253,29 @@ if (typeof chrome !== 'undefined' && chrome.runtime && chrome.runtime.id &&
       });
     });
 
+    document.getElementById('repair-evidence').addEventListener('click', async event => {
+      event.currentTarget.disabled = true; const button = event.currentTarget;
+      status.textContent = 'Recalculating derived evidence…';
+      try {
+        const result = await chrome.runtime.sendMessage({ type: 'REPAIR_EVIDENCE' });
+        if (!result?.ok) throw new Error(result?.error || 'Recalculation failed.');
+        await refresh(); status.textContent = 'Evidence recalculated. Original history and your grouping choices are preserved.';
+      } catch (error) { status.textContent = error.message; }
+      finally { button.disabled = false; }
+    });
+
     document.getElementById('export-json').addEventListener('click', async () => {
       // Full DB minus extractedText (spec §7.9: exports carry no page text).
-      const dump = await store.readSnapshot(['visits', 'captures', 'pages', 'topics', 'memberships', 'topic_events', 'daily_metrics', 'baselines', 'runs', 'briefs', 'transitions', 'uncategorized', 'corrections', 'settings']);
+      try {
+      const dump = await store.readSnapshot(['visits', 'captures', 'pages', 'topics', 'memberships', 'topic_events', 'daily_metrics', 'baselines', 'runs', 'briefs', 'transitions', 'uncategorized', 'corrections', 'intent_sessions', 'settings']);
       const blob = new Blob([JSON.stringify(dump, null, 1)], { type: 'application/json' });
       const a = document.createElement('a');
       a.href = URL.createObjectURL(blob);
       a.download = `cognitive-trails-export-${CTText.dayKeyFromMs(Date.now())}.json`;
       a.click();
-      URL.revokeObjectURL(a.href);
+      setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+      status.textContent = 'Export prepared. Check your browser downloads.';
+      } catch (error) { status.textContent = `Export failed: ${error.message}`; }
     });
 
     document.getElementById('delete-everything').addEventListener('click', async () => {

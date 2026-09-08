@@ -22,7 +22,8 @@ http.createServer((req, res) => {
   try { urlPath = decodeURIComponent(req.url.split('?')[0]); } catch { res.writeHead(400); res.end(); return; }
   const target = urlPath === '/' ? '/ui/demo.html' : urlPath;
   const full = path.join(root, target);
-  if (!full.startsWith(root + path.sep) || !fs.existsSync(full) || fs.statSync(full).isDirectory()) {
+  const allowed = /^\/(?:ui|lib|vendor)\/[a-zA-Z0-9._-]+$/.test(target) || target === '/fixtures/current/snapshot.json' || /^\/validation\/[a-zA-Z0-9_-]+\.(?:json|md)$/.test(target) || /^\/icon[0-9]+\.png$/.test(target);
+  if (!allowed || !full.startsWith(root + path.sep) || !fs.existsSync(full) || fs.statSync(full).isDirectory()) {
     res.writeHead(404, { 'Content-Type': 'text/plain' });
     res.end('not found');
     return;

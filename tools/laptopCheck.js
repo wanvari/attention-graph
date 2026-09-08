@@ -18,7 +18,7 @@ const report = { generatedAt: new Date().toISOString(), scope: 'Synthetic 28-day
   host: { platform: os.platform(), arch: os.arch(), memoryBytes: os.totalmem(), cpu: os.cpus()[0].model }, profile: O.DEFAULTS, calls: [], runs: [], peakResidentBytes: 0, modelOverlap: false };
 try { report.host.model = execFileSync('sysctl', ['-n', 'hw.model'], { encoding: 'utf8' }).trim(); } catch {}
 const recording = { recordedAt: new Date().toISOString(), chatModel: O.DEFAULTS.chatModel, runDays: [], calls: [] };
-const output = path.join(root, 'validation', 'laptop-2026-09-05.json');
+const output = path.join(root, 'validation', `laptop-${new Date().toISOString().slice(0, 10)}.json`);
 let deadline = Infinity;
 const transport = async (url, opts, timeout) => {
   const started = performance.now();

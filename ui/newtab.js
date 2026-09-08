@@ -2,11 +2,11 @@
 // reads one projected snapshot, and never schedules inference.
 (function(root, factory) {
   const api = typeof module !== 'undefined' && module.exports
-    ? factory(require('../lib/text.js'), require('../lib/trails.js'))
-    : factory(root.CTText, root.CTTrails);
+    ? factory(require('../lib/text.js'), require('../lib/trails.js'), require('./dashboard.js'))
+    : factory(root.CTText, root.CTTrails, root.CTDailyView);
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   root.CTNewtab = api;
-})(typeof globalThis !== 'undefined' ? globalThis : this, function(CTText, CTTrails) {
+})(typeof globalThis !== 'undefined' ? globalThis : this, function(CTText, CTTrails, CTDailyView) {
   'use strict';
   const number = value => Number(value || 0).toLocaleString();
   const count = (value, noun) => `${number(value)} ${noun}${value === 1 ? '' : 's'}`;
@@ -119,6 +119,8 @@
 
     const live = el('p', 'nt-live'); live.setAttribute('role', 'status'); live.setAttribute('aria-live', 'polite');
     shell.appendChild(live);
+    const dashboardHost = el('div', 'nt-daily-host'); shell.appendChild(dashboardHost);
+    let dailyView;
     const layout = el('div', 'nt-layout'); shell.appendChild(layout);
     const content = el('section', 'nt-content'); content.id = 'record-content'; content.tabIndex = -1;
     const aside = el('aside', 'nt-sidebar'); aside.setAttribute('aria-label', 'About this record');
@@ -151,6 +153,7 @@
         await opts.onSaveMetadata(correction);
         data.corrections = (data.corrections || []).filter(row => row.correctionId !== correction.correctionId).concat(correction);
         record = CTTrails.buildRecord(data, { now });
+        dailyView?.update(record);
         drawContent(); drawAside(); announce('Saved on this device.');
       } catch {
         if (target) target.disabled = false;
@@ -274,6 +277,7 @@
         edit.appendChild(form);
       }
       content.appendChild(edit);
+      content.appendChild(button('Start session in this trail', 'nt-secondary-button', () => dailyView.startSession(trail)));
       const sessionHeading = el('div', 'nt-section-heading nt-recent-heading');
       sessionHeading.appendChild(el('h3', null, 'The pages along this trail'));
       content.append(sessionHeading, el('p', 'nt-help', 'Sessions start after a 30-minute gap between visits in this trail, or on a new day. Pages are ordered by visit time.'));
@@ -297,7 +301,10 @@
         meta.querySelector('time').dateTime = new Date(event.time).toISOString();
         if (!event.topicIds.length) meta.appendChild(el('span', 'nt-ungrouped', 'No topic yet'));
         if (event.pending) meta.appendChild(el('span', 'nt-ungrouped', 'Recent capture'));
-        body.appendChild(meta); row.appendChild(body);
+        meta.appendChild(el('span', 'nt-visit-time', `${duration(event.dwellMs)} estimated · this visit`));
+        body.appendChild(meta);
+        body.appendChild(button('Inspect page & grouping', 'nt-text-button', () => dailyView.openPage(event)));
+        row.appendChild(body);
         if (!selectedId && event.topicIds.length) {
           const trail = record.trails.find(t => t.id === event.topicIds[0]);
           if (trail) {
@@ -324,7 +331,7 @@
       }
       card.appendChild(stats);
       const timing = el('div', 'nt-time-estimate');
-      timing.append(el('strong', null, summary.visitCount ? duration(summary.estimatedMs) : '—'), el('span', null, 'estimated browsing time'));
+      timing.append(el('strong', null, summary.visitCount ? duration(summary.estimatedMs) : '—'), el('span', null, selected ? 'entire trail · all recorded dates' : 'estimated browsing time · past 7 days'));
       card.appendChild(timing);
       const coverage = el('p', 'nt-coverage', summary.visitCount
         ? `${count(summary.categorizedCount, 'visit')} grouped of ${number(summary.visitCount)} recorded. Interaction timing available for ${number(summary.measuredCount)} of ${number(summary.visitCount)}.`
@@ -333,7 +340,7 @@
       if (summary.pendingCount) card.appendChild(el('p', 'nt-help', `${count(summary.pendingCount, 'recent capture')} included before history processing.`));
       const method = el('details', 'nt-method'); method.appendChild(el('summary', null, 'What these numbers mean'));
       method.appendChild(el('p', null, 'Visits are recorded page openings. Repeated visits remain separate. A returned day is a date after the first recorded date, using this device’s local time. Websites count distinct hostnames.'));
-      method.appendChild(el('p', null, 'Time uses gaps between visits, capped at 30 minutes, with a one-minute allowance at a session end. Available interaction measurements can lower that estimate. Recent captures use measured time; overlapping estimates are counted once.'));
+      method.appendChild(el('p', null, 'Timestamped activity preserves breaks and revisits. Older interaction totals and history gaps have estimated placement. Gaps are capped at 30 minutes, with a one-minute allowance at a session end. Overlapping tabs count once across the whole record.'));
       method.appendChild(el('p', null, 'These are browser observations, not a measure of attention or thinking. Other apps and devices, private browsing, paused intervals, and excluded pages are outside this record. Silent reading can be undercounted.'));
       card.appendChild(method); aside.appendChild(card);
       const local = el('section', 'nt-local-card');
@@ -353,6 +360,8 @@
           try {
             const result = await opts.onTogglePause(pause, !paused);
             paused = result && typeof result.paused === 'boolean' ? result.paused : !paused;
+            if (opts.loadSnapshot) { data = await opts.loadSnapshot(); record = CTTrails.buildRecord(data); dailyView.update(record); }
+            if (result?.endedSession) dailyView.openRecap(result.endedSession);
             pause.textContent = paused ? 'Resume capture' : 'Pause capture';
             state.textContent = paused ? 'Capture is paused. Your existing record is still available.' : 'Capture is enabled for eligible pages.';
             announce(paused ? 'Capture paused.' : 'Capture resumed.');
@@ -375,6 +384,19 @@
         }).catch(() => { if (local.isConnected) groupingStatus.textContent = 'Capture status is unavailable. Check Settings for details.'; });
       }
     }
+    async function action(message) {
+      const reply = await opts.onAction(message);
+      if (!reply?.ok) throw new Error(reply?.error || (reply?.reason === 'session-active' ? 'A session is already running.' : reply?.reason === 'capture-paused' ? 'Resume capture before starting a session.' : 'Could not save. Please retry.'));
+      if (opts.loadSnapshot) data = await opts.loadSnapshot();
+      else {
+        if (reply.session) data.intent_sessions = (data.intent_sessions || []).filter(s => s.sessionId !== reply.session.sessionId).concat(reply.session);
+        if (message.type === 'SAVE_PAGE_MEMBERSHIP') data.corrections = (data.corrections || []).filter(c => c.correctionId !== `page:${message.normalizedUrl}`).concat({ correctionId: `page:${message.normalizedUrl}`, kind: 'page_membership', targetId: message.normalizedUrl, value: { topicId: message.topicId }, updatedAt: Date.now() });
+      }
+      now = opts.now || Date.now(); record = CTTrails.buildRecord(data, { now });
+      dailyView.update(record); drawContent(); drawAside();
+      return reply;
+    }
+    dailyView = CTDailyView.mount(dashboardHost, record, { readOnly: opts.readOnly, openTrail, sessionId: opts.sessionId, action: opts.onAction ? action : null });
     drawContent(); drawAside();
     const keyboard = event => {
       const target = event.target;
@@ -390,14 +412,16 @@
       openTrail,
       update(next) {
         // Do not discard an unfinished personal note when background data changes.
-        if (disposed || doc.querySelector('.nt-edit[open]')) return;
+        if (disposed || doc.querySelector('.nt-edit[open]') || dailyView.isEditing) return;
         const active = doc.activeElement;
-        if (active && content.contains(active) && active !== content) return;
+        const preserveContent = active && content.contains(active) && active !== content;
         now = opts.now || Date.now(); today = CTText.dayKeyFromMs(now);
         data = next; record = CTTrails.buildRecord(data, { now });
-        drawContent(); drawAside();
+        dailyView?.update(record);
+        if (!preserveContent) drawContent();
+        drawAside();
       },
-      dispose() { disposed = true; doc.removeEventListener('keydown', keyboard); }
+      dispose() { disposed = true; dailyView.dispose(); doc.removeEventListener('keydown', keyboard); }
     };
   }
 
@@ -410,6 +434,7 @@
     const reads = store.stats ? store.stats.transactions : null;
     return { ...render(d.container || document.getElementById('app'), data, {
       ...d,
+      loadSnapshot: d.loadSnapshot || (() => CTTrails.loadData(store)),
       onSaveMetadata: d.readOnly ? null : d.onSaveMetadata || (row => store.put('corrections', row))
     }), readTransactions: reads };
   }
@@ -428,6 +453,8 @@ if (typeof chrome !== 'undefined' && chrome.runtime && chrome.runtime.id &&
     });
     CTNewtab.main({
       trailId: new URLSearchParams(location.search).get('trail'),
+      sessionId: new URLSearchParams(location.search).get('session'),
+      onAction: send,
       onSaveMetadata: row => send({ type: 'SAVE_TRAIL_METADATA', row }).then(reply => { if (!reply?.ok) throw new Error(reply?.reason || 'Save unavailable'); }),
       statusProvider: () => send({ type: 'GET_STATUS' }),
       onTogglePause: (_button, paused) => send({ type: 'SET_CAPTURE_PAUSED', paused }).then(reply => { if (typeof reply?.paused !== 'boolean') throw new Error('Pause unavailable'); return reply; }),
@@ -443,7 +470,7 @@ if (typeof chrome !== 'undefined' && chrome.runtime && chrome.runtime.id &&
       const refresh = async () => {
         if (document.hidden || refreshing) return;
         refreshing = true;
-        try { view.update(await CTTrails.loadData(store)); } catch { /* retain the current record */ }
+        try { await send({ type: 'GET_TRAIL_SESSION_STATUS' }); view.update(await CTTrails.loadData(store)); } catch { /* retain the current record */ }
         finally { refreshing = false; }
       };
       const timer = setInterval(refresh, 30000);

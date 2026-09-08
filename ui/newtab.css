@@ -64,8 +64,8 @@ body:has(.nt-page) { background: #f6f5f2; }
 .nt-view-controls { display: flex; gap: 2px; padding: 3px; border: 1px solid var(--nt-line); border-radius: 8px; }
 .nt-view { border: 0; border-radius: 5px; background: transparent; color: var(--nt-muted); padding: 5px 10px; font-size: 11px !important; white-space: nowrap; }
 .nt-view.active { background: var(--nt-panel); color: var(--nt-text); box-shadow: 0 1px 3px #292c3010; }
-.nt-trail-list { display: grid; gap: 14px; }
-.nt-trail-card { border: 1px solid var(--nt-line); border-radius: 12px; background: var(--nt-panel); padding: 21px 23px 18px; }
+.nt-trail-list { display: grid; grid-template-columns: minmax(0, 1fr); gap: 14px; }
+.nt-trail-card { min-width: 0; border: 1px solid var(--nt-line); border-radius: 12px; background: var(--nt-panel); padding: 21px 23px 18px; }
 .nt-trail-top { display: flex; justify-content: space-between; align-items: center; gap: 15px; margin-bottom: 10px; }
 .nt-trail-date { color: var(--nt-muted); font-size: 11px; }
 .nt-pin { color: var(--nt-muted); font-size: 11px !important; border: 1px solid var(--nt-line); background: transparent; border-radius: 5px; padding: 3px 9px; }
@@ -191,4 +191,94 @@ body:has(.nt-page) { background: #f6f5f2; }
 @media (prefers-reduced-motion: no-preference) {
   .nt-trail-card { transition: border-color 140ms ease; }
   .nt-trail-card:hover { border-color: #9ca9bb; }
+}
+
+/* Daily signals: arc length is the literal share; hue describes recent range. */
+.nt-page { --signal-below: #a56a43; --signal-within: #526c88; --signal-above: #765a8b; --signal-neutral: #868b92; }
+.nt-hero { margin: 38px 0 30px; }
+.nt-daily-host { margin-bottom: 35px; }
+.nt-dashboard { background: var(--nt-panel); border: 1px solid var(--nt-line); border-radius: 18px; padding: 26px 30px 20px; }
+.nt-dashboard-heading { display: flex; align-items: baseline; justify-content: space-between; gap: 16px; }
+.nt-dashboard .nt-dashboard-heading h2 { font-family: Georgia, serif; font-size: 25px; font-weight: 400; }
+.nt-scope { color: var(--nt-muted); font-size: 12px; }
+.nt-time-row { display: flex; align-items: center; gap: 28px; margin: 21px 0 20px; }
+.nt-time-headline { display: flex; align-items: baseline; gap: 12px; border: 0; background: none; color: var(--nt-text); text-align: left; padding: 0; }
+.nt-time-headline strong { font-size: 31px; font-weight: 500; letter-spacing: -.04em; font-variant-numeric: tabular-nums; }
+.nt-time-headline span { font-size: 12px; color: var(--nt-muted); }
+.nt-comparison { font-size: 11px; color: var(--nt-muted); }
+.nt-comparison small { display: block; margin-top: 3px; font-size: 10px; }
+.nt-time-row .nt-comparison { border-left: 3px solid var(--signal-color); padding-left: 12px; }
+.nt-direction-below { --signal-color: var(--signal-below); }
+.nt-direction-within { --signal-color: var(--signal-within); }
+.nt-direction-above { --signal-color: var(--signal-above); }
+.nt-direction-insufficient { --signal-color: var(--signal-neutral); }
+.nt-rings { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); border-top: 1px solid var(--nt-line); padding: 24px 0 22px; gap: 18px; }
+.nt-ring-card { display: flex; flex-direction: column; align-items: center; gap: 7px; border: 0; border-radius: 12px; background: transparent; color: var(--nt-text); padding: 6px 12px; text-align: center; min-width: 0; }
+.nt-ring-card:hover { background: var(--nt-soft); }
+.nt-ring-dial { width: 134px; height: 134px; display: grid; place-items: center; border-radius: 50%; background: conic-gradient(var(--signal-color) var(--ring-turn), var(--nt-soft) 0); position: relative; margin-bottom: 10px; flex-shrink: 0; }
+.nt-ring-dial::before { content: ''; position: absolute; inset: 9px; border-radius: 50%; background: var(--nt-panel); }
+.nt-ring-dial strong { position: relative; font-size: 32px; font-weight: 480; letter-spacing: -.04em; font-variant-numeric: tabular-nums; }
+.nt-ring-title { font-size: 15px; font-weight: 620; }
+.nt-ring-subject { font-size: 12px; max-width: 100%; overflow-wrap: anywhere; }
+.nt-ring-raw { color: var(--nt-muted); font-size: 10px; max-width: 215px; min-height: 30px; }
+.nt-ring-card .nt-comparison { font-size: 10px; }
+.nt-inspect { font-size: 10px; color: var(--nt-accent); margin-top: 5px; }
+.nt-observation { font-size: 13px; border-top: 1px solid var(--nt-line); padding-top: 17px; }
+.nt-signal-coverage { font-size: 11px; color: var(--nt-muted); margin-top: 10px !important; }
+.nt-signal-note { font-size: 10px; color: var(--nt-muted); margin-top: 5px !important; }
+.nt-continuation { display: flex; justify-content: space-between; align-items: center; gap: 25px; border: 1px solid var(--nt-line); border-radius: 13px; background: var(--nt-accent-soft); margin-top: 16px; padding: 22px 27px; }
+.nt-continuation > div { min-width: 0; }
+.nt-continuation h2 { margin-top: 6px; font-family: Georgia, serif; font-size: 21px; font-weight: 400; overflow-wrap: anywhere; }
+.nt-session-actions { display: flex; gap: 10px; align-items: center; flex-shrink: 0; flex-wrap: wrap; }
+.nt-session-note { white-space: pre-wrap; overflow-wrap: anywhere; font-size: 12px; margin-top: 9px !important; }
+.nt-session-countdown { color: var(--nt-muted); font-size: 12px; margin-top: 6px !important; font-variant-numeric: tabular-nums; }
+.nt-session-history { font-size: 12px; margin-top: 14px; }
+.nt-session-history button { display: block; margin: 12px; }
+.nt-drawer { width: min(650px, calc(100vw - 32px)); max-height: calc(100dvh - 40px); margin: auto; color: var(--nt-text); background: var(--nt-panel); border: 1px solid var(--nt-line); border-radius: 17px; padding: 27px; overflow-y: auto; box-shadow: 0 20px 90px #00000033; }
+.nt-drawer::backdrop { background: #15191f88; backdrop-filter: blur(3px); }
+.nt-drawer > * + * { margin-top: 17px; }
+.nt-drawer .nt-help { margin-top: 12px; font-size: 12px; }
+.nt-drawer-heading { display: flex; align-items: start; justify-content: space-between; gap: 20px; }
+.nt-drawer-heading h2 { font-size: 21px; overflow-wrap: anywhere; }
+.nt-drawer-lead { font-size: 17px; line-height: 1.5; }
+.nt-drawer .nt-scope { margin-top: 16px; }
+.nt-session-form { display: grid; gap: 16px; }
+.nt-field select { border: 1px solid var(--nt-line); background: var(--nt-panel); color: var(--nt-text); padding: 10px; border-radius: 6px; font: inherit; max-width: 100%; }
+.nt-action-error { font-size: 12px; color: var(--nt-text); padding: 12px; border: 1px solid var(--nt-line); background: var(--nt-soft); margin-top: 10px !important; }
+.nt-recap-stats { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 15px; border-block: 1px solid var(--nt-line); padding: 20px 0; }
+.nt-recap-stats dt { font-size: 11px; color: var(--nt-muted); }
+.nt-recap-stats dd { font-size: 25px; margin: 5px 0 0; }
+.nt-evidence-list { padding: 0; list-style: none; }
+.nt-evidence-list li { padding: 14px 0; border-top: 1px solid var(--nt-line); }
+.nt-evidence-list li .nt-help { margin-top: 5px; }
+.nt-evidence-list li button { margin-top: 8px; }
+.nt-evidence-groups > div { display: flex; justify-content: space-between; gap: 15px; padding: 12px 0; align-items: center; border-top: 1px solid var(--nt-line); }
+.nt-visit-body > .nt-text-button { margin-top: 6px; }
+.nt-visit-time { font-size: 10px; color: var(--nt-muted); }
+@media (prefers-color-scheme: dark) {
+  .nt-page { --signal-below: #d3a176; --signal-within: #afc7e1; --signal-above: #c9ace0; --signal-neutral: #939ba5; }
+}
+@media (max-width: 800px) {
+  .nt-dashboard { padding: 22px 18px 19px; }
+  .nt-continuation { flex-direction: column; align-items: stretch; }
+  .nt-rings { gap: 4px; }
+  .nt-ring-card { padding-inline: 5px; }
+  .nt-ring-dial { width: 112px; height: 112px; }
+  .nt-ring-dial strong { font-size: 29px; }
+  .nt-time-row { flex-wrap: wrap; gap: 12px; }
+}
+@media (max-width: 520px) {
+  .nt-hero { margin-top: 30px; }
+  .nt-rings { grid-template-columns: 1fr; gap: 10px; padding-block: 17px; }
+  .nt-ring-card { display: grid; grid-template-columns: 91px minmax(0, 1fr); column-gap: 19px; text-align: left; align-items: start; padding: 10px 0; }
+  .nt-ring-dial { width: 91px; height: 91px; grid-row: 1 / 7; margin: 0; align-self: center; }
+  .nt-ring-dial::before { inset: 7px; }
+  .nt-ring-dial strong { font-size: 25px; }
+  .nt-ring-title { font-size: 14px; }
+  .nt-ring-raw { min-height: 0; }
+  .nt-ring-card .nt-comparison { font-size: 10px; }
+  .nt-inspect { margin-top: 0; }
+  .nt-continuation { padding: 20px; }
+  .nt-drawer { padding: 21px; }
+  .nt-time-headline { flex-wrap: wrap; gap: 7px; }
 }

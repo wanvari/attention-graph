@@ -465,7 +465,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         await store.open();
         const url = CTTrails.safeUrl(message.normalizedUrl);
         if (!url || CTText.normalizeUrl(url) !== message.normalizedUrl) throw new Error('Invalid page');
-        const exists = await store.get('pages', url) || (await store.byIndex('captures', 'byNormUrl', url)).length;
+        const exists = await store.get('pages', url) || (await store.byIndex('captures', 'byNormUrl', url)).length || (await store.byIndex('visits', 'byNormUrl', url)).length;
         if (!exists) throw new Error('Page no longer exists');
         const topicId = message.topicId;
         if (topicId !== null && (typeof topicId !== 'string' || !await store.get('topics', topicId))) throw new Error('Trail no longer exists');
@@ -475,6 +475,10 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       }).then(sendResponse, error => sendResponse({ ok: false, error: error.message }));
       return true;
     case 'AUDIT_EVIDENCE':
+      withWriter(async () => { await store.open(); return { ok: true, audit: CTIntegrity.rebuild(await CTTrails.loadData(store)).audit }; })
+        .then(sendResponse, error => sendResponse({ ok: false, error: error.message }));
+      return true;
+    case 'REPAIR_EVIDENCE':
       withWriter(async () => { await store.open(); return { ok: true, audit: await CTIntegrity.repair(store) }; })
         .then(sendResponse, error => sendResponse({ ok: false, error: error.message }));
       return true;
