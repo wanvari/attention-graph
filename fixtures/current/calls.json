@@ -1,5 +1,5 @@
 {
-  "recordedAt": "2026-09-07T19:32:42.201Z",
+  "recordedAt": "2026-09-10T16:21:03.444Z",
   "chatModel": "qwen3:4b",
   "runDays": [
     28,
@@ -70,19 +70,20 @@
       },
       "response": {
         "model": "qwen3:4b",
-        "created_at": "2026-09-07T19:33:20.165773Z",
+        "created_at": "2026-09-10T16:21:40.680008Z",
         "message": {
           "role": "assistant",
           "content": "{\n  \"topics\": [\n    {\n      \"id\": \"c0\",\n      \"label\": \"Rust async programming concepts\",\n      \"confidence\": 0.95,\n      \"rationale\": \"All pages discuss Rust async features like pinning, futures, and wakers, with titles and text snippets focused on implementation details and best practices for asynchronous Rust development.\"\n    },\n    {\n      \"id\": \"c1\",\n      \"label\": \"Sourdough baking techniques\",\n      \"confidence\": 0.98,\n      \"rationale\": \"Pages cover sourdough fermentation, dough handling, and equipment comparisons (dutch ovens vs. baking steel) with specific focus on temperature charts, flour types, and bread-making processes.\"\n    },\n    {\n      \"id\": \"c2\",\n      \"label\": \"Cognitive attention and task switching research\",\n      \"confidence\": 0.92,\n      \"rationale\": \"Content addresses attention studies, task switching costs, and interruption effects with academic papers and AI tool interactions focused on cognitive psychology research.\"\n    },\n    {\n      \"id\": \"c3\",\n      \"label\": \"Victorian industrial literature and social conditions\",\n      \"confidence\": 0.94,\n      \"rationale\": \"Pages explore Dickensian novels, industrialization's impact on England, and literary movements like sensation novels, with emphasis on social conditions and historical context.\"\n    },\n    {\n      \"id\": \"c4\",\n      \"label\": \"Investment expense ratios and index funds\",\n      \"confidence\": 0.96,\n      \"rationale\": \"All pages discuss financial metrics like expense ratios, index fund tracking, and tax implications for bond funds, with a focus on cost efficiency in investment strategies.\"\n    },\n    {\n      \"id\": \"c5\",\n      \"label\": \"Mechanical keyboard customization\",\n      \"confidence\": 0.93,\n      \"rationale\": \"Content focuses on keyboard mechanics, actuation types, keycap materials, and switching techniques, with specific technical details about spring swapping and lubrication.\"\n    }\n  ]\n}"
         },
         "done": true,
         "done_reason": "stop",
-        "total_duration": 16711490583,
-        "load_duration": 2093289208,
+        "total_duration": 16250896667,
+        "load_duration": 2100905250,
         "prompt_eval_count": 1962,
-        "prompt_eval_duration": 4146854000,
+        "prompt_eval_cached_count": 0,
+        "prompt_eval_duration": 4130559000,
         "eval_count": 433,
-        "eval_duration": 10458430000
+        "eval_duration": 10010984000
       }
     },
     {
@@ -149,19 +150,20 @@
       },
       "response": {
         "model": "qwen3:4b",
-        "created_at": "2026-09-07T19:33:50.050957Z",
+        "created_at": "2026-09-10T16:22:09.334913Z",
         "message": {
           "role": "assistant",
           "content": "{\n  \"topics\": [\n    {\n      \"id\": \"c6\",\n      \"label\": \"Running injury prevention and training\",\n      \"confidence\": 0.95,\n      \"rationale\": \"Pages discuss building mileage without injury, zone two training evidence, shin splints and cadence adjustments, and marathon pacing strategies from running-focused domains like letsrun.com and strava.com.\"\n    },\n    {\n      \"id\": \"c7\",\n      \"label\": \"Kubernetes networking and service meshes\",\n      \"confidence\": 0.92,\n      \"rationale\": \"Pages cover egress gateways, multi-cluster service meshes, Gateway API migration, and CoreDNS debugging from Kubernetes-related domains like cilium.io and kubernetes.io.\"\n    },\n    {\n      \"id\": \"c8\",\n      \"label\": \"Houseplant care and soil management\",\n      \"confidence\": 0.90,\n      \"rationale\": \"Pages address monstera root training, fertilizer burn signs, fungus gnat control, and soil flushing from gardening and Reddit communities.\"\n    },\n    {\n      \"id\": \"c9\",\n      \"label\": \"Mars sample return technology\",\n      \"confidence\": 0.88,\n      \"rationale\": \"Pages focus on tungsten shielding design, sample container capture mechanisms, and Mars Ascent Vehicle requirements from ESA and planetary science domains.\"\n    },\n    {\n      \"id\": \"c10\",\n      \"label\": \"AI model optimization techniques\",\n      \"confidence\": 0.91,\n      \"rationale\": \"Pages discuss quantization quality, KV cache memory scaling, and GPU-CPU layer offloading from GitHub and Hugging Face resources.\"\n    },\n    {\n      \"id\": \"c11\",\n      \"label\": \"MIXED\",\n      \"confidence\": 0.0,\n      \"rationale\": \"Only one page with a single link roundup from ycombinator, no clear theme across multiple pages.\"\n    }\n  ]\n}"
         },
         "done": true,
         "done_reason": "stop",
-        "total_duration": 13091754417,
-        "load_duration": 18955542,
+        "total_duration": 12383486000,
+        "load_duration": 5918875,
         "prompt_eval_count": 1520,
-        "prompt_eval_duration": 2928526000,
+        "prompt_eval_cached_count": 133,
+        "prompt_eval_duration": 2899492000,
         "eval_count": 413,
-        "eval_duration": 10010409000
+        "eval_duration": 9402551000
       }
     },
     {
@@ -242,19 +244,20 @@
       },
       "response": {
         "model": "qwen3:4b",
-        "created_at": "2026-09-07T19:34:05.156361Z",
+        "created_at": "2026-09-10T16:22:23.708781Z",
         "message": {
           "role": "assistant",
           "content": "{\n  \"verdict\": \"uncategorized\",\n  \"confidence\": 0.95,\n  \"rationale\": \"The page title mentions 'Weekly links roundup' but the current label is 'MIXED' and keywords include 'mixed', indicating inconsistent topic focus.\",\n  \"groups\": []\n}"
         },
         "done": true,
         "done_reason": "stop",
-        "total_duration": 1957985916,
-        "load_duration": 24829000,
+        "total_duration": 1967753875,
+        "load_duration": 6848708,
         "prompt_eval_count": 269,
-        "prompt_eval_duration": 471272000,
+        "prompt_eval_cached_count": 52,
+        "prompt_eval_duration": 464435000,
         "eval_count": 63,
-        "eval_duration": 1369681000
+        "eval_duration": 1329494000
       }
     },
     {
@@ -335,19 +338,20 @@
       },
       "response": {
         "model": "qwen3:4b",
-        "created_at": "2026-09-07T19:34:10.710359Z",
+        "created_at": "2026-09-10T16:22:29.12516Z",
         "message": {
           "role": "assistant",
           "content": "{\n  \"verdict\": \"uncategorized\",\n  \"confidence\": 0.95,\n  \"rationale\": \"The page title mentions 'Weekly links roundup' but the current label is 'MIXED' and keywords include 'mixed', indicating inconsistent topic focus.\",\n  \"groups\": []\n}"
         },
         "done": true,
         "done_reason": "stop",
-        "total_duration": 1689166291,
-        "load_duration": 28093250,
+        "total_duration": 1410356667,
+        "load_duration": 5214375,
         "prompt_eval_count": 269,
-        "prompt_eval_duration": 165809000,
+        "prompt_eval_cached_count": 268,
+        "prompt_eval_duration": 51644000,
         "eval_count": 63,
-        "eval_duration": 1455109000
+        "eval_duration": 1343810000
       }
     },
     {
@@ -414,19 +418,20 @@
       },
       "response": {
         "model": "qwen3:4b",
-        "created_at": "2026-09-07T19:34:44.444442Z",
+        "created_at": "2026-09-10T16:23:10.985866Z",
         "message": {
           "role": "assistant",
           "content": "{\n  \"topics\": [\n    {\n      \"id\": \"c0\",\n      \"label\": \"Energy storage cost comparisons\",\n      \"confidence\": 0.95,\n      \"rationale\": \"Pages discuss long-duration storage costs, grid storage solutions, and battery chemistry comparisons for stationary storage systems, with specific focus on cost targets and reliability metrics.\"\n    },\n    {\n      \"id\": \"c1\",\n      \"label\": \"Tech links roundup\",\n      \"confidence\": 0.92,\n      \"rationale\": \"Pages contain technical links from news.ycombinator and reddit, focusing on networking and system administration topics like VXLAN encapsulation and conntrack exhaustion.\"\n    },\n    {\n      \"id\": \"c2\",\n      \"label\": \"Reddit Friday links\",\n      \"confidence\": 0.98,\n      \"rationale\": \"Pages are Reddit's weekly 'grab bag' collections of links with short, varied technical content.\"\n    },\n    {\n      \"id\": \"c3\",\n      \"label\": \"Medium Friday links\",\n      \"confidence\": 0.95,\n      \"rationale\": \"Pages are Medium's weekly 'grab bag' collections of links with short, varied content including plant care tips.\"\n    },\n    {\n      \"id\": \"c4\",\n      \"label\": \"Medium monthly reading roundup\",\n      \"confidence\": 0.93,\n      \"rationale\": \"Pages are Medium's monthly reading summaries with technical content about concurrency and task scheduling.\"\n    },\n    {\n      \"id\": \"c5\",\n      \"label\": \"Medium Friday links\",\n      \"confidence\": 0.97,\n      \"rationale\": \"Pages are Medium's weekly 'grab bag' collections of links with short, varied content including personal anecdotes.\"\n    }\n  ]\n}"
         },
         "done": true,
         "done_reason": "stop",
-        "total_duration": 12401288583,
-        "load_duration": 2101088791,
+        "total_duration": 10921418292,
+        "load_duration": 825152583,
         "prompt_eval_count": 951,
-        "prompt_eval_duration": 1921781000,
+        "prompt_eval_cached_count": 0,
+        "prompt_eval_duration": 1919580000,
         "eval_count": 372,
-        "eval_duration": 8370264999
+        "eval_duration": 8172731000
       }
     },
     {
@@ -493,19 +498,20 @@
       },
       "response": {
         "model": "qwen3:4b",
-        "created_at": "2026-09-07T19:34:59.814656Z",
+        "created_at": "2026-09-10T16:23:24.536046Z",
         "message": {
           "role": "assistant",
           "content": "{\n  \"topics\": [\n    {\n      \"id\": \"c6\",\n      \"label\": \"Reddit monthly roundup\",\n      \"confidence\": 0.95,\n      \"rationale\": \"The page title 'What I read this month #30' and keywords 'reddit', 'links', 'mixed', 'month', 'read', 'roundup' indicate a Reddit post that compiles a monthly reading roundup, specifically a '29-links-roundup' which is a recurring format on Reddit.\"\n    }\n  ]\n}"
         },
         "done": true,
         "done_reason": "stop",
-        "total_duration": 2948597792,
-        "load_duration": 5713083,
+        "total_duration": 2608641375,
+        "load_duration": 6412584,
         "prompt_eval_count": 229,
-        "prompt_eval_duration": 243319000,
+        "prompt_eval_cached_count": 133,
+        "prompt_eval_duration": 226000000,
         "eval_count": 110,
-        "eval_duration": 2639311000
+        "eval_duration": 2324149000
       }
     }
   ]

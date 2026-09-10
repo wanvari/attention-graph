@@ -1,0 +1,567 @@
+{
+  "generatedAt": "2026-09-10T16:21:03.441Z",
+  "scope": "Synthetic 28-day history, empty embedding cache, live production model profile. One laptop; not a human evaluation or proof of broad hardware support.",
+  "host": {
+    "platform": "darwin",
+    "arch": "arm64",
+    "memoryBytes": 19327352832,
+    "cpu": "Apple M3 Pro",
+    "model": "Mac15,6"
+  },
+  "profile": {
+    "embeddingModel": "bge-m3:latest",
+    "chatModel": "qwen3:4b",
+    "embedBatchSize": 8,
+    "embedTimeoutMs": 45000,
+    "chatTimeoutMs": 60000,
+    "chatContextTokens": 8192,
+    "chatOutputTokens": 1800,
+    "embedKeepAlive": "2m",
+    "chatKeepAlive": "2m",
+    "dutyCycle": 0.5,
+    "numThread": 4
+  },
+  "calls": [
+    {
+      "kind": "embed",
+      "model": "bge-m3:latest",
+      "durationMs": 1695,
+      "inputs": 8,
+      "promptTokens": 2862,
+      "loadDurationMs": 801
+    },
+    {
+      "kind": "embed",
+      "model": "bge-m3:latest",
+      "durationMs": 702,
+      "inputs": 8,
+      "promptTokens": 2796,
+      "loadDurationMs": 4
+    },
+    {
+      "kind": "embed",
+      "model": "bge-m3:latest",
+      "durationMs": 707,
+      "inputs": 8,
+      "promptTokens": 2985,
+      "loadDurationMs": 4
+    },
+    {
+      "kind": "embed",
+      "model": "bge-m3:latest",
+      "durationMs": 756,
+      "inputs": 8,
+      "promptTokens": 3016,
+      "loadDurationMs": 6
+    },
+    {
+      "kind": "embed",
+      "model": "bge-m3:latest",
+      "durationMs": 644,
+      "inputs": 8,
+      "promptTokens": 2729,
+      "loadDurationMs": 4
+    },
+    {
+      "kind": "embed",
+      "model": "bge-m3:latest",
+      "durationMs": 669,
+      "inputs": 8,
+      "promptTokens": 2986,
+      "loadDurationMs": 4
+    },
+    {
+      "kind": "embed",
+      "model": "bge-m3:latest",
+      "durationMs": 626,
+      "inputs": 8,
+      "promptTokens": 2598,
+      "loadDurationMs": 5
+    },
+    {
+      "kind": "embed",
+      "model": "bge-m3:latest",
+      "durationMs": 686,
+      "inputs": 8,
+      "promptTokens": 2738,
+      "loadDurationMs": 5
+    },
+    {
+      "kind": "embed",
+      "model": "bge-m3:latest",
+      "durationMs": 705,
+      "inputs": 8,
+      "promptTokens": 3044,
+      "loadDurationMs": 5
+    },
+    {
+      "kind": "embed",
+      "model": "bge-m3:latest",
+      "durationMs": 687,
+      "inputs": 8,
+      "promptTokens": 2939,
+      "loadDurationMs": 5
+    },
+    {
+      "kind": "embed",
+      "model": "bge-m3:latest",
+      "durationMs": 735,
+      "inputs": 8,
+      "promptTokens": 3139,
+      "loadDurationMs": 5
+    },
+    {
+      "kind": "embed",
+      "model": "bge-m3:latest",
+      "durationMs": 671,
+      "inputs": 8,
+      "promptTokens": 2882,
+      "loadDurationMs": 4
+    },
+    {
+      "kind": "embed",
+      "model": "bge-m3:latest",
+      "durationMs": 398,
+      "inputs": 4,
+      "promptTokens": 1554,
+      "loadDurationMs": 9
+    },
+    {
+      "kind": "label_topics",
+      "model": "qwen3:4b",
+      "durationMs": 16253,
+      "promptTokens": 1962,
+      "outputTokens": 433,
+      "loadDurationMs": 2101,
+      "doneReason": "stop"
+    },
+    {
+      "kind": "label_topics",
+      "model": "qwen3:4b",
+      "durationMs": 12390,
+      "promptTokens": 1520,
+      "outputTokens": 413,
+      "loadDurationMs": 6,
+      "doneReason": "stop"
+    },
+    {
+      "kind": "adjudicate_pass1",
+      "model": "qwen3:4b",
+      "durationMs": 1974,
+      "promptTokens": 269,
+      "outputTokens": 63,
+      "loadDurationMs": 7,
+      "doneReason": "stop"
+    },
+    {
+      "kind": "adjudicate_pass2",
+      "model": "qwen3:4b",
+      "durationMs": 3433,
+      "promptTokens": 269,
+      "outputTokens": 63,
+      "loadDurationMs": 5,
+      "doneReason": "stop"
+    },
+    {
+      "kind": "embed",
+      "model": "bge-m3:latest",
+      "durationMs": 1949,
+      "inputs": 8,
+      "promptTokens": 2800,
+      "loadDurationMs": 1286
+    },
+    {
+      "kind": "embed",
+      "model": "bge-m3:latest",
+      "durationMs": 666,
+      "inputs": 8,
+      "promptTokens": 2809,
+      "loadDurationMs": 4
+    },
+    {
+      "kind": "embed",
+      "model": "bge-m3:latest",
+      "durationMs": 699,
+      "inputs": 8,
+      "promptTokens": 3025,
+      "loadDurationMs": 4
+    },
+    {
+      "kind": "embed",
+      "model": "bge-m3:latest",
+      "durationMs": 778,
+      "inputs": 8,
+      "promptTokens": 3099,
+      "loadDurationMs": 4
+    },
+    {
+      "kind": "embed",
+      "model": "bge-m3:latest",
+      "durationMs": 666,
+      "inputs": 8,
+      "promptTokens": 2850,
+      "loadDurationMs": 4
+    },
+    {
+      "kind": "embed",
+      "model": "bge-m3:latest",
+      "durationMs": 695,
+      "inputs": 8,
+      "promptTokens": 3037,
+      "loadDurationMs": 3
+    },
+    {
+      "kind": "embed",
+      "model": "bge-m3:latest",
+      "durationMs": 620,
+      "inputs": 8,
+      "promptTokens": 2576,
+      "loadDurationMs": 4
+    },
+    {
+      "kind": "embed",
+      "model": "bge-m3:latest",
+      "durationMs": 659,
+      "inputs": 8,
+      "promptTokens": 2743,
+      "loadDurationMs": 4
+    },
+    {
+      "kind": "embed",
+      "model": "bge-m3:latest",
+      "durationMs": 668,
+      "inputs": 8,
+      "promptTokens": 2909,
+      "loadDurationMs": 5
+    },
+    {
+      "kind": "embed",
+      "model": "bge-m3:latest",
+      "durationMs": 722,
+      "inputs": 8,
+      "promptTokens": 2963,
+      "loadDurationMs": 5
+    },
+    {
+      "kind": "embed",
+      "model": "bge-m3:latest",
+      "durationMs": 216,
+      "inputs": 2,
+      "promptTokens": 696,
+      "loadDurationMs": 5
+    },
+    {
+      "kind": "label_topics",
+      "model": "qwen3:4b",
+      "durationMs": 10923,
+      "promptTokens": 951,
+      "outputTokens": 372,
+      "loadDurationMs": 825,
+      "doneReason": "stop"
+    },
+    {
+      "kind": "label_topics",
+      "model": "qwen3:4b",
+      "durationMs": 2616,
+      "promptTokens": 229,
+      "outputTokens": 110,
+      "loadDurationMs": 6,
+      "doneReason": "stop"
+    }
+  ],
+  "runs": [
+    {
+      "pass": 1,
+      "elapsedMs": 88384,
+      "result": {
+        "ok": true,
+        "runId": "run-mnb7ay80-aog0",
+        "day": "2026-03-28",
+        "brief": {
+          "day": "2026-03-28",
+          "generatedAt": 1774755000000,
+          "runId": "run-mnb7ay80-aog0",
+          "items": [
+            {
+              "kind": "first_run",
+              "text": "First analysis complete. Topic histories appear once the record has history to compare against.",
+              "topicIds": [],
+              "evidence": {
+                "day": "2026-03-28"
+              }
+            },
+            {
+              "kind": "new_topics",
+              "text": "11 new trails were grouped: *Rust async programming concepts*, *Sourdough baking techniques*, *Cognitive attention and task switching research*.",
+              "topicIds": [
+                "t-001",
+                "t-002",
+                "t-003",
+                "t-004",
+                "t-005",
+                "t-006",
+                "t-007",
+                "t-008",
+                "t-009",
+                "t-010",
+                "t-011"
+              ],
+              "evidence": {
+                "count": 11,
+                "topicIds": [
+                  "t-001",
+                  "t-002",
+                  "t-003",
+                  "t-004",
+                  "t-005",
+                  "t-006",
+                  "t-007",
+                  "t-008",
+                  "t-009",
+                  "t-010",
+                  "t-011"
+                ]
+              }
+            }
+          ],
+          "seen": false,
+          "seenAt": null
+        },
+        "counts": {
+          "visitsIngested": 410,
+          "pagesEmbedded": 100,
+          "embeddingsCached": 0,
+          "pagesDeferred": 82,
+          "pagesPending": 88,
+          "topicsCreated": 11,
+          "topicsMatched": 0,
+          "adjudicated": 1,
+          "kept": 0,
+          "split": 0,
+          "uncategorized": 49,
+          "disagreed": 0,
+          "errors": 0,
+          "utilityPagesExcluded": 42,
+          "utilityMembershipsRemoved": 0
+        },
+        "timingsMs": {
+          "ingest": 247,
+          "embed": 19564,
+          "cluster": 19,
+          "label": 57310,
+          "adjudicate": 10833,
+          "registry": 305,
+          "transitions": 73
+        },
+        "warnings": []
+      },
+      "pending": 88,
+      "calls": 17,
+      "pacingMs": 43762
+    },
+    {
+      "pass": 2,
+      "elapsedMs": 44678,
+      "result": {
+        "ok": true,
+        "runId": "run-mnb7ay80-5cma",
+        "day": "2026-03-28",
+        "brief": {
+          "day": "2026-03-28",
+          "generatedAt": 1774755000000,
+          "runId": "run-mnb7ay80-5cma",
+          "items": [
+            {
+              "kind": "dormancy",
+              "text": "*Cognitive attention and task switching research* went quiet — last seen 14 days ago.",
+              "topicIds": [
+                "t-003"
+              ],
+              "evidence": {
+                "event": "dormant",
+                "topicId": "t-003",
+                "lastActiveDay": "2026-03-14"
+              }
+            },
+            {
+              "kind": "new_topics",
+              "text": "7 new trails were grouped: *Energy storage cost comparisons*, *Tech links roundup*, *Reddit Friday links*.",
+              "topicIds": [
+                "t-012",
+                "t-013",
+                "t-014",
+                "t-015",
+                "t-016",
+                "t-017",
+                "t-018"
+              ],
+              "evidence": {
+                "count": 7,
+                "topicIds": [
+                  "t-012",
+                  "t-013",
+                  "t-014",
+                  "t-015",
+                  "t-016",
+                  "t-017",
+                  "t-018"
+                ]
+              }
+            }
+          ],
+          "seen": false,
+          "seenAt": null
+        },
+        "counts": {
+          "visitsIngested": 0,
+          "pagesEmbedded": 82,
+          "embeddingsCached": 6,
+          "pagesDeferred": 0,
+          "pagesPending": 0,
+          "topicsCreated": 7,
+          "topicsMatched": 11,
+          "adjudicated": 0,
+          "kept": 0,
+          "split": 0,
+          "uncategorized": 0,
+          "disagreed": 0,
+          "errors": 0,
+          "utilityPagesExcluded": 0,
+          "utilityMembershipsRemoved": 0
+        },
+        "timingsMs": {
+          "ingest": 243,
+          "embed": 16840,
+          "cluster": 4,
+          "label": 27101,
+          "adjudicate": 2,
+          "registry": 383,
+          "transitions": 87
+        },
+        "warnings": []
+      },
+      "pending": 0,
+      "calls": 13,
+      "pacingMs": 21903
+    }
+  ],
+  "peakResidentBytes": 3856589127,
+  "modelOverlap": false,
+  "recordBuildMs": 7.49,
+  "summary": {
+    "visitCount": 415,
+    "pageCount": 228,
+    "sourceCount": 61,
+    "dayCount": 25,
+    "returnDays": 24,
+    "categorizedCount": 361,
+    "measuredCount": 415,
+    "pendingCount": 5,
+    "estimatedMs": 58995443.388183594
+  },
+  "topics": [
+    {
+      "topicId": "t-001",
+      "label": "Rust async programming concepts",
+      "state": "active"
+    },
+    {
+      "topicId": "t-002",
+      "label": "Sourdough baking techniques",
+      "state": "active"
+    },
+    {
+      "topicId": "t-003",
+      "label": "Cognitive attention and task switching research",
+      "state": "dormant"
+    },
+    {
+      "topicId": "t-004",
+      "label": "Victorian industrial literature and social condi",
+      "state": "active"
+    },
+    {
+      "topicId": "t-005",
+      "label": "Investment expense ratios and index funds",
+      "state": "active"
+    },
+    {
+      "topicId": "t-006",
+      "label": "Mechanical keyboard customization",
+      "state": "active"
+    },
+    {
+      "topicId": "t-007",
+      "label": "Running injury prevention and training",
+      "state": "active"
+    },
+    {
+      "topicId": "t-008",
+      "label": "Kubernetes networking and service meshes",
+      "state": "active"
+    },
+    {
+      "topicId": "t-009",
+      "label": "Houseplant care and soil management",
+      "state": "active"
+    },
+    {
+      "topicId": "t-010",
+      "label": "Mars sample return technology",
+      "state": "active"
+    },
+    {
+      "topicId": "t-011",
+      "label": "AI model optimization techniques",
+      "state": "active"
+    },
+    {
+      "topicId": "t-012",
+      "label": "Energy storage cost comparisons",
+      "state": "active"
+    },
+    {
+      "topicId": "t-013",
+      "label": "Tech links roundup",
+      "state": "active"
+    },
+    {
+      "topicId": "t-014",
+      "label": "Reddit Friday links",
+      "state": "active"
+    },
+    {
+      "topicId": "t-015",
+      "label": "Medium Friday links",
+      "state": "active"
+    },
+    {
+      "topicId": "t-016",
+      "label": "Medium monthly reading roundup",
+      "state": "active"
+    },
+    {
+      "topicId": "t-017",
+      "label": "Medium Friday links",
+      "state": "active"
+    },
+    {
+      "topicId": "t-018",
+      "label": "Reddit monthly roundup",
+      "state": "active"
+    }
+  ],
+  "grouping": {
+    "ingestedPages": 224,
+    "memberships": 181,
+    "clearPages": 200,
+    "clearPagesGrouped": 171,
+    "noisePages": 24,
+    "noisePagesGrouped": 10,
+    "sameTrailPairs": 1323,
+    "sameTruthPairs": 1298,
+    "pairPrecision": 0.981103552532124,
+    "note": "Pair precision measures only grouped fixture pages; coverage is separate. It does not validate inferred intention or real-world label quality."
+  },
+  "complete": true
+}

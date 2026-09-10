@@ -57,7 +57,7 @@ Version 5.1 upgrades the database to schema 5. Reload the extension in `chrome:/
 
 ## Laptop profile
 
-The default is `bge-m3:latest` for embeddings and `qwen3:4b` for short structured labels. Downloads total roughly 3.7 GB. The [current validation report](validation/report-2026-09-07.md) records measured performance on an **M3 Pro with 18 GiB RAM**, including model residency, stage times, backlog completion, and fixture quality.
+The default is `bge-m3:latest` for embeddings and `qwen3:4b` for short structured labels. Downloads total roughly 3.7 GB. The [current validation report](validation/report-2026-09-10.md) records code-review findings, regression tests and measured performance on an **M3 Pro with 18 GiB RAM**, including model residency, stage times, backlog completion, and fixture quality.
 
 - 100 pending pages and at most 12 new topics per run; configurable page budget is bounded at 200.
 - Embeddings use batches of 8. Labeling uses at most two batches of 6 with four short page excerpts per topic.
