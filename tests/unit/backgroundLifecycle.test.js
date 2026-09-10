@@ -28,7 +28,7 @@ async function harness() {
       id: 'test-extension', onInstalled: event('installed'), onStartup: event('startup'), onMessage: event('message'),
       getURL: value => `chrome-extension://test-extension/${value}`,
       getContexts: async () => h.hasOffscreen ? [{}] : [],
-      sendMessage: async message => { events.push(message.type); }
+      sendMessage: async message => { events.push(message.type); if (message.type === 'RUN_PIPELINE') return h.pipelineReply || { started: true }; }
     },
     storage: { local: {
       set: async values => { Object.assign(storage, values); },
@@ -170,6 +170,40 @@ async function harness() {
     const second = await h.send({ type: 'RUN_PIPELINE_MANUAL' });
     assert.equal(second.started, false, 'duplicate dispatch is refused before the first heartbeat');
     assert.equal(h.events.filter(e => e === 'RUN_PIPELINE').length, 1);
+  }
+  {
+    const h = await harness();
+    h.hasOffscreen = true; h.pipelineReply = { started: false, reason: 'already-running' };
+    assert.equal((await h.send({ type: 'RUN_PIPELINE_MANUAL' })).started, false, 'a busy offscreen host cannot be reported as accepting another run');
+    h.pipelineReply = { started: true };
+    assert.equal((await h.send({ type: 'RUN_PIPELINE_MANUAL' })).started, true, 'refused work leaves no phantom launch guard');
+  }
+  {
+    const h = await harness();
+    await h.store.put('topics', { topicId: 'session-topic', label: 'Session topic', state: 'active' });
+    const replies = await Promise.all(Array.from({ length: 5 }, () => h.send({ type: 'START_TRAIL_SESSION', topicId: 'session-topic', durationMinutes: null })));
+    assert.equal(replies.filter(r => r.ok).length, 1, 'worker serializes simultaneous session starts');
+    const session = replies.find(r => r.ok).session, pauseAt = session.startedAt + 1000;
+    await h.store.put('intent_sessions', { ...session, startedAt: session.startedAt - 60000 });
+    await h.store.setSetting('pauseIntervals', [{ start: pauseAt - 30000, end: pauseAt - 10000 }]);
+    const status = await h.send({ type: 'GET_TRAIL_SESSION_STATUS' });
+    assert.equal(status.session, null, 'real status routing reconciles a session interrupted by a persisted pause');
+    const ended = await h.store.get('intent_sessions', session.sessionId);
+    assert.equal(ended.endedAt, pauseAt - 30000);
+    assert.equal(ended.endReason, 'capture-paused');
+  }
+  {
+    const h = await harness(), at = Date.now() - 10000;
+    const update = h.capture('intervals', { startedAt: at, updatedAt: at + 8000, activeMs: 99999999,
+      activityIntervals: [[at - 5000, at + 2000], [at + 1000, at + 4000], [at + 6000, at + 20000], [at + 2, at + 1], ['bad', at], [NaN, Infinity]] });
+    assert.equal((await h.send(update)).ok, true);
+    const row = await h.store.get('captures', 'intervals');
+    assert.deepEqual(row.activityIntervals, [[at, at + 4000], [at + 6000, at + 8000]]);
+    assert.equal(row.activeMs, 6000, 'worker derives totals from bounded, merged valid intervals');
+    await h.store.setSetting('pauseIntervals', [{ start: at + 2000, end: at + 6000 }]);
+    assert.equal((await h.send(h.capture('during-pause', { startedAt: at + 3000 }))).ok, false, 'late capture from a closed pause is still rejected');
+    const record = require('../../lib/trails').buildRecord(await require('../../lib/trails').loadData(h.store));
+    assert.equal(record.estimatedMs, 4000, 'shared evidence also subtracts pauses from existing captures');
   }
   console.log('background lifecycle tests passed');
 })().catch(error => { console.error(error); process.exit(1); });

@@ -60,5 +60,14 @@ const seed = () => ({ visits: [
   const overlapping = seed(); overlapping.visits[1].visitTime = start + 1000; overlapping.visits[2].visitTime = start + 2000;
   const constrained = T.buildRecord(overlapping, { now });
   assert.equal(constrained.events.find(e => e.id === 'a').topicIds.length, 0, 'grouping uses time left after overlap allocation');
+  const upgrading = S.createStore({ indexedDB: new IDBFactory(), IDBKeyRange }); await upgrading.open();
+  for (const [table, rows] of Object.entries(seed())) await upgrading.bulkPut(table, rows);
+  await upgrading.setSetting('evidenceRepairVersion', 2);
+  await I.repair(upgrading, { now, once: true });
+  assert.equal(await upgrading.getSetting('evidenceRepairVersion'), 3, 'existing installations receive the updated accounting rule');
+  assert.equal((await upgrading.get('pages', status)).dwellMs, 8000);
+  assert.equal((await upgrading.getAll('visits')).length, seed().visits.length, 'repair preserves original navigation records');
+  assert.equal(await I.repair(upgrading, { now, once: true }), null, 'startup repair runs once per version');
+  await upgrading.close();
   await store.close(); console.log('evidence integrity and correction regression tests passed');
 })().catch(e => { console.error(e); process.exit(1); });

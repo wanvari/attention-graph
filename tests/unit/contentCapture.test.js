@@ -35,8 +35,10 @@ function harness(url, html = '<main>A useful article about the material someone 
   return {
     dom, w, messages, replies,
     step(ms) { now += ms; clock += ms; tick(); },
+    advance(ms) { now += ms; clock += ms; },
     input() { inputs.pointerdown({ isTrusted: true }); },
     hide() { visible = 'hidden'; focused = false; w.document.dispatchEvent(new w.Event('visibilitychange')); },
+    show() { visible = 'visible'; focused = true; w.document.dispatchEvent(new w.Event('visibilitychange')); },
     settings(values) { changed(Object.fromEntries(Object.entries(values).map(([key, newValue]) => [key, { newValue }])), 'local'); },
     end() { w.dispatchEvent(new w.Event('pagehide')); },
     last() { return messages[messages.length - 1]?.capture; }
@@ -110,6 +112,34 @@ function harness(url, html = '<main>A useful article about the material someone 
     h.step(15000);
     assert.strictEqual(h.last().captureId, successor);
     assert.ok(h.last().extractedText, 'late acknowledgement from old route cannot suppress new route text');
+    h.dom.window.close();
+  }
+  {
+    const h = harness('https://example.com/article');
+    h.input();
+    for (let i = 0; i < 5; i++) h.step(1000);
+    h.hide(); h.advance(5 * 60000); h.show();
+    h.input();
+    for (let i = 0; i < 3; i++) h.step(1000);
+    h.end();
+    assert.equal(h.last().activeMs, 8000);
+    assert.deepEqual(h.last().activityIntervals, [[1000000, 1005000], [1305000, 1308000]], 'returning to a tab retains the gap in timestamped evidence');
+    h.advance(10 * 60000);
+    const restored = new h.w.Event('pageshow'); Object.defineProperty(restored, 'persisted', { value: true });
+    h.w.dispatchEvent(restored);
+    const fresh = h.last();
+    assert.notEqual(fresh.captureId, h.messages[0].capture.captureId, 'back/forward cache restoration starts a new observation');
+    h.step(15000); assert.equal(h.last().activeMs, 0, 'old input cannot carry over into the restored page');
+    h.input(); h.step(1000); h.end(); assert.equal(h.last().activeMs, 1000);
+    h.dom.window.close();
+  }
+  {
+    const h = harness('https://example.com/article');
+    for (let i = 0; i < 31 * 60; i++) { if (i % 30 === 0) h.input(); h.step(1000); }
+    h.end();
+    assert.equal(h.last().activeMs, 31 * 60000, 'observed intervals can exceed the legacy 30-minute estimate cap');
+    const record = require('../../lib/trails').buildRecord({ captures: [h.last()] }, { now: h.last().endedAt });
+    assert.equal(record.estimatedMs, 31 * 60000, 'the shared record preserves a long, continuously observed session');
     h.dom.window.close();
   }
   {

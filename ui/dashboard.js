@@ -77,7 +77,7 @@
         paragraph(box, 'Timestamped activity is clipped to this period. Older interaction totals and history gaps use estimated placement. Overlapping tabs count once. Silent reading and activity outside this browser may be absent.');
       } else {
         paragraph(box, `${percent(signals[key].value)} · ${raw(key)}`, 'nt-drawer-lead');
-        paragraph(box, key === 'continuity' ? 'Same-trail transitions ÷ classified within-session transitions. Reloads, the same URL, gaps over 30 minutes and day boundaries are excluded.'
+        paragraph(box, key === 'continuity' ? 'Same-trail transitions ÷ classified within-session transitions. Reloads, the same URL, simultaneous timestamps, capture pauses, gaps over 30 minutes and day boundaries are excluded.'
           : key === 'top' ? 'Estimated minutes in the largest trail ÷ all grouped estimated minutes.'
           : 'Estimated minutes in trails first recorded before today ÷ all grouped estimated minutes.');
       }

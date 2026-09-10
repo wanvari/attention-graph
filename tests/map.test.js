@@ -14,6 +14,7 @@ const { JSDOM } = require('jsdom');
 const { IDBFactory, IDBKeyRange } = require('fake-indexeddb');
 
 const root = path.join(__dirname, '..');
+const NOW = new Date(2026, 8, 10, 15).getTime();
 
 // The header/workspace skeleton map.js reaches into by id. Lifted from
 // ui/map.html so the two cannot drift apart silently.
@@ -132,7 +133,7 @@ async function seedRegistry(store, CTText, today) {
   await store.bulkPut('visits', pages.flatMap(([url, title, domain, , day], i) =>
     [0, 1].map(n => ({
       visitId: `v-${i}-${n}`, url, normalizedUrl: CTText.normalizeUrl(url), title, domain,
-      visitTime: CTText.dayKeyToNoonMs(day) + n * 6e5, transition: 'link',
+      visitTime: CTText.dayKeyToNoonMs(day) + n * 6e5 + i * 6e4, transition: 'link',
       sessionId: 0, dwellMs: 45e4, endsSession: false, dayKey: day, source: 'web'
     }))
   ));
@@ -175,13 +176,13 @@ async function renderMap() {
 
   const store = global.CTStore.createStore({ indexedDB: new IDBFactory(), IDBKeyRange });
   await store.open();
-  const today = CTText.dayKeyFromMs(Date.now());
+  const today = CTText.dayKeyFromMs(NOW);
   await seedRegistry(store, CTText, today);
 
   const errors = [];
   const originalError = console.error;
   console.error = (...args) => errors.push(args[0]);
-  const viz = new CTMap.TopicMapVisualizer({ store });
+  const viz = new CTMap.TopicMapVisualizer({ store, now: NOW });
   // loadAnalysis is fired from the constructor; let its promise chain settle.
   await new Promise(resolve => setTimeout(resolve, 50));
   console.error = originalError;
@@ -267,11 +268,18 @@ async function renderMap() {
     assert.ok(window.document.getElementById('evidence-panel').textContent.includes(edge.examples[0].from.title));
     const before = viz.analysis.coverage.estimatedActiveMs;
     const url = 'https://docs.rs/tokio';
-    await require('../lib/integrity').repair(store, { correction: { correctionId: `page:${url}`, kind: 'page_membership', targetId: url, value: { topicId: null }, updatedAt: Date.now() } });
-    const after = await global.CTMapData.build(store, { windowDays: 30 });
+    await require('../lib/integrity').repair(store, { now: NOW, correction: { correctionId: `page:${url}`, kind: 'page_membership', targetId: url, value: { topicId: null }, updatedAt: NOW } });
+    const after = await global.CTMapData.build(store, { windowDays: 30, now: NOW });
     assert.equal(after.coverage.estimatedActiveMs, before);
     assert.equal(after.transitions.length, 0);
     assert.ok(after.uncategorized.pages.some(p => p.id === url));
+  }
+
+  // A morning view must omit today's future fixture visits without failing.
+  {
+    const { store } = await renderMap();
+    const morning = await global.CTMapData.build(store, { now: new Date(2026, 8, 10, 8).getTime() });
+    assert.deepEqual(morning.topics.map(t => t.id), ['topic-bread']);
   }
 
   // ---- empty registry takes the honest path, not the failure path ------

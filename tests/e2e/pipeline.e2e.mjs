@@ -183,13 +183,17 @@ async function main() {
       }
       assert.equal(run?.status, 'ok', run?.error || 'live repeated-page run did not finish');
       assert.ok((await readStore(ext, 'embeddings')).length >= 3, `supported pages embed through real Ollama: ${JSON.stringify({counts:run.counts,pages:(await readStore(ext, 'pages')).map(p=>({url:p.url,n:p.visitCount,reason:p.classificationReason,pending:p.needsClassification}))})}`);
+      // Two model-unload requests each have a 10s transport timeout, followed
+      // by a 5s worker acknowledgement deadline. Allow 5s for browser overhead.
+      const cleanupStarted = Date.now();
       let remaining;
-      for (let i = 0; i < 25; i++) {
+      for (let i = 0; i < 150; i++) {
         remaining = await ext.evaluate(() => chrome.runtime.getContexts({ contextTypes: ['OFFSCREEN_DOCUMENT'] }));
         if (!remaining.length) break;
         await ext.waitForTimeout(200);
       }
-      assert.equal(remaining.length, 0, 'offscreen host closes after durable run completion');
+      assert.equal(remaining.length, 0, `offscreen host closes within its cleanup budget (${Date.now() - cleanupStarted}ms observed)`);
+      console.log(`     offscreen cleanup observed after durable result: ${Date.now() - cleanupStarted}ms`);
     });
 
     await check('stale running row is marked abandoned and does not block a rerun', async () => {

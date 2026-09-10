@@ -105,6 +105,23 @@ try {
   await page.goto(`${origin}/ui/newtab.html?session=${timed.sessionId}`);
   await page.getByRole('heading', { name: 'Session recap', exact: true }).waitFor();
   await page.keyboard.press('Escape');
+  // Recover the persisted half of a pause even if capture has resumed before
+  // a service worker comes back. This uses a real worker restart and IDB.
+  const interrupted = await send({ type: 'START_TRAIL_SESSION', topicId: 'test-rust', durationMinutes: null });
+  const pauseAt = await page.evaluate(async id => {
+    const store = CTStore.createStore({}), session = await store.get('intent_sessions', id), at = Date.now() - 45000;
+    await store.put('intent_sessions', { ...session, startedAt: at - 15000 });
+    await store.setSetting('pauseIntervals', [{ start: at, end: at + 15000 }]);
+    return at;
+  }, interrupted.session.sessionId);
+  await cdp.send('ServiceWorker.stopAllWorkers');
+  await page.reload();
+  assert.equal((await send({ type: 'GET_TRAIL_SESSION_STATUS' })).session, null);
+  const recovered = await page.evaluate(async id => CTStore.createStore({}).get('intent_sessions', id), interrupted.session.sessionId);
+  assert.equal(recovered.endedAt, pauseAt);
+  assert.equal(recovered.endReason, 'capture-paused');
+  assert.equal(recovered.alarmCleared, true);
+  assert.equal(recovered.notifiedAt, null);
   running = await send({ type: 'START_TRAIL_SESSION', topicId: 'test-rust', durationMinutes: null });
   assert.equal(running.ok, true);
   await page.goto(`${origin}/ui/options.html`);

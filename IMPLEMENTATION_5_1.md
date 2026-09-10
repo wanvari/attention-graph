@@ -4,7 +4,19 @@ Branch: `main` → `origin/main` (GitHub: wanvari/attention-graph). The user req
 
 ## Resume here
 
-Status: implementation and installed verification complete. Release 5.1.0 is installed; database schema 5 and evidence-repair version 2 applied. Implementation commit `cd76c5a` and final verification/copy checkpoint `73fda68` are included on main. The actual Claude Status record is repaired: 35s recorded interaction, 211 navigation entries preserved, 129 unknown-duration entries explicitly labeled, no automatic membership. Final runtime edits clarify unknown versus zero time and call passive visit groups “episodes” to distinguish optional sessions. No outstanding implementation blocker. Future work should start from this checkpoint and the documented pilot limitations, not restart the build.
+Status: September 10 review fixes and new regressions verified for the **5.1.1** patch on main (base `341cde7`). Confirmed and fixed: estimates displacing observed activity, transitions crossing pauses or arbitrarily ordering simultaneous visits, interrupted pauses leaving sessions active, and cleanup failures leaving stale alarms/notifications. The time-dependent map fixture is deterministic. Repair version 3 updates stored accounting on startup. Full suite **36/36**, expanded browser Home/session E2E, capture E2E, and all four live pipeline checks pass. Pipeline's original 5s shutdown assertion failed; cleanup actually took 8.382s on the retest, inside the two 10s unload budgets. Investigation also fixed a run-admission race during cleanup: explicit acceptance/refusal, completion after unloads, bounded missing acknowledgement. Commit this verified implementation checkpoint, then run the synthetic laptop check, exact replay/full suite, package/product E2E, final report and push the validation checkpoint. No user browsing data was accessed.
+
+Previous release: 5.1.0 is installed; database schema 5 and evidence-repair version 2 applied. The actual Claude Status record is repaired: 35s recorded interaction, 211 navigation entries preserved, 129 unknown-duration entries explicitly labeled, no automatic membership. Preserve that checkpoint and the documented pilot limitations.
+
+### September 10 review checklist
+
+- [x] Inspect development contract, branch, prior checklist and test inventory; run baseline tests.
+- [x] Review core accounting, privacy/capture, durable sessions, storage/pipeline and UI integration.
+- [x] Add deterministic map fixtures and meaningful regressions for confirmed defects; fix failures.
+- [ ] Run all unit/protocol/UI tests and relevant browser E2E suites; record actual results and limitations.
+- [ ] Commit, push main, verify remote commit, and update this resume checkpoint.
+
+Review evidence: `tests/unit/evidenceBoundaries.test.js` covers overlap precedence, 100 deterministic allocation-oracle/permutation cases, pause boundaries, simultaneous visits, and Map/recap consistency. `tests/unit/sessionRecovery.test.js` covers open/closed pauses on restart, deadline ordering, alarm failure, notification cleanup and idempotent completion. Existing capture/worker/integrity suites now cover back/forward cache, hidden gaps, 31 minutes of observed interaction, concurrent starts, malformed intervals, late paused captures and the version-3 repair gate. Browser session tests include a worker restart after a partially persisted pause. Logs are ignored `.tmp/review-2026-09-10-*.log`; do not reuse September 7 results as current validation.
 
 ## Accepted product decisions
 

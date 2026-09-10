@@ -229,7 +229,13 @@ async function startPipeline(trigger, force) {
     if (!(await offscreenExists())) throw error;
   }
   pipelineLaunchUntil = Date.now() + HEARTBEAT_FRESH_MS;
-  try { await chrome.runtime.sendMessage({ type: 'RUN_PIPELINE', trigger, force: !!force }); }
+  try {
+    const reply = await chrome.runtime.sendMessage({ type: 'RUN_PIPELINE', trigger, force: !!force });
+    if (!reply?.started) {
+      pipelineLaunchUntil = 0;
+      return { started: false, reason: reply?.reason || 'offscreen-unavailable' };
+    }
+  }
   catch (error) { pipelineLaunchUntil = 0; throw error; }
   return { started: true };
 }

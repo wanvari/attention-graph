@@ -7,9 +7,11 @@
 
   let running = false;
 
-  function swCall(type, payload) {
+  function swCall(type, payload, timeoutMs) {
     return new Promise((resolve, reject) => {
+      const timer = timeoutMs ? setTimeout(() => reject(new Error(`${type} acknowledgement timed out`)), timeoutMs) : null;
       chrome.runtime.sendMessage({ type, ...payload }, response => {
+        if (timer) clearTimeout(timer);
         if (chrome.runtime.lastError) reject(new Error(chrome.runtime.lastError.message));
         else if (response && response.error) reject(new Error(response.error));
         else resolve(response);
@@ -31,7 +33,7 @@
   async function runPipeline(trigger, force) {
     if (running) return;
     running = true;
-    let ollama;
+    let ollama, result;
     try {
       const store = CTStore.createStore({});
       await store.open();
@@ -61,25 +63,28 @@
         ollama,
         settings
       });
-      const result = await pipeline.run({ trigger, force });
-      try {
-        await swCall('RUN_COMPLETE', { result, brief: result.brief || null });
-      } catch { /* SW may have been recycled; the run row is already stored */ }
+      result = await pipeline.run({ trigger, force });
     } catch (error) {
       console.error('pipeline failed', error);
+      result = { ok: false, error: error.message || String(error) };
     } finally {
       if (ollama) {
-        await ollama.unloadEmbedModel();
-        await ollama.unloadChatModel();
+        try { await ollama.unloadEmbedModel(); } catch { /* short residency is the fallback */ }
+        try { await ollama.unloadChatModel(); } catch { /* attempt both models independently */ }
       }
+      try {
+        await swCall('RUN_COMPLETE', { result, brief: result?.brief || null }, 5000);
+      } catch { /* durable result survives a recycled or unresponsive worker */ }
       running = false;
       window.close(); // release the offscreen document
     }
   }
 
-  chrome.runtime.onMessage.addListener(message => {
+  chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
     if (message && message.type === 'RUN_PIPELINE') {
+      if (running) { sendResponse({ started: false, reason: 'already-running' }); return; }
       runPipeline(message.trigger, message.force);
+      sendResponse({ started: true });
     }
   });
 })();
