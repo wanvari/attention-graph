@@ -25,11 +25,13 @@ Raw reports: [CPU](performance-2026-09-11.json), [Chromium storage](storage-2026
 ## Verification
 
 - Baseline: 36/36 existing test files passed.
-- Infrastructure: existing 36 plus new output-equivalence and storage-projection suites pass. The final working-tree run also includes the initial context-input test: 39/39 total.
+- Infrastructure: existing 36 plus new output-equivalence and storage-projection suites pass. The final working-tree run also includes context-input characterization and full experiment replay: 40/40 total.
 - 316 full record/dashboard/recap comparisons against frozen 5.1.1 match every output field. Cases include changed evidence, corrections, overlapping tabs, simultaneous visits, future/clipped observations, unknown status-page durations, open/closed pauses, midnight and DST across three time zones.
 - Schema-5 source text and vectors survive migration unchanged. Tests cover cross-context revision reuse, atomic abort, retention, range deletion, deletion followed by new writes, and a completed repair gate that reads no full tables.
 - Home/session/Audit browser E2E passes, including worker restart, user corrections, persistence and deletion.
 - Capture E2E passes all 16 checks. Live pipeline E2E passes all four checks. Existing exact production transcript replay remains passing; fixtures/current was not replaced.
 - Real Chromium migration and metadata read E2E passes all five checks.
+
+GitHub's existing workflow was also found to fail before this work because it skipped dependency installation. The final setup installs the lockfile with `npm ci` and uses Node 26, compatible with the test dependencies. The GitHub result is recorded in the implementation checklist.
 
 No installed user database was opened or modified, and the installed extension was not reloaded. Upgrading an installation requires the usual extension reload to close older database connections. Schema 6 is forward migration; an old schema-5 binary cannot open the upgraded database. Packaging/onboarding improvements and broader hardware validation remain outside these two authorized steps.

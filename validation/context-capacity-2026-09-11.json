@@ -1,0 +1,82 @@
+{
+  "generatedAt": "2026-09-11T20:13:27.597Z",
+  "inputId": "long-6",
+  "chars": 8068,
+  "sha256": "1dcd2d66541827a6c98d0a10076eec20d4a3514ff1e6b7d8f5fffed6594cd3ac",
+  "ollama": {
+    "version": "0.33.3"
+  },
+  "cases": [
+    {
+      "options": {},
+      "truncate": false,
+      "status": 400,
+      "error": "the input length exceeds the context length",
+      "inputTokens": null,
+      "vectorDimensions": null,
+      "runtime": [
+        {
+          "name": "bge-m3:latest",
+          "context_length": 4096,
+          "size_vram": 673049476
+        }
+      ],
+      "elapsedMs": 882
+    },
+    {
+      "options": {
+        "num_ctx": 8192
+      },
+      "truncate": false,
+      "status": 400,
+      "error": "the input length exceeds the context length",
+      "inputTokens": null,
+      "vectorDimensions": null,
+      "runtime": [
+        {
+          "name": "bge-m3:latest",
+          "context_length": 8192,
+          "size_vram": 673049476
+        }
+      ],
+      "elapsedMs": 861
+    },
+    {
+      "options": {
+        "num_ctx": 8192
+      },
+      "truncate": true,
+      "status": 200,
+      "error": null,
+      "inputTokens": 2048,
+      "vectorDimensions": 1024,
+      "runtime": [
+        {
+          "name": "bge-m3:latest",
+          "context_length": 8192,
+          "size_vram": 673049476
+        }
+      ],
+      "elapsedMs": 1716
+    },
+    {
+      "options": {
+        "num_ctx": 8192,
+        "num_batch": 4096
+      },
+      "truncate": false,
+      "status": 200,
+      "error": null,
+      "inputTokens": 2070,
+      "vectorDimensions": 1024,
+      "runtime": [
+        {
+          "name": "bge-m3:latest",
+          "context_length": 8192,
+          "size_vram": 753045339
+        }
+      ],
+      "elapsedMs": 1624
+    }
+  ]
+}

@@ -14,7 +14,10 @@
     "check:laptop": "node tools/laptopCheck.js",
     "package": "node tools/package.js",
     "check:performance": "node --expose-gc tools/performanceCheck.js",
-    "e2e:storage": "node tests/e2e/storage.e2e.mjs"
+    "e2e:storage": "node tests/e2e/storage.e2e.mjs",
+    "check:context": "node tools/contextExperiment.js --live",
+    "replay:context": "node tools/contextExperiment.js --replay",
+    "check:context-capacity": "node tools/contextCapacityCheck.js"
   },
   "devDependencies": {
     "fake-indexeddb": "^6.2.5",

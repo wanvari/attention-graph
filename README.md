@@ -86,3 +86,8 @@ npm run package          # installable unpacked folder and zip in dist/
 The live check writes complete chat transcripts, vectors, a metadata-only sample, and measurements. `tests/protocol/current.test.js` replays those exact current requests without models; a changed prompt fails instead of silently substituting a response. Archived 12b fixtures are retained as historical evidence only. The older `validate`/`bench` tools retain their legacy configuration and do not validate the new runtime profile.
 
 See [ARCHITECTURE.md](ARCHITECTURE.md) for failure recovery and storage contracts, and [PRIVACY.md](PRIVACY.md) for data handling. This build is suitable for a local pilot. Multi-device synchronization, a published store release, semantic search over full page text, and independent human evaluation are not implemented.
+
+
+### Efficiency and context audit (5.1.2)
+
+The [efficiency report](validation/performance-review-2026-09-11.md) documents equivalent-output optimizations, schema-6 metadata reads, migration tests and measured speedups. The [context audit](validation/context-audit-2026-09-11.md) compares longer retained input with the same models in an isolated synthetic experiment. Production inference inputs and settings remain unchanged; full context improved these stress cases but still mishandled mixed subjects. The audit also reproduces Ollama's separate token-batch/truncation limit.

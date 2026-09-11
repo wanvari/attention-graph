@@ -1,0 +1,843 @@
+{
+  "generatedAt": "2026-09-11T20:13:52.958Z",
+  "scope": "Synthetic same-model context ablation; stages embedding, clustering, labeling and adjudication only. No registry/history/capture loop, no user data. Challenge text repeats fixture prose; not independent human validation. Operational exclusions and all production thresholds/budgets retained. Generative label quality is not human-scored.",
+  "host": {
+    "cpu": "Apple M3 Pro",
+    "memoryBytes": 19327352832,
+    "node": "v26.7.0"
+  },
+  "profiles": [
+    {
+      "profile": "current",
+      "eligiblePages": 72,
+      "excludedBeforeEmbedding": 4,
+      "inputChars": {
+        "min": 1089,
+        "max": 1568,
+        "total": 109788
+      },
+      "peakResidentBytes": 3800291082,
+      "modelOverlap": false,
+      "embeddingWallMs": 31458,
+      "elapsedMs": 94504,
+      "rawClustering": {
+        "correctPairs": 128,
+        "incorrectMergePairs": 136,
+        "missedSameTopicPairs": 96,
+        "pairPrecision": 0.48484848484848486,
+        "pairRecall": 0.5714285714285714,
+        "clearPages": 64,
+        "clearPagesGrouped": 64,
+        "noisePages": 12,
+        "noisePagesGrouped": 8,
+        "byCase": {
+          "ordinary": {
+            "pages": 40,
+            "grouped": 40,
+            "supportedCorrectly": 20
+          },
+          "late": {
+            "pages": 8,
+            "grouped": 8,
+            "supportedCorrectly": 0
+          },
+          "middle-chat": {
+            "pages": 8,
+            "grouped": 8,
+            "supportedCorrectly": 0
+          },
+          "long": {
+            "pages": 8,
+            "grouped": 8,
+            "supportedCorrectly": 4
+          },
+          "mixed-chat": {
+            "pages": 4,
+            "grouped": 4,
+            "supportedCorrectly": 0
+          },
+          "mixed-source": {
+            "pages": 4,
+            "grouped": 4,
+            "supportedCorrectly": 0
+          },
+          "brief-status": {
+            "pages": 4,
+            "grouped": 0,
+            "supportedCorrectly": 0
+          }
+        }
+      },
+      "afterLabelAndAudit": {
+        "correctPairs": 128,
+        "incorrectMergePairs": 136,
+        "missedSameTopicPairs": 96,
+        "pairPrecision": 0.48484848484848486,
+        "pairRecall": 0.5714285714285714,
+        "clearPages": 64,
+        "clearPagesGrouped": 64,
+        "noisePages": 12,
+        "noisePagesGrouped": 7,
+        "byCase": {
+          "ordinary": {
+            "pages": 40,
+            "grouped": 40,
+            "supportedCorrectly": 20
+          },
+          "late": {
+            "pages": 8,
+            "grouped": 8,
+            "supportedCorrectly": 0
+          },
+          "middle-chat": {
+            "pages": 8,
+            "grouped": 8,
+            "supportedCorrectly": 0
+          },
+          "long": {
+            "pages": 8,
+            "grouped": 8,
+            "supportedCorrectly": 4
+          },
+          "mixed-chat": {
+            "pages": 4,
+            "grouped": 4,
+            "supportedCorrectly": 0
+          },
+          "mixed-source": {
+            "pages": 4,
+            "grouped": 3,
+            "supportedCorrectly": 0
+          },
+          "brief-status": {
+            "pages": 4,
+            "grouped": 0,
+            "supportedCorrectly": 0
+          }
+        }
+      },
+      "beyondTopicBudget": 1,
+      "adjudication": {
+        "audited": 0,
+        "kept": 0,
+        "split": 0,
+        "uncategorized": 0,
+        "disagreed": 0,
+        "errors": 0,
+        "calls": 0
+      },
+      "groups": [
+        {
+          "label": "Working notes and source material",
+          "pages": [
+            "late-0",
+            "late-3",
+            "late-6",
+            "middle-chat-0",
+            "middle-chat-3",
+            "middle-chat-6",
+            "late-1",
+            "late-4",
+            "late-7",
+            "middle-chat-1",
+            "middle-chat-4",
+            "middle-chat-7",
+            "late-2",
+            "late-5",
+            "middle-chat-2",
+            "middle-chat-5"
+          ],
+          "adjudication": null
+        },
+        {
+          "label": "Index fund expense ratios and tracking errors",
+          "pages": [
+            "ordinary-2-0",
+            "ordinary-2-4",
+            "mixed-chat-2",
+            "ordinary-2-3",
+            "ordinary-2-2",
+            "ordinary-2-1",
+            "long-2"
+          ],
+          "adjudication": null
+        },
+        {
+          "label": "Sourdough baking techniques",
+          "pages": [
+            "ordinary-0-2",
+            "mixed-chat-0",
+            "ordinary-0-1",
+            "long-0",
+            "ordinary-0-3",
+            "ordinary-0-4",
+            "ordinary-0-0"
+          ],
+          "adjudication": null
+        },
+        {
+          "label": "Async Rust programming concepts",
+          "pages": [
+            "mixed-chat-1",
+            "ordinary-1-1",
+            "ordinary-1-4",
+            "long-1",
+            "ordinary-1-2",
+            "ordinary-1-0",
+            "ordinary-1-3"
+          ],
+          "adjudication": null
+        },
+        {
+          "label": "Large language model memory management",
+          "pages": [
+            "mixed-chat-3",
+            "ordinary-3-1",
+            "ordinary-3-2",
+            "long-3",
+            "ordinary-3-0",
+            "ordinary-3-4",
+            "ordinary-3-3"
+          ],
+          "adjudication": null
+        },
+        {
+          "label": "Battery storage economics",
+          "pages": [
+            "ordinary-7-0",
+            "ordinary-7-4",
+            "ordinary-7-3",
+            "long-7",
+            "ordinary-7-2",
+            "ordinary-7-1"
+          ],
+          "adjudication": null
+        },
+        {
+          "label": "Kubernetes CNI plugins",
+          "pages": [
+            "ordinary-5-1",
+            "ordinary-5-4",
+            "ordinary-5-0",
+            "ordinary-5-3",
+            "long-5",
+            "ordinary-5-2"
+          ],
+          "adjudication": null
+        },
+        {
+          "label": "Houseplant care guides",
+          "pages": [
+            "ordinary-6-3",
+            "ordinary-6-0",
+            "ordinary-6-4",
+            "long-6",
+            "ordinary-6-2",
+            "ordinary-6-1"
+          ],
+          "adjudication": null
+        },
+        {
+          "label": "Running training strategies",
+          "pages": [
+            "ordinary-4-3",
+            "long-4",
+            "ordinary-4-0",
+            "ordinary-4-4",
+            "ordinary-4-1",
+            "ordinary-4-2"
+          ],
+          "adjudication": null
+        },
+        {
+          "label": "Y Combinator weekly links",
+          "pages": [
+            "noise-1"
+          ],
+          "adjudication": null
+        },
+        {
+          "label": "Y Combinator weekly links",
+          "pages": [
+            "noise-3"
+          ],
+          "adjudication": null
+        },
+        {
+          "label": "Reddit Friday links",
+          "pages": [
+            "noise-0"
+          ],
+          "adjudication": null
+        }
+      ],
+      "calls": 11
+    },
+    {
+      "profile": "expanded4000",
+      "eligiblePages": 72,
+      "excludedBeforeEmbedding": 4,
+      "inputChars": {
+        "min": 1089,
+        "max": 4068,
+        "total": 213683
+      },
+      "peakResidentBytes": 3856589127,
+      "modelOverlap": false,
+      "embeddingWallMs": 42862,
+      "elapsedMs": 104361,
+      "rawClustering": {
+        "correctPairs": 128,
+        "incorrectMergePairs": 136,
+        "missedSameTopicPairs": 96,
+        "pairPrecision": 0.48484848484848486,
+        "pairRecall": 0.5714285714285714,
+        "clearPages": 64,
+        "clearPagesGrouped": 64,
+        "noisePages": 12,
+        "noisePagesGrouped": 8,
+        "byCase": {
+          "ordinary": {
+            "pages": 40,
+            "grouped": 40,
+            "supportedCorrectly": 20
+          },
+          "late": {
+            "pages": 8,
+            "grouped": 8,
+            "supportedCorrectly": 0
+          },
+          "middle-chat": {
+            "pages": 8,
+            "grouped": 8,
+            "supportedCorrectly": 0
+          },
+          "long": {
+            "pages": 8,
+            "grouped": 8,
+            "supportedCorrectly": 4
+          },
+          "mixed-chat": {
+            "pages": 4,
+            "grouped": 4,
+            "supportedCorrectly": 0
+          },
+          "mixed-source": {
+            "pages": 4,
+            "grouped": 4,
+            "supportedCorrectly": 0
+          },
+          "brief-status": {
+            "pages": 4,
+            "grouped": 0,
+            "supportedCorrectly": 0
+          }
+        }
+      },
+      "afterLabelAndAudit": {
+        "correctPairs": 128,
+        "incorrectMergePairs": 136,
+        "missedSameTopicPairs": 96,
+        "pairPrecision": 0.48484848484848486,
+        "pairRecall": 0.5714285714285714,
+        "clearPages": 64,
+        "clearPagesGrouped": 64,
+        "noisePages": 12,
+        "noisePagesGrouped": 7,
+        "byCase": {
+          "ordinary": {
+            "pages": 40,
+            "grouped": 40,
+            "supportedCorrectly": 20
+          },
+          "late": {
+            "pages": 8,
+            "grouped": 8,
+            "supportedCorrectly": 0
+          },
+          "middle-chat": {
+            "pages": 8,
+            "grouped": 8,
+            "supportedCorrectly": 0
+          },
+          "long": {
+            "pages": 8,
+            "grouped": 8,
+            "supportedCorrectly": 4
+          },
+          "mixed-chat": {
+            "pages": 4,
+            "grouped": 4,
+            "supportedCorrectly": 0
+          },
+          "mixed-source": {
+            "pages": 4,
+            "grouped": 3,
+            "supportedCorrectly": 0
+          },
+          "brief-status": {
+            "pages": 4,
+            "grouped": 0,
+            "supportedCorrectly": 0
+          }
+        }
+      },
+      "beyondTopicBudget": 1,
+      "adjudication": {
+        "audited": 0,
+        "kept": 0,
+        "split": 0,
+        "uncategorized": 0,
+        "disagreed": 0,
+        "errors": 0,
+        "calls": 0
+      },
+      "groups": [
+        {
+          "label": "Working notes and source material",
+          "pages": [
+            "late-0",
+            "late-3",
+            "late-6",
+            "middle-chat-0",
+            "middle-chat-3",
+            "middle-chat-6",
+            "late-1",
+            "late-4",
+            "late-7",
+            "middle-chat-1",
+            "middle-chat-4",
+            "middle-chat-7",
+            "late-2",
+            "late-5",
+            "middle-chat-2",
+            "middle-chat-5"
+          ],
+          "adjudication": null
+        },
+        {
+          "label": "Index fund expense ratios and tracking errors",
+          "pages": [
+            "ordinary-2-0",
+            "ordinary-2-4",
+            "mixed-chat-2",
+            "ordinary-2-3",
+            "ordinary-2-2",
+            "ordinary-2-1",
+            "long-2"
+          ],
+          "adjudication": null
+        },
+        {
+          "label": "Sourdough baking techniques",
+          "pages": [
+            "ordinary-0-2",
+            "mixed-chat-0",
+            "ordinary-0-1",
+            "long-0",
+            "ordinary-0-3",
+            "ordinary-0-4",
+            "ordinary-0-0"
+          ],
+          "adjudication": null
+        },
+        {
+          "label": "Async Rust programming concepts",
+          "pages": [
+            "mixed-chat-1",
+            "ordinary-1-1",
+            "ordinary-1-4",
+            "long-1",
+            "ordinary-1-2",
+            "ordinary-1-0",
+            "ordinary-1-3"
+          ],
+          "adjudication": null
+        },
+        {
+          "label": "Large language model memory management",
+          "pages": [
+            "mixed-chat-3",
+            "ordinary-3-1",
+            "ordinary-3-2",
+            "long-3",
+            "ordinary-3-0",
+            "ordinary-3-4",
+            "ordinary-3-3"
+          ],
+          "adjudication": null
+        },
+        {
+          "label": "Battery storage economics",
+          "pages": [
+            "ordinary-7-0",
+            "ordinary-7-4",
+            "ordinary-7-3",
+            "long-7",
+            "ordinary-7-2",
+            "ordinary-7-1"
+          ],
+          "adjudication": null
+        },
+        {
+          "label": "Kubernetes CNI plugins",
+          "pages": [
+            "ordinary-5-1",
+            "ordinary-5-4",
+            "ordinary-5-0",
+            "ordinary-5-3",
+            "long-5",
+            "ordinary-5-2"
+          ],
+          "adjudication": null
+        },
+        {
+          "label": "Houseplant care guides",
+          "pages": [
+            "ordinary-6-3",
+            "ordinary-6-0",
+            "ordinary-6-4",
+            "long-6",
+            "ordinary-6-2",
+            "ordinary-6-1"
+          ],
+          "adjudication": null
+        },
+        {
+          "label": "Running training strategies",
+          "pages": [
+            "ordinary-4-3",
+            "long-4",
+            "ordinary-4-0",
+            "ordinary-4-4",
+            "ordinary-4-1",
+            "ordinary-4-2"
+          ],
+          "adjudication": null
+        },
+        {
+          "label": "Y Combinator weekly links",
+          "pages": [
+            "noise-1"
+          ],
+          "adjudication": null
+        },
+        {
+          "label": "Y Combinator weekly links",
+          "pages": [
+            "noise-3"
+          ],
+          "adjudication": null
+        },
+        {
+          "label": "Reddit Friday links",
+          "pages": [
+            "noise-0"
+          ],
+          "adjudication": null
+        }
+      ],
+      "calls": 11
+    },
+    {
+      "profile": "full8000",
+      "requestedContextTokens": 8192,
+      "requestedBatchTokens": 4096,
+      "eligiblePages": 72,
+      "excludedBeforeEmbedding": 4,
+      "inputChars": {
+        "min": 1089,
+        "max": 8068,
+        "total": 325671
+      },
+      "peakResidentBytes": 3856589127,
+      "modelOverlap": false,
+      "embeddingWallMs": 53839,
+      "elapsedMs": 108629,
+      "rawClustering": {
+        "correctPairs": 224,
+        "incorrectMergePairs": 32,
+        "missedSameTopicPairs": 0,
+        "pairPrecision": 0.875,
+        "pairRecall": 1,
+        "clearPages": 64,
+        "clearPagesGrouped": 64,
+        "noisePages": 12,
+        "noisePagesGrouped": 8,
+        "byCase": {
+          "ordinary": {
+            "pages": 40,
+            "grouped": 40,
+            "supportedCorrectly": 20
+          },
+          "late": {
+            "pages": 8,
+            "grouped": 8,
+            "supportedCorrectly": 4
+          },
+          "middle-chat": {
+            "pages": 8,
+            "grouped": 8,
+            "supportedCorrectly": 4
+          },
+          "long": {
+            "pages": 8,
+            "grouped": 8,
+            "supportedCorrectly": 4
+          },
+          "mixed-chat": {
+            "pages": 4,
+            "grouped": 4,
+            "supportedCorrectly": 0
+          },
+          "mixed-source": {
+            "pages": 4,
+            "grouped": 4,
+            "supportedCorrectly": 0
+          },
+          "brief-status": {
+            "pages": 4,
+            "grouped": 0,
+            "supportedCorrectly": 0
+          }
+        }
+      },
+      "afterLabelAndAudit": {
+        "correctPairs": 224,
+        "incorrectMergePairs": 32,
+        "missedSameTopicPairs": 0,
+        "pairPrecision": 0.875,
+        "pairRecall": 1,
+        "clearPages": 64,
+        "clearPagesGrouped": 64,
+        "noisePages": 12,
+        "noisePagesGrouped": 8,
+        "byCase": {
+          "ordinary": {
+            "pages": 40,
+            "grouped": 40,
+            "supportedCorrectly": 20
+          },
+          "late": {
+            "pages": 8,
+            "grouped": 8,
+            "supportedCorrectly": 4
+          },
+          "middle-chat": {
+            "pages": 8,
+            "grouped": 8,
+            "supportedCorrectly": 4
+          },
+          "long": {
+            "pages": 8,
+            "grouped": 8,
+            "supportedCorrectly": 4
+          },
+          "mixed-chat": {
+            "pages": 4,
+            "grouped": 4,
+            "supportedCorrectly": 0
+          },
+          "mixed-source": {
+            "pages": 4,
+            "grouped": 4,
+            "supportedCorrectly": 0
+          },
+          "brief-status": {
+            "pages": 4,
+            "grouped": 0,
+            "supportedCorrectly": 0
+          }
+        }
+      },
+      "beyondTopicBudget": 0,
+      "adjudication": {
+        "audited": 0,
+        "kept": 0,
+        "split": 0,
+        "uncategorized": 0,
+        "disagreed": 0,
+        "errors": 0,
+        "calls": 0
+      },
+      "groups": [
+        {
+          "label": "Index fund expense ratios and tracking errors",
+          "pages": [
+            "ordinary-2-0",
+            "ordinary-2-4",
+            "mixed-chat-2",
+            "ordinary-2-3",
+            "ordinary-2-2",
+            "ordinary-2-1",
+            "late-2",
+            "long-2",
+            "middle-chat-2"
+          ],
+          "adjudication": null
+        },
+        {
+          "label": "Sourdough baking techniques",
+          "pages": [
+            "ordinary-0-2",
+            "mixed-chat-0",
+            "ordinary-0-1",
+            "late-0",
+            "long-0",
+            "middle-chat-0",
+            "ordinary-0-3",
+            "ordinary-0-4",
+            "ordinary-0-0"
+          ],
+          "adjudication": null
+        },
+        {
+          "label": "Rust concurrency and async programming",
+          "pages": [
+            "mixed-chat-1",
+            "ordinary-1-1",
+            "ordinary-1-4",
+            "late-1",
+            "long-1",
+            "middle-chat-1",
+            "ordinary-1-2",
+            "ordinary-1-0",
+            "ordinary-1-3"
+          ],
+          "adjudication": null
+        },
+        {
+          "label": "Large language model memory and quantization",
+          "pages": [
+            "mixed-chat-3",
+            "ordinary-3-1",
+            "ordinary-3-2",
+            "late-3",
+            "long-3",
+            "middle-chat-3",
+            "ordinary-3-0",
+            "ordinary-3-4",
+            "ordinary-3-3"
+          ],
+          "adjudication": null
+        },
+        {
+          "label": "Battery storage and grid economics",
+          "pages": [
+            "ordinary-7-0",
+            "ordinary-7-4",
+            "ordinary-7-3",
+            "late-7",
+            "long-7",
+            "middle-chat-7",
+            "ordinary-7-2",
+            "ordinary-7-1"
+          ],
+          "adjudication": null
+        },
+        {
+          "label": "Kubernetes networking and CNI plugins",
+          "pages": [
+            "ordinary-5-1",
+            "ordinary-5-4",
+            "ordinary-5-0",
+            "ordinary-5-3",
+            "late-5",
+            "long-5",
+            "middle-chat-5",
+            "ordinary-5-2"
+          ],
+          "adjudication": null
+        },
+        {
+          "label": "Houseplant care guides",
+          "pages": [
+            "ordinary-6-3",
+            "ordinary-6-0",
+            "ordinary-6-4",
+            "late-6",
+            "long-6",
+            "middle-chat-6",
+            "ordinary-6-2",
+            "ordinary-6-1"
+          ],
+          "adjudication": null
+        },
+        {
+          "label": "Marathon training strategies",
+          "pages": [
+            "ordinary-4-3",
+            "late-4",
+            "long-4",
+            "middle-chat-4",
+            "ordinary-4-0",
+            "ordinary-4-4",
+            "ordinary-4-1",
+            "ordinary-4-2"
+          ],
+          "adjudication": null
+        },
+        {
+          "label": "Weekly news links",
+          "pages": [
+            "noise-1"
+          ],
+          "adjudication": null
+        },
+        {
+          "label": "Weekly news links",
+          "pages": [
+            "noise-3"
+          ],
+          "adjudication": null
+        },
+        {
+          "label": "Reddit weekly links",
+          "pages": [
+            "noise-0"
+          ],
+          "adjudication": null
+        },
+        {
+          "label": "Substack miscellany",
+          "pages": [
+            "noise-2"
+          ],
+          "adjudication": null
+        }
+      ],
+      "calls": 11
+    }
+  ],
+  "models": {
+    "embedding": "bge-m3:latest",
+    "chat": "qwen3:4b"
+  },
+  "modelDigests": [
+    {
+      "name": "qwen3:4b",
+      "digest": "359d7dd4bcdab3d86b87d73ac27966f4dbb9f5efdfcc75d34a8764a09474fae7"
+    },
+    {
+      "name": "bge-m3:latest",
+      "digest": "7907646426070047a77226ac3e684fbbe8410524f7b4a74d02837e43f2146bab"
+    }
+  ],
+  "ollama": {
+    "version": "0.33.3"
+  },
+  "embeddingDetails": {
+    "details": {
+      "parent_model": "",
+      "format": "gguf",
+      "family": "bert",
+      "families": [
+        "bert"
+      ],
+      "parameter_size": "566.70M",
+      "quantization_level": "F16"
+    },
+    "contextTokens": 8192,
+    "dimensions": 1024
+  }
+}

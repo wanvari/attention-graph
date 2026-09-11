@@ -13,13 +13,15 @@ Work checkout: `/Users/arnav/.codex/worktrees/cognitive-trails-performance`, bra
 - [x] Record baseline tests and reproducible CPU/storage performance.
 - [x] Optimize metadata reads, repeated calculation and no-op repair; add equivalence, migration, concurrency and invalidation regressions.
 - [x] Run full tests and relevant browser E2E; compare before/after; commit and push step 1 to main.
-- [ ] Audit extraction → embedding → cache invalidation → label/adjudication context.
-- [ ] Build and run isolated same-model short/long context evaluation; record inputs, results and limitations without changing production caches or records.
+- [x] Audit extraction → embedding → cache invalidation → label/adjudication context.
+- [x] Build and run isolated same-model short/long context evaluation; record inputs, results and limitations without changing production caches or records.
 - [ ] Finish reports, tests and checklist; commit/push step 2 and verify GitHub main.
 
 Step 1: version 5.1.2 / schema 6. See `validation/performance-review-2026-09-11.md`. 316 reference comparisons match; 38 infrastructure/existing test files pass (39 including the new context input characterization). Home/session, capture, live pipeline and real Chromium storage/migration E2E pass. CPU at 100k visits: 1353ms → 449ms; raw metadata read of 3000 captures: 34.7ms → 5.1ms, unchanged refresh 0.1ms. Production prompts/input/models/capture timing unchanged. Schema adds projections; raw records preserved. No installed extension reload.
 
-Step 2 is running via `node tools/contextExperiment.js --live` in this checkout. Progress: `.tmp/context-experiment-live.log`; completed requests are durably saved in `fixtures/context/recording.json.gz`. Do not launch overlapping model runs or overwrite the recording while the process is active. Corpus: 76 synthetic ordinary/long/mixed/status pages, three input profiles, identical models and production thresholds. This experiment does not open browser history or IndexedDB. Check process/log completion before resuming.
+Step 1 is pushed/verified at `0e1021f`. Step 2 experiment and audit are complete: `validation/context-audit-2026-09-11.md`, raw result JSON and capacity probe. Complete synthetic recording at `fixtures/context/recording.json.gz`: 33 exact requests/responses, 76 pages, three profiles; replay passes. Full retained text required `num_ctx:8192,num_batch:4096,truncate:false`. It reduced wrong grouped pairs 136→32 and missed pairs 96→0 on the stress set; mixed-subject chats remain incorrectly assigned, with additional pair contamination. Current/4k policies were identical on this corpus. No production inference/input changes; do not treat the experiment as a rollout approval. Full local test suite: **40/40**; all previously listed browser checks pass. Two failed capacity attempts are documented and preserved under ignored `.tmp`, not claimed as passes.
+
+Final remaining work: commit/push the context audit and repaired GitHub test setup, observe the GitHub result, and mark the checklist complete. GitHub's pre-existing workflow failed even at the old baseline because it did not install dependencies. `.github/workflows/test.yml` now uses Node 26 (matching local supported runtime), npm cache and `npm ci` before tests. Run success is pending the push; packaging and onboarding remain out of scope. No live experiment process remains and both local models are unloaded.
 
 Baseline and prior completed release details follow; they are not validation of this active work.
 
