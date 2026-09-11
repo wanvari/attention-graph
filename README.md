@@ -17,11 +17,17 @@ A local Chrome extension for finding the pages you visited and returning to the 
 
 Search matches titles, website names, suggested topics, personal notes, and date text. Date filters and **All pages** include pages without a topic. Open a trail for its dated sessions and original links. Pin, name, and note controls are optional; personal metadata never overwrites inferred labels. The map is a secondary view of suggested groups and consecutive visits.
 
-**Try the recorded sample:** `npm run demo`, then open `http://localhost:8912/ui/demo.html`. It uses the same interface with a committed synthetic record produced by the current local models. It requires neither Ollama nor an extension installation and makes no persistent changes.
+**Try the recorded sample:** `npm run demo`, then open `http://localhost:8912/ui/demo.html`. It uses the same interface with a committed synthetic record produced by the current local models. It requires neither Ollama nor an extension installation and makes no changes to browsing records. Only the display theme is remembered.
 
 ## Today and optional sessions
 
-Home shows estimated recorded time and three literal rings. Select any ring to see its formula, counts, contributing pages, timing coverage and comparison details. The continuation card opens your last page or starts an optional session in a selected trail.
+Studio opens in dark mode, with a saved Light/Dark switch shared across Home, Graph, Explore, Settings and record inspection. Home puts continuation and search first, with compact evidence cards and a seven-day preview.
+
+**Explore** shows 7 or 14 days of stacked activity. Switch between estimated time and recorded visit starts, move to an earlier period, or select a day to inspect its trail totals and source pages. Other trails and ungrouped pages remain in every total. Day boundaries use the local time zone; a page crossing midnight contributes time on both days but starts only once.
+
+**Graph** retains the full topic/page view, including ungrouped pages. Search a trail or page, select a node or connection for evidence, and use **Zoom to this trail** to inspect a neighborhood. Dragging a trail moves its attached pages. Pages and labels can be toggled; Fit returns to the whole graph. Colors identify trails consistently across the workspace.
+
+Home shows estimated recorded time and three compact literal rings. Select any ring to see its formula, counts, contributing pages, timing coverage and comparison details. The continuation card opens your last page or starts an optional session in a selected trail.
 
 | Ring | Calculation | How to use it |
 | --- | --- | --- |
@@ -77,6 +83,7 @@ Vanilla JavaScript, Manifest V3, IndexedDB, and D3. No bundler or hosted backend
 npm install
 npm test                 # unit, protocol, migration, copy and DOM tests; no models
 npm run e2e              # Chrome capture/privacy tests; disposable profile
+npm run e2e:studio   # Studio themes, graph interactions, chart totals and responsive screens
 npm run e2e:trails       # actual UI -> worker -> persistence and reload
 npm run e2e:pipeline     # Chrome offscreen lifecycle + live Ollama
 npm run check:laptop     # cold vector cache, synthetic month, current live models

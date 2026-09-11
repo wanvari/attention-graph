@@ -159,7 +159,13 @@ async function harness() {
     assert.equal((await h.send({ type: 'SAVE_PREFERENCES', values: { days: 7, watermark: 1 } })).ok, true);
     assert.equal(await h.store.getSetting('watermark'), undefined);
     assert.equal((await h.send({ type: 'SAVE_PREFERENCES', values: { maxNewPagesPerRun: 1000000 } })).ok, false);
+    assert.equal((await h.send({ type: 'GET_UI_THEME' })).theme, 'dark');
+    assert.equal((await h.send({ type: 'SET_UI_THEME', theme: 'light' })).ok, true);
+    assert.equal((await h.send({ type: 'GET_UI_THEME' })).theme, 'light');
+    assert.equal(h.storage.ctUiTheme, 'light');
+    assert.equal((await h.send({ type: 'SET_UI_THEME', theme: 'invalid' })).ok, false);
     await h.send({ type: 'DELETE_EVERYTHING' });
+    assert.equal((await h.send({ type: 'GET_UI_THEME' })).theme, 'dark');
     assert.equal((await h.send({ type: 'SAVE_TRAIL_METADATA', row })).ok, false, 'stale page cannot resurrect a deleted note');
     assert.equal((await h.store.getAll('corrections')).length, 0);
   }

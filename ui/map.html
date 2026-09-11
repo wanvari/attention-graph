@@ -8,13 +8,15 @@
   <link rel="stylesheet" href="shared.css">
   <link rel="stylesheet" href="map.css">
   <script src="../vendor/d3.min.js"></script>
+  <link rel="stylesheet" href="studio.css">
+  <script src="studio.js"></script>
 </head>
 <body>
-  <div class="container">
+  <div class="container" data-studio-view="graph">
     <header>
       <div class="topbar">
         <div>
-          <h1>Cognitive Trails</h1>
+          <h1>Your trails, connected.</h1>
           <div id="status-line" class="status-line">Loading the topic registry...</div>
         </div>
         <div id="health-pill" class="health-pill">Registry</div>
@@ -42,13 +44,16 @@
           </select>
         </label>
         <label class="control-field">
-          <span>Topic nodes</span>
+          <span>Trails</span>
           <select id="topic-limit">
             <option value="18">Top 18</option>
             <option value="30">Top 30</option>
-            <option value="all">All</option>
+            <option value="all" selected>All</option>
           </select>
         </label>
+        <label class="control-field"><span>Find</span><input id="graph-search" type="search" placeholder="A trail or page" aria-label="Find a trail or page"></label>
+        <label class="control-field"><input id="show-pages" type="checkbox" checked> Pages</label>
+        <label class="control-field"><span>Labels</span><select id="graph-labels"><option value="auto">Automatic</option><option value="all">All</option><option value="off">Off</option></select></label>
       </div>
       <div id="staleness-banner" class="staleness-banner" hidden></div>
       <div id="summary-strip" class="summary-strip"></div>

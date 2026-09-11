@@ -10,7 +10,7 @@ const destination = path.join(root, 'dist', 'cognitive-trails');
 fs.rmSync(destination, { recursive: true, force: true });
 fs.mkdirSync(destination, { recursive: true });
 for (const name of ['manifest.json', 'background.js', 'icon16.png', 'icon48.png', 'icon128.png', 'lib', 'ui', 'content', 'offscreen', 'vendor', 'README.md', 'ARCHITECTURE.md', 'PRIVACY.md']) {
-  fs.cpSync(path.join(root, name), path.join(destination, name), { recursive: true });
+  fs.cpSync(path.join(root, name), path.join(destination, name), { recursive: true, filter: source => path.basename(source) !== 'mockups.html' });
 }
 fs.mkdirSync(path.join(destination, 'fixtures/current'), { recursive: true });
 fs.copyFileSync(path.join(root, 'fixtures/current/snapshot.json'), path.join(destination, 'fixtures/current/snapshot.json'));

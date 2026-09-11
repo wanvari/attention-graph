@@ -137,6 +137,7 @@
           estimatedDwellMs: evidence.dwellMs,
           estimatedDwellMinutes: msToMinutes(evidence.dwellMs),
           topPages: evidence.pages.slice(0, 8),
+          pages: evidence.pages,
           pageUrls: evidence.pages.map(p => p.id),
           pageIds: evidence.pages.map(p => p.id),
           topDomains: Array.from(evidence.domains.values())
@@ -192,7 +193,7 @@
     const uncategorizedPages = [...ungroupedUrls].map(url => {
       const page = pageByUrl.get(url), stats = windowStatsByUrl.get(url), event = measured.events.find(e => e.normalizedUrl === url);
       return { id: url, title: page.title, url: page.url, domain: page.domain, reason: event.groupingReason, visitCount: stats.visitCount,
-        estimatedDwellMs: stats.dwellMs, estimatedDwellMinutes: msToMinutes(stats.dwellMs) };
+        estimatedDwellMs: stats.dwellMs, estimatedDwellMinutes: msToMinutes(stats.dwellMs), firstVisitTime: stats.firstSeen, lastVisitTime: stats.lastSeen };
     });
 
     // Flow aggregates over exactly the edges this window drew, so the summary
@@ -211,7 +212,7 @@
     const activeHours = activeMs / 3.6e6;
 
     return {
-      ok: visibleTopics.length > 0,
+      ok: measured.events.length > 0,
       version: 'cognitive-trails-v5.1',
       source: 'corrected recorded visits',
       metrics: {
@@ -261,7 +262,7 @@
         visitCount: uncategorizedPages.reduce((sum, p) => sum + p.visitCount, 0),
         estimatedDwellMs: uncategorizedPages.reduce((sum, p) => sum + p.estimatedDwellMs, 0),
         estimatedDwellMinutes: msToMinutes(uncategorizedPages.reduce((sum, p) => sum + p.estimatedDwellMs, 0)),
-        pages: uncategorizedPages.slice(0, 30),
+        pages: uncategorizedPages,
         pageUrls: uncategorizedPages.map(p => p.id),
         byReason: uncategorizedPages.reduce((acc, page) => {
           acc[page.reason] = (acc[page.reason] || 0) + 1;

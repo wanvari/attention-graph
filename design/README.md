@@ -1,8 +1,18 @@
+# Studio implementation
+
+The extension now uses Studio across Home, Graph, Explore, Settings and record inspection. Dark mode is the default; the Light/Dark preference is saved through the worker and synchronized across open extension pages. The installed UI reads existing records; no database migration, model, or permission changes are needed for this redesign.
+
+Try the implemented screens with `npm run demo`: [Home](http://localhost:8912/ui/demo.html), [Graph](http://localhost:8912/ui/map.html?demo=1), and [Explore](http://localhost:8912/ui/explore.html?demo=1). This uses the committed March sample, so its graph and activity differ from the illustrative prototypes below. Connections appear only when the record contains at least two qualifying sequences.
+
+Implemented screenshots: [Home](implemented/studio-home-dark.png) · [Graph, dark](implemented/studio-graph-dark.png) · [Graph, light](implemented/studio-graph-light.png) · [Explore](implemented/studio-explore-dark.png).
+
+Implementation checks include the full unit/protocol suite, the existing Chrome trails workflow, and `npm run e2e:studio` for theme persistence, graph source evidence, search, dragging, keyboard selection, chart drill-down, and six screens at five widths in both themes.
+
 # Cognitive Trails: UI explorations
 
-Open `http://localhost:8912/ui/mockups.html` after running `npm run demo`. The prototype opens to the selected Studio graph direction, dark by default. It also opens directly from `ui/mockups.html` and uses the repository’s bundled D3; it loads no external assets. Home, Graph, Explore, and Your trails share the same navigation. The original directions remain accessible through the top selector.
+Open `http://localhost:8912/design/prototype/mockups.html` after running `npm run demo`. The prototype opens to the selected Studio graph direction, dark by default. It also opens directly from `design/prototype/mockups.html` and uses the repository’s bundled D3; it loads no external assets. Home, Graph, Explore, and Your trails share the same navigation. The original directions remain accessible through the top selector.
 
-These are design proposals with illustrative September 4–10, 2026 data, not a replacement for the production UI or the existing model-recorded fixture. No production files, records, schemas, model behavior, or dependencies were changed. Source links open external pages only when clicked. Notes, pins, and graph arrangements live in memory and reset on reload. The Studio theme preference is saved in the prototype-specific localStorage key `ct.design.studio.theme`; this does not access the extension database.
+These are design proposals with illustrative September 4–10, 2026 data, not a replacement for the production UI or the existing model-recorded fixture. The prototype itself does not touch production records. The approved Studio direction is now implemented in `ui/`; these archived files preserve the earlier proposals. Source links open external pages only when clicked. Notes, pins, and graph arrangements live in memory and reset on reload. The Studio theme preference is saved in the prototype-specific localStorage key `ct.design.studio.theme`; this does not access the extension database.
 
 ## Selected direction: Studio, after dark
 
@@ -29,7 +39,7 @@ The Graph navigation item preserves a full topic/page graph, independently of th
 - Search highlights matching graph nodes and gives an explicit no-match state.
 - The light/dark switch leaves node positions and camera unchanged.
 
-This mockup renders the illustrative sample graph rather than the installed extension’s history. Production integration would retain the existing map adapter’s membership, sequence, correction, and evidence semantics. Timeline and weekly charts complement the graph; they do not replace it.
+This mockup renders the illustrative sample graph rather than the installed extension’s history. Production integration retains the existing map adapter’s membership, sequence, correction, and evidence semantics. Timeline and weekly charts complement the graph; they do not replace it.
 
 ## Three directions
 
@@ -85,4 +95,4 @@ These inform the proposals; the layouts and waymarker artwork are original.
 - [Stripe payments analytics](https://docs.stripe.com/payments/analytics): overview, filtering, and specific reports.
 - [Duolingo’s core tab redesign](https://blog.duolingo.com/core-tabs-redesign/): consistent hierarchy, spacing, and purposeful visual character.
 
-The implementation is isolated in `ui/mockups.html`, `ui/mockups.css`, `ui/mockups.js`, `ui/studio-night.css`, and `ui/mockup-graph.js`. Production work would connect the selected presentation to `CTTrails`, `CTDashboard`, and the existing graph view model, preserve the evidence and correction contracts, and verify against the recorded fixture and extension flows.
+The implementation is isolated in `design/prototype/mockups.html`, `ui/mockups.css`, `ui/mockups.js`, `ui/studio-night.css`, and `ui/mockup-graph.js`. Production work would connect the selected presentation to `CTTrails`, `CTDashboard`, and the existing graph view model, preserve the evidence and correction contracts, and verify against the recorded fixture and extension flows.

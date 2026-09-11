@@ -9,6 +9,7 @@
     "bench": "node tools/bench.js",
     "e2e": "node tests/e2e/capture.e2e.mjs",
     "demo": "node tools/serveDemo.js",
+    "e2e:studio": "node tests/e2e/studio.e2e.mjs",
     "e2e:trails": "node tests/e2e/trails.e2e.mjs",
     "e2e:pipeline": "node tests/e2e/pipeline.e2e.mjs",
     "check:laptop": "node tools/laptopCheck.js",

@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="dark light">
+  <title>Cognitive Trails — Design explorations</title>
+  <link rel="icon" href="../../icon48.png">
+  <link rel="stylesheet" href="mockups.css">
+  <link rel="stylesheet" href="studio-night.css">
+</head>
+<body>
+  <a class="skip-link" href="#main">Skip to mockup</a>
+  <header class="design-bar">
+    <div class="design-brand"><span class="design-dot"></span><span>COGNITIVE TRAILS <span class="design-slash">/</span> <span class="design-sub">DESIGN EXPLORATIONS</span></span></div>
+    <nav class="concept-switch" aria-label="Design direction">
+      <button type="button" data-concept="still"><span>01</span> Still</button>
+      <button type="button" data-concept="studio"><span>02</span> Studio</button>
+      <button type="button" data-concept="field"><span>03</span> Fieldnotes</button>
+    </nav>
+    <div class="design-actions"><span class="sample-label">Interactive concept · Sample data</span><button type="button" class="design-info" data-action="rationale" aria-label="Read design notes">i</button></div>
+  </header>
+  <div id="prototype" class="prototype"></div>
+  <footer class="design-footer"><span id="direction-note"></span><a href="../../ui/demo.html">View current UI ↗</a></footer>
+  <dialog id="detail-dialog" aria-labelledby="dialog-title"><div id="dialog-content"></div></dialog>
+  <div id="announcement" class="sr-only" role="status" aria-live="polite"></div>
+  <script src="../../vendor/d3.min.js"></script>
+  <script src="mockup-graph.js"></script>
+  <script src="mockups.js"></script>
+</body>
+</html>

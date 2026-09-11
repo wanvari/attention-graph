@@ -1,6 +1,8 @@
 <!DOCTYPE html>
-<html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>Cognitive Trails — Page diagnostics</title><link rel="stylesheet" href="shared.css"><link rel="stylesheet" href="audit.css"></head>
-<body><main class="audit-page"><header class="audit-header"><h1>Page diagnostics</h1><a class="btn" href="audit.html">Trust audit</a></header>
+<html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>Cognitive Trails — Page diagnostics</title><link rel="stylesheet" href="shared.css"><link rel="stylesheet" href="audit.css">  <link rel="stylesheet" href="studio.css">
+  <script src="studio.js"></script>
+</head>
+<body><main class="audit-page" data-studio-view="diagnostics"><header class="audit-header"><h1>Page diagnostics</h1><a class="btn" href="audit.html">Trust audit</a></header>
 <p>Inspect stored totals alongside the current evidence calculation. Reading this page does not change your record. A trail total includes other pages.</p>
 <form id="diagnostic-form"><label for="query">Page URL or title</label> <input id="query" type="search" required maxlength="1000"> <button class="btn primary">Inspect</button></form>
 <p id="diagnostic-status" role="status"></p><div id="diagnostic-results"></div></main>

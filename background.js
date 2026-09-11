@@ -488,6 +488,17 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       withWriter(async () => { await store.open(); return { ok: true, audit: await CTIntegrity.repair(store) }; })
         .then(sendResponse, error => sendResponse({ ok: false, error: error.message }));
       return true;
+    case 'GET_UI_THEME':
+      store.getSetting('uiTheme').then(theme => sendResponse({ ok: true, theme: theme === 'light' ? 'light' : 'dark' }), error => sendResponse({ ok: false, error: error.message }));
+      return true;
+    case 'SET_UI_THEME':
+      withWriter(async () => {
+        if (!['dark', 'light'].includes(message.theme)) throw new Error('Invalid theme');
+        await store.open(); await store.setSetting('uiTheme', message.theme);
+        await chrome.storage.local.set({ ctUiTheme: message.theme });
+        return { ok: true, theme: message.theme };
+      }).then(sendResponse, error => sendResponse({ ok: false, error: error.message }));
+      return true;
     case 'SAVE_PREFERENCES':
       withWriter(async () => {
         await store.open(); await store.saveEditableSettings(message.values);

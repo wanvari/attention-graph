@@ -227,7 +227,7 @@
         if (resume.page) { const a = link(resume.page); a.textContent = 'Open last page ↗'; a.className = 'nt-primary-link'; actions.append(a); }
         if (resume.session) actions.append(button('View or end session', 'nt-secondary-button', () => openRecap(resume.session)));
         else if (resume.trail) actions.append(button('Start session', 'nt-secondary-button', () => startSession(resume.trail)));
-        card.append(body, actions); main.append(card);
+        card.append(body, actions); main.prepend(card);
       }
       const completed = record.sessions.filter(s => s.status === 'complete').sort((a, b) => b.startedAt - a.startedAt);
       if (completed.length) {

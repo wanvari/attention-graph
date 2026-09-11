@@ -222,8 +222,8 @@ async function renderMap() {
 
     const strip = window.document.getElementById('summary-strip').textContent;
     assert.ok(/topics shown/.test(strip), 'summary strip did not render');
-    assert.ok(/between-topic visits/.test(strip), 'switch count missing from the summary strip');
-    assert.ok(/changes per est. hour/.test(strip), 'switch rate missing from the summary strip');
+    assert.ok(/between-topic visits/.test(window.document.getElementById('evidence-panel').textContent), 'recorded sequences missing from evidence');
+    assert.ok(/changes per est. hour/.test(window.document.getElementById('evidence-panel').textContent), 'sequence rate missing from evidence');
     assert.ok(!/undefined/.test(strip), `summary strip printed "undefined": ${strip}`);
   }
 
@@ -255,7 +255,7 @@ async function renderMap() {
     assert.ok(!/undefined/.test(evidence), `evidence panel printed "undefined": ${evidence}`);
 
     const legend = window.document.getElementById('legend').textContent;
-    assert.ok(/Highest estimated time/.test(legend), 'legend did not render');
+    assert.ok(/area = estimated time/.test(legend), 'legend did not render');
   }
 
   // Repeated edges show actual examples; correcting one page removes stale

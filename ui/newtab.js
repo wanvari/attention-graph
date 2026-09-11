@@ -2,11 +2,11 @@
 // reads one projected snapshot, and never schedules inference.
 (function(root, factory) {
   const api = typeof module !== 'undefined' && module.exports
-    ? factory(require('../lib/text.js'), require('../lib/trails.js'), require('./dashboard.js'))
-    : factory(root.CTText, root.CTTrails, root.CTDailyView);
+    ? factory(require('../lib/text.js'), require('../lib/trails.js'), require('./dashboard.js'), require('./studio.js'), require('./explore.js'))
+    : factory(root.CTText, root.CTTrails, root.CTDailyView, root.CTStudio, root.CTExplore);
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   root.CTNewtab = api;
-})(typeof globalThis !== 'undefined' ? globalThis : this, function(CTText, CTTrails, CTDailyView) {
+})(typeof globalThis !== 'undefined' ? globalThis : this, function(CTText, CTTrails, CTDailyView, CTStudio, CTExplore) {
   'use strict';
   const number = value => Number(value || 0).toLocaleString();
   const count = (value, noun) => `${number(value)} ${noun}${value === 1 ? '' : 's'}`;
@@ -65,7 +65,7 @@
 
     const hero = el('section', 'nt-hero');
     const eyebrow = el('div', 'nt-eyebrow', opts.readOnly ? 'A sample browsing record' : 'Your browsing, kept close');
-    hero.append(eyebrow, el('h1', null, 'Pick up where you left off.'),
+    hero.append(eyebrow, el('h1', null, 'Your browsing, in view.'),
       el('p', 'nt-intro', 'Find the page, revisit the trail, and carry on. Your record stays on this device.'));
     const searchForm = el('form', 'nt-search'); searchForm.setAttribute('role', 'search');
     const searchIcon = el('span', 'nt-search-icon', '⌕'); searchIcon.setAttribute('aria-hidden', 'true');
@@ -115,7 +115,7 @@
     const live = el('p', 'nt-live'); live.setAttribute('role', 'status'); live.setAttribute('aria-live', 'polite');
     shell.appendChild(live);
     const dashboardHost = el('div', 'nt-daily-host'); shell.appendChild(dashboardHost);
-    let dailyView;
+    let dailyView, studioView;
     const layout = el('div', 'nt-layout'); shell.appendChild(layout);
     const content = el('section', 'nt-content'); content.id = 'record-content'; content.tabIndex = -1;
     const aside = el('aside', 'nt-sidebar'); aside.setAttribute('aria-label', 'About this record');
@@ -217,6 +217,7 @@
     }
     function trailCard(trail) {
       const card = el('article', 'nt-trail-card');
+      card.style.setProperty('--trail-color', CTStudio.topicColor(trail.id));
       const top = el('div', 'nt-trail-top');
       const label = el('span', 'nt-trail-date', `Last visited ${date(trail.lastAt)}`);
       top.append(label, pinControl(trail)); card.appendChild(top);
@@ -313,13 +314,20 @@
       if (paginate && events.length > limit) target.appendChild(button(`Show more (${number(events.length - limit)} remaining)`, 'nt-secondary-button nt-load-more', () => { limit += 20; drawContent(); }));
     }
     function drawAside() {
+      studioView?.update(record);
       aside.textContent = '';
       const selected = record.trails.find(t => t.id === selectedId);
       const fromDay = CTText.addDays(today, -6);
       const events = selected ? selected.events : record.events.filter(e => e.day >= fromDay && e.day <= today);
       const summary = CTTrails.summarize(events);
       const card = el('section', 'nt-record-card');
-      card.append(el('div', 'nt-eyebrow', selected ? 'This trail, in the record' : 'The past 7 days'), el('h2', null, selected ? 'A few useful bearings' : 'A little context'));
+      card.append(el('div', 'nt-eyebrow', selected ? 'This trail, in the record' : 'The past 7 days'), el('h2', null, selected ? 'Trail overview' : 'Your week at a glance'));
+      if (!selected) {
+        const week = CTExplore.buildSeries(record), max = Math.max(1, ...week.days.map(d => d.ms));
+        const chart = el('div', 'nt-mini-week'); chart.setAttribute('aria-label', 'Estimated browsing time over the past seven days');
+        for (const day of week.days) { const a = link('', opts.readOnly ? 'explore.html?demo=1' : 'explore.html', 'nt-mini-day'); a.setAttribute('aria-label', `${date(day.bounds.from)}: ${duration(day.ms)} estimated. Explore this week`); a.title = a.getAttribute('aria-label'); const bar = el('span'); bar.style.height = `${Math.max(1, day.ms / max * 100)}%`; a.append(bar); chart.append(a); }
+        card.append(chart, link('Explore your week →', opts.readOnly ? 'explore.html?demo=1' : 'explore.html', 'nt-week-link'));
+      }
       const stats = el('dl', 'nt-stats');
       for (const [value, label] of [[summary.visitCount, 'recorded visits'], [summary.pageCount, 'distinct pages'], [summary.sourceCount, 'websites'], [selected ? summary.returnDays : summary.dayCount, selected ? 'later days returned' : 'days with visits']]) {
         const pair = el('div', 'nt-stat'); pair.append(el('dd', null, number(value)), el('dt', null, label)); stats.appendChild(pair);
@@ -392,6 +400,9 @@
       return reply;
     }
     dailyView = CTDailyView.mount(dashboardHost, record, { readOnly: opts.readOnly, openTrail, sessionId: opts.sessionId, action: opts.onAction ? action : null });
+    const studioPage = new URLSearchParams(win.location.search).get('view') === 'trails' ? 'trails' : 'home';
+    if (studioPage === 'trails') hero.querySelector('h1').textContent = 'A place for every trail.';
+    studioView = CTStudio.mount(shell, { view: studioPage, demo: opts.readOnly, links });
     drawContent(); drawAside();
     const keyboard = event => {
       const target = event.target;
