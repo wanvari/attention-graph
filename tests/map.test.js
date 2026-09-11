@@ -282,6 +282,21 @@ async function renderMap() {
     assert.deepEqual(morning.topics.map(t => t.id), ['topic-bread']);
   }
 
+  // A populated view becoming unavailable must clear the separate screen
+  // labels too, and controls must still work before a successful reload.
+  {
+    const { viz, window } = await renderMap();
+    const analysis = viz.analysis;
+    assert.ok(window.document.querySelectorAll('.label-overlay text').length > 0);
+    viz.renderUnavailable({ ok: false, message: 'Registry read interrupted' });
+    assert.strictEqual(window.document.querySelectorAll('#graph circle, .label-overlay text').length, 0);
+    assert.strictEqual(viz.graphData.nodes.length, 0);
+    viz.clearSelection();
+    viz.handleResize();
+    viz.renderAnalysis(analysis);
+    assert.strictEqual(window.document.querySelectorAll('.topic-node').length, 2);
+  }
+
   // ---- empty registry takes the honest path, not the failure path ------
   {
     const dom = freshDom();

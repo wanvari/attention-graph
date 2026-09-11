@@ -52,8 +52,8 @@
           </select>
         </label>
         <label class="control-field"><span>Find</span><input id="graph-search" type="search" placeholder="A trail or page" aria-label="Find a trail or page"></label>
-        <label class="control-field"><input id="show-pages" type="checkbox" checked> Pages</label>
-        <label class="control-field"><span>Labels</span><select id="graph-labels"><option value="auto">Automatic</option><option value="all">All</option><option value="off">Off</option></select></label>
+        <label class="control-field"><input id="show-pages" type="checkbox" checked> Page detail</label>
+        <label class="control-field"><span>Labels</span><select id="graph-labels"><option value="auto">Automatic</option><option value="all">More</option><option value="off">Off</option></select></label>
       </div>
       <div id="staleness-banner" class="staleness-banner" hidden></div>
       <div id="summary-strip" class="summary-strip"></div>
@@ -61,7 +61,8 @@
     </header>
     <div class="workspace">
       <div id="graph-container">
-        <svg id="graph"></svg>
+        <svg id="graph" aria-label="Trail graph"></svg>
+        <div id="graph-view-status" class="graph-view-status" aria-live="polite"></div>
       </div>
       <aside id="evidence-panel" class="evidence-panel">
         <div class="empty-state">

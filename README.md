@@ -25,7 +25,7 @@ Studio opens in dark mode, with a saved Light/Dark switch shared across Home, Gr
 
 **Explore** shows 7 or 14 days of stacked activity. Switch between estimated time and recorded visit starts, move to an earlier period, or select a day to inspect its trail totals and source pages. Other trails and ungrouped pages remain in every total. Day boundaries use the local time zone; a page crossing midnight contributes time on both days but starts only once.
 
-**Graph** retains the full topic/page view, including ungrouped pages. Search a trail or page, select a node or connection for evidence, and use **Zoom to this trail** to inspect a neighborhood. Dragging a trail moves its attached pages. Pages and labels can be toggled; Fit returns to the whole graph. Colors identify trails consistently across the workspace.
+**Graph** opens with a readable trail overview. Labels keep a fixed screen size and yield when they would overlap. Select a trail to zoom into its pages, or use the searchable inspector to read full titles and open page or connection evidence. All recorded pages remain available; ungrouped pages have a single expandable entry instead of stretching the overview. Dragging a trail moves its attached pages. Page detail and labels can be toggled; **Overview** returns to all trails. Colors identify trails consistently across the workspace.
 
 Home shows estimated recorded time and three compact literal rings. Select any ring to see its formula, counts, contributing pages, timing coverage and comparison details. The continuation card opens your last page or starts an optional session in a selected trail.
 
@@ -84,6 +84,7 @@ npm install
 npm test                 # unit, protocol, migration, copy and DOM tests; no models
 npm run e2e              # Chrome capture/privacy tests; disposable profile
 npm run e2e:studio   # Studio themes, graph interactions, chart totals and responsive screens
+npm run e2e:graph-scale # 117 trails, 1,025 pages: label geometry, search and responsive overview
 npm run e2e:trails       # actual UI -> worker -> persistence and reload
 npm run e2e:pipeline     # Chrome offscreen lifecycle + live Ollama
 npm run check:laptop     # cold vector cache, synthetic month, current live models

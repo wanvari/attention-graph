@@ -220,3 +220,37 @@ html[data-theme] .demo-view > .nt-page { padding: 0; }
 .studio-shell .graph-group-label { fill: var(--text-dim); font-size: 12px; }
 @media(max-width:680px) { .studio-shell .audit-grid { grid-template-columns: minmax(0,1fr); } .studio-shell .panel { overflow-x: auto; } }
 @media(max-width:680px) { .studio-shell .topbar { flex-direction: column; align-items: start; gap: 12px; } .studio-shell .topbar > div { min-width: 0; } }
+/* Large graph: keep the overview readable and put full titles within reach. */
+.studio-shell .graph-view-status { position: absolute; top: 16px; left: 18px; max-width: calc(100% - 36px); padding: 8px 11px; border: 1px solid var(--line); border-radius: 8px; color: var(--text-dim); background: var(--panel); font-size: 11px; pointer-events: none; }
+.studio-shell .topic-label, .studio-shell .page-label { pointer-events: auto; cursor: pointer; font-weight: 500; }
+.studio-shell .collection-node { cursor: pointer; }
+.studio-shell .flow-hit { cursor: pointer; }
+.studio-shell .graph-browser-note { font-size: 12px; line-height: 1.6; margin: 12px 0 20px; }
+.studio-shell .graph-browser-list { display: grid; gap: 6px; }
+.studio-shell .graph-result { display: flex; align-items: start; gap: 10px; width: 100%; text-align: left; padding: 12px 10px; border: 1px solid var(--line); background: var(--panel); color: var(--text); border-radius: 9px; }
+.studio-shell .graph-result:hover { border-color: var(--accent); background: var(--panel-2); }
+.studio-shell .graph-result .studio-dot { margin-top: 6px; }
+.studio-shell .graph-result strong { display: block; font-size: 13px; line-height: 1.45; font-weight: 550; overflow-wrap: anywhere; }
+.studio-shell .graph-result small { display: block; color: var(--text-dim); margin-top: 5px; font-size: 11px; line-height: 1.5; }
+.studio-shell .graph-back, .studio-shell .graph-more { background: var(--panel-2); color: var(--accent); border: 1px solid var(--line); border-radius: 7px; padding: 9px 12px; font: inherit; font-size: 12px; margin: 0 0 18px; }
+.studio-shell .graph-more { display: block; width: 100%; margin: 12px 0 0; }
+.studio-shell .graph-record-details { border-top: 1px solid var(--line); margin-top: 22px; padding-top: 16px; font-size: 12px; color: var(--text-dim); }
+.studio-shell .graph-record-details summary { cursor: pointer; }
+.studio-shell .graph-record-details p { margin: 12px 0 0; line-height: 1.6; }
+.studio-shell #graph-topic-pages { margin-bottom: 18px; }
+.studio-shell .evidence-panel .graph-back + h2 { margin: 0; }
+.studio-shell .page-node[aria-pressed="true"] { fill: var(--accent); stroke: var(--text); stroke-width: 3px; }
+.studio-shell .topic-node[aria-pressed="true"], .studio-shell .collection-node[aria-pressed="true"] { stroke: var(--text); stroke-width: 3px; }
+@media(max-width:1180px) {
+  .studio-shell .workspace { flex-direction: column; height: auto; }
+  .studio-shell #graph-container { flex: auto; height: 580px; }
+  .studio-shell .evidence-panel { width: 100%; min-width: 0; max-height: 400px; border-left: 0; border-top: 1px solid var(--line); }
+}
+@media(max-width:680px) { .studio-shell #graph-container { height: 680px; } }
+@media(max-width:1000px) {
+  html[data-theme] .studio-shell[data-studio-page="graph"] { display: block; }
+  [data-studio-page="graph"] .studio-sidebar { position: static; height: auto; padding: 16px 18px 0; gap: 14px; border-right: 0; border-bottom: 1px solid var(--line); }
+  [data-studio-page="graph"] .studio-nav { display: flex; gap: 8px; overflow-x: auto; padding-bottom: 12px; }
+  [data-studio-page="graph"] .studio-nav a { flex-shrink: 0; padding: 8px 12px; font-size: 12px; }
+  [data-studio-page="graph"] .studio-pins, [data-studio-page="graph"] .studio-sidebar-bottom { display: none; }
+}

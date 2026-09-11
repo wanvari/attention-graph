@@ -8,6 +8,8 @@ Implemented screenshots: [Home](implemented/studio-home-dark.png) · [Graph, dar
 
 Implementation checks include the full unit/protocol suite, the existing Chrome trails workflow, and `npm run e2e:studio` for theme persistence, graph source evidence, search, dragging, keyboard selection, chart drill-down, and six screens at five widths in both themes.
 
+The graph scale correction is verified against a synthetic record with 117 trails, 1,025 pages (767 ungrouped), and 1,962 visits. `npm run e2e:graph-scale` checks actual browser label bounds, click target sizes, page retention, search, collection pagination, both themes, and widths from 320 to 1536 pixels. The overview fits trail roots; pages appear on selection or zoom. Every title is available in the searchable inspector. These screenshots show the implemented UI with synthetic data: [Large graph, dark](implemented/graph-scale-dark.png) · [Large graph, light](implemented/graph-scale-light.png) · [Selected trail](implemented/graph-scale-detail.png).
+
 # Cognitive Trails: UI explorations
 
 Open `http://localhost:8912/design/prototype/mockups.html` after running `npm run demo`. The prototype opens to the selected Studio graph direction, dark by default. It also opens directly from `design/prototype/mockups.html` and uses the repository’s bundled D3; it loads no external assets. Home, Graph, Explore, and Your trails share the same navigation. The original directions remain accessible through the top selector.
