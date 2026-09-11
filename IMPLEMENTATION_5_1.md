@@ -4,6 +4,21 @@ Branch: `main` → `origin/main` (GitHub: wanvari/attention-graph). The user req
 
 ## Resume here
 
+
+### Active: efficiency and embedding-context audit (September 10)
+
+Work checkout: `/Users/arnav/.codex/worktrees/cognitive-trails-performance`, branch main, baseline `183ab41`. The original workspace is on `codex/studio-interface` at `42e2c59`; preserve that independent design work. User authorized steps 1 and 2 only: optimize surrounding infrastructure with equivalent outputs, then evaluate longer inputs with the SAME models in an isolated experiment. No production model, prompt, input, grouping threshold or capture-timing changes.
+
+- [x] Inspect current branches and contract; isolate main without changing Studio.
+- [ ] Record baseline tests and reproducible CPU/storage performance.
+- [ ] Optimize metadata reads, repeated calculation and no-op repair; add equivalence, migration, concurrency and invalidation regressions.
+- [ ] Run full tests and relevant browser E2E; compare before/after; commit and push step 1 to main.
+- [ ] Audit extraction → embedding → cache invalidation → label/adjudication context.
+- [ ] Build and run isolated same-model short/long context evaluation; record inputs, results and limitations without changing production caches or records.
+- [ ] Finish reports, tests and checklist; commit/push step 2 and verify GitHub main.
+
+Baseline and prior completed release details follow; they are not validation of this active work.
+
 Status: September 10 code review, new regressions and retesting **complete** for **5.1.1**. Implementation is committed/pushed to GitHub main as `ddb60d0`; this validation checkpoint adds fresh recordings, measurements and the finished report. Repair version 3 updates stored accounting on startup. Full suite **36/36**, capture E2E (16 checks), expanded Home/session/Audit E2E, all four live pipeline checks, and packaged-product E2E pass. Fresh M3 Pro check: two processing passes, **133.062s** combined including **65.665s** pacing; **3.592 GiB** peak sampled model residency, no model overlap, zero pending work. Exact fresh-recording replay passes. Package: `dist/cognitive-trails-v5.1.1.zip` (0.344 MiB), 51 runtime files matched to source and no private/development artifacts. See `validation/report-2026-09-10.md` for findings, tests and limits. No pending implementation/testing step for this request; no installed user history was accessed or extension reloaded. Reload the installed extension to use 5.1.1. Further work should begin with the documented pilot limitations rather than repeat this completed pass.
 
 Previous release: 5.1.0 is installed; database schema 5 and evidence-repair version 2 applied. The actual Claude Status record is repaired: 35s recorded interaction, 211 navigation entries preserved, 129 unknown-duration entries explicitly labeled, no automatic membership. Preserve that checkpoint and the documented pilot limitations.
