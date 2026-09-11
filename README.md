@@ -53,7 +53,7 @@ Select **Inspect page & grouping** on a recorded visit. It separates that visit'
 
 **Record & privacy → Inspect a page** compares stored totals with the current evidence calculation without changing the database, including legacy schema-4 records. **Recalculate evidence** rebuilds derived time and memberships while preserving raw history and personal corrections. Repeated status-page navigations can be background refreshes, so repetition alone cannot qualify them for grouping. Map lines require at least two recorded sequences in the selected period; a single sequence remains available in the timeline.
 
-Version 5.1 upgrades the database to schema 5. Reload the extension in `chrome://extensions` after updating; older open extension pages can block migration. Reopen Home after reloading. The release uses the existing permissions.
+Version 5.1.2 upgrades the database to schema 6, preserving original records and adding lightweight metadata projections. Reload the extension in `chrome://extensions` after updating; older open extension pages can block migration. Reopen Home after reloading. The release uses the existing permissions.
 
 ## Laptop profile
 

@@ -1,6 +1,7 @@
+// Frozen output oracle from 183ab41 (5.1.1). Do not optimize this reference.
 // Literal observations and comparisons. No inference and no composite score.
 (function(root, factory) {
-  const api = typeof module !== 'undefined' && module.exports ? factory(require('./text'), require('./trails')) : factory(root.CTText, root.CTTrails);
+  const api = typeof module !== 'undefined' && module.exports ? factory(require('../../../lib/text'), require('./trails-5.1.1')) : factory(root.CTText, root.CTTrails);
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   root.CTDashboard = api;
 })(typeof globalThis !== 'undefined' ? globalThis : this, function(Text, Trails) {
@@ -38,28 +39,12 @@
     }
     return { pairs, eligible, uncovered: eligible - pairs.length };
   }
-  function lowerBound(rows, value, field) {
-    let lo = 0, hi = rows.length;
-    while (lo < hi) { const mid = (lo + hi) >>> 1; if (rows[mid][field] < value) lo = mid + 1; else hi = mid; }
-    return lo;
-  }
-  function measurementIndex(record) {
-    // One index per calculation, never a persistent cache of mutable evidence.
-    // Each comparison clips the same globally attributed timeline.
-    return { events: record.events.slice().sort((a, b) => a.time - b.time || a.id.localeCompare(b.id)),
-      slices: Trails.attributeTimelineMinutes(record.events), trailById: new Map(record.trails.map(t => [t.id, t])) };
-  }
-  function measure(record, bounds, index = measurementIndex(record)) {
-    const slices = [];
-    for (let i = lowerBound(index.slices, bounds.from, 'end'); i < index.slices.length; i++) {
-      const slice = index.slices[i]; if (slice.start >= bounds.to) break;
-      const start = Math.max(slice.start, bounds.from), end = Math.min(slice.end, bounds.to);
-      if (end > start) slices.push({ start, end, event: slice.event });
-    }
-    const starts = index.events.slice(lowerBound(index.events, bounds.from, 'time'), lowerBound(index.events, bounds.to, 'time'));
+  function measure(record, bounds) {
+    const slices = Trails.attributeTimelineMinutes(record.events, bounds);
+    const starts = record.events.filter(e => e.time >= bounds.from && e.time < bounds.to);
     const contributing = new Map(starts.map(e => [e.id, e]));
     const byTopic = new Map(); let totalMs = 0, groupedMs = 0, measuredMs = 0, returnMs = 0;
-    const day = Text.dayKeyFromMs(bounds.from), trailById = index.trailById;
+    const day = Text.dayKeyFromMs(bounds.from), trailById = new Map(record.trails.map(t => [t.id, t]));
     for (const slice of slices) {
       const ms = slice.end - slice.start, id = slice.event.topicIds[0]; totalMs += ms;
       contributing.set(slice.event.id, slice.event);
@@ -70,7 +55,7 @@
       }
     }
     const ranking = [...byTopic].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]));
-    const flow = transitions(starts, bounds, record.settings?.pauseIntervals), same = flow.pairs.filter(p => p.same).length;
+    const flow = transitions(record.events, bounds, record.settings?.pauseIntervals), same = flow.pairs.filter(p => p.same).length;
     const events = [...contributing.values()].sort((a, b) => a.time - b.time || a.id.localeCompare(b.id));
     const ratio = (numerator, denominator, eligible) => ({ numerator, denominator, value: denominator ? numerator / denominator : null, eligible });
     return { day, bounds, events, slices, byTopic, flow,
@@ -85,9 +70,8 @@
   }
   function buildDailySignals(record, options = {}) {
     const now = options.now ?? record.now ?? Date.now();
-    const index = measurementIndex(record);
-    const current = measure(record, localBounds(now), index);
-    const days = Array.from({ length: options.lookbackDays ?? 28 }, (_, i) => measure(record, localBounds(now, -i - 1), index));
+    const current = measure(record, localBounds(now));
+    const days = Array.from({ length: options.lookbackDays ?? 28 }, (_, i) => measure(record, localBounds(now, -i - 1)));
     const comparisons = Object.fromEntries(['time', 'continuity', 'top', 'return'].map(key => [key, buildComparisonRange(days, key, current[key])]));
     const topTrail = record.trails.find(t => t.id === current.top.topicId);
     const returned = [...current.byTopic.keys()].filter(id => Text.dayKeyFromMs(record.trails.find(t => t.id === id).firstAt) < current.day);

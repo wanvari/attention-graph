@@ -1,0 +1,155 @@
+{
+  "generatedAt": "2026-09-11T14:16:20.578Z",
+  "baseline": "183ab41",
+  "node": "v26.7.0",
+  "cpu": "Apple M3 Pro",
+  "scope": "Node CPU only, synthetic history. Excludes browser DOM, IndexedDB and model latency. Alternating versions, five repetitions; no accuracy inference from timing.",
+  "cases": [
+    {
+      "visits": 20000,
+      "pages": 1000,
+      "trails": 100,
+      "samples": {
+        "baseline": [
+          {
+            "recordMs": 184.397875,
+            "dashboardMs": 59.6455,
+            "totalMs": 244.043375
+          },
+          {
+            "recordMs": 138.40537499999994,
+            "dashboardMs": 44.68845800000008,
+            "totalMs": 183.09383300000002
+          },
+          {
+            "recordMs": 152.41629199999988,
+            "dashboardMs": 47.98641599999996,
+            "totalMs": 200.40270799999985
+          },
+          {
+            "recordMs": 132.544709,
+            "dashboardMs": 46.187124999999924,
+            "totalMs": 178.73183399999994
+          },
+          {
+            "recordMs": 152.97483300000022,
+            "dashboardMs": 48.40645799999993,
+            "totalMs": 201.38129100000015
+          }
+        ],
+        "optimized": [
+          {
+            "recordMs": 90.72754100000003,
+            "dashboardMs": 13.359208999999964,
+            "totalMs": 104.08675
+          },
+          {
+            "recordMs": 87.49416700000006,
+            "dashboardMs": 12.685041999999953,
+            "totalMs": 100.17920900000001
+          },
+          {
+            "recordMs": 95.91924999999992,
+            "dashboardMs": 13.864542000000029,
+            "totalMs": 109.78379199999995
+          },
+          {
+            "recordMs": 91.932458,
+            "dashboardMs": 12.558333000000175,
+            "totalMs": 104.49079100000017
+          },
+          {
+            "recordMs": 93.01499999999987,
+            "dashboardMs": 13.066709000000174,
+            "totalMs": 106.08170900000005
+          }
+        ]
+      },
+      "median": {
+        "baseline": {
+          "recordMs": 152.42,
+          "dashboardMs": 47.99,
+          "totalMs": 200.4
+        },
+        "optimized": {
+          "recordMs": 91.93,
+          "dashboardMs": 13.07,
+          "totalMs": 104.49
+        }
+      }
+    },
+    {
+      "visits": 100000,
+      "pages": 5000,
+      "trails": 500,
+      "samples": {
+        "baseline": [
+          {
+            "recordMs": 1330.5849589999998,
+            "dashboardMs": 478.5130000000004,
+            "totalMs": 1809.0979590000002
+          },
+          {
+            "recordMs": 1148.996916,
+            "dashboardMs": 263.7790420000001,
+            "totalMs": 1412.7759580000002
+          },
+          {
+            "recordMs": 1008.6211249999997,
+            "dashboardMs": 259.6978330000002,
+            "totalMs": 1268.3189579999998
+          },
+          {
+            "recordMs": 1119.7965000000004,
+            "dashboardMs": 233.53212499999972,
+            "totalMs": 1353.328625
+          },
+          {
+            "recordMs": 965.1822079999984,
+            "dashboardMs": 220.97804200000064,
+            "totalMs": 1186.160249999999
+          }
+        ],
+        "optimized": [
+          {
+            "recordMs": 477.947416,
+            "dashboardMs": 57.09699999999975,
+            "totalMs": 535.0444159999997
+          },
+          {
+            "recordMs": 383.47662500000024,
+            "dashboardMs": 53.110459000000446,
+            "totalMs": 436.5870840000007
+          },
+          {
+            "recordMs": 397.1422079999993,
+            "dashboardMs": 49.375458000000435,
+            "totalMs": 446.51766599999974
+          },
+          {
+            "recordMs": 393.43795899999895,
+            "dashboardMs": 57.7230410000011,
+            "totalMs": 451.16100000000006
+          },
+          {
+            "recordMs": 398.2386250000018,
+            "dashboardMs": 50.992083000001,
+            "totalMs": 449.2307080000028
+          }
+        ]
+      },
+      "median": {
+        "baseline": {
+          "recordMs": 1119.8,
+          "dashboardMs": 259.7,
+          "totalMs": 1353.33
+        },
+        "optimized": {
+          "recordMs": 397.14,
+          "dashboardMs": 53.11,
+          "totalMs": 449.23
+        }
+      }
+    }
+  ]
+}

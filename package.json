@@ -1,6 +1,6 @@
 {
   "name": "cognitive-trails",
-  "version": "5.1.1",
+  "version": "5.1.2",
   "private": true,
   "description": "Local browsing capture, searchable trails, and bounded laptop inference",
   "scripts": {
@@ -12,7 +12,9 @@
     "e2e:trails": "node tests/e2e/trails.e2e.mjs",
     "e2e:pipeline": "node tests/e2e/pipeline.e2e.mjs",
     "check:laptop": "node tools/laptopCheck.js",
-    "package": "node tools/package.js"
+    "package": "node tools/package.js",
+    "check:performance": "node --expose-gc tools/performanceCheck.js",
+    "e2e:storage": "node tests/e2e/storage.e2e.mjs"
   },
   "devDependencies": {
     "fake-indexeddb": "^6.2.5",

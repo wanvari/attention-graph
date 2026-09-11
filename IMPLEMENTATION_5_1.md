@@ -5,17 +5,21 @@ Branch: `main` → `origin/main` (GitHub: wanvari/attention-graph). The user req
 ## Resume here
 
 
-### Active: efficiency and embedding-context audit (September 10)
+### Active: efficiency and embedding-context audit (September 10–11)
 
 Work checkout: `/Users/arnav/.codex/worktrees/cognitive-trails-performance`, branch main, baseline `183ab41`. The original workspace is on `codex/studio-interface` at `42e2c59`; preserve that independent design work. User authorized steps 1 and 2 only: optimize surrounding infrastructure with equivalent outputs, then evaluate longer inputs with the SAME models in an isolated experiment. No production model, prompt, input, grouping threshold or capture-timing changes.
 
 - [x] Inspect current branches and contract; isolate main without changing Studio.
-- [ ] Record baseline tests and reproducible CPU/storage performance.
-- [ ] Optimize metadata reads, repeated calculation and no-op repair; add equivalence, migration, concurrency and invalidation regressions.
-- [ ] Run full tests and relevant browser E2E; compare before/after; commit and push step 1 to main.
+- [x] Record baseline tests and reproducible CPU/storage performance.
+- [x] Optimize metadata reads, repeated calculation and no-op repair; add equivalence, migration, concurrency and invalidation regressions.
+- [x] Run full tests and relevant browser E2E; compare before/after; commit and push step 1 to main.
 - [ ] Audit extraction → embedding → cache invalidation → label/adjudication context.
 - [ ] Build and run isolated same-model short/long context evaluation; record inputs, results and limitations without changing production caches or records.
 - [ ] Finish reports, tests and checklist; commit/push step 2 and verify GitHub main.
+
+Step 1: version 5.1.2 / schema 6. See `validation/performance-review-2026-09-11.md`. 316 reference comparisons match; 38 infrastructure/existing test files pass (39 including the new context input characterization). Home/session, capture, live pipeline and real Chromium storage/migration E2E pass. CPU at 100k visits: 1353ms → 449ms; raw metadata read of 3000 captures: 34.7ms → 5.1ms, unchanged refresh 0.1ms. Production prompts/input/models/capture timing unchanged. Schema adds projections; raw records preserved. No installed extension reload.
+
+Step 2 is running via `node tools/contextExperiment.js --live` in this checkout. Progress: `.tmp/context-experiment-live.log`; completed requests are durably saved in `fixtures/context/recording.json.gz`. Do not launch overlapping model runs or overwrite the recording while the process is active. Corpus: 76 synthetic ordinary/long/mixed/status pages, three input profiles, identical models and production thresholds. This experiment does not open browser history or IndexedDB. Check process/log completion before resuming.
 
 Baseline and prior completed release details follow; they are not validation of this active work.
 

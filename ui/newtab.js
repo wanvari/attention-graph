@@ -146,7 +146,7 @@
         const correction = CTTrails.makeCorrection(trail.id, value, Date.now(),
           (data.corrections || []).find(row => row.correctionId === `trail:${trail.id}`));
         await opts.onSaveMetadata(correction);
-        data.corrections = (data.corrections || []).filter(row => row.correctionId !== correction.correctionId).concat(correction);
+        data = { ...data, corrections: (data.corrections || []).filter(row => row.correctionId !== correction.correctionId).concat(correction) };
         record = CTTrails.buildRecord(data, { now });
         dailyView?.update(record);
         drawContent(); drawAside(); announce('Saved on this device.');
@@ -425,11 +425,11 @@
     const store = d.store || globalThis.CTStore.createStore({});
     await store.open();
     if (store.resetStats) store.resetStats();
-    const data = await CTTrails.loadData(store);
+    const data = await CTTrails.loadData(store, { reuseUnchanged: true });
     const reads = store.stats ? store.stats.transactions : null;
     return { ...render(d.container || document.getElementById('app'), data, {
       ...d,
-      loadSnapshot: d.loadSnapshot || (() => CTTrails.loadData(store)),
+      loadSnapshot: d.loadSnapshot || (() => CTTrails.loadData(store, { reuseUnchanged: true })),
       onSaveMetadata: d.readOnly ? null : d.onSaveMetadata || (row => store.put('corrections', row))
     }), readTransactions: reads };
   }
@@ -465,7 +465,7 @@ if (typeof chrome !== 'undefined' && chrome.runtime && chrome.runtime.id &&
       const refresh = async () => {
         if (document.hidden || refreshing) return;
         refreshing = true;
-        try { await send({ type: 'GET_TRAIL_SESSION_STATUS' }); view.update(await CTTrails.loadData(store)); } catch { /* retain the current record */ }
+        try { await send({ type: 'GET_TRAIL_SESSION_STATUS' }); view.update(await CTTrails.loadData(store, { reuseUnchanged: true })); } catch { /* retain the current record */ }
         finally { refreshing = false; }
       };
       const timer = setInterval(refresh, 30000);

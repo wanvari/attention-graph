@@ -1,0 +1,44 @@
+{
+  "generatedAt": "2026-09-11T14:15:26.339Z",
+  "browser": "151.0.7922.34",
+  "cpu": "Apple M3 Pro",
+  "scope": "Real Chromium, synthetic 3000-capture database, 24 million retained text characters. Timings exclude DOM/inference. Disposable profile; no installed user data.",
+  "captures": 3000,
+  "textCharsPerCapture": 8000,
+  "upgradeMs": 275,
+  "samples": {
+    "rawThenStrip": [
+      34.700000047683716,
+      34.700000047683716,
+      32.5,
+      35.39999997615814,
+      33.300000071525574
+    ],
+    "metadata": [
+      5.200000047683716,
+      4.800000071525574,
+      5.100000023841858,
+      5.799999952316284,
+      5.100000023841858
+    ],
+    "unchanged": [
+      0.19999992847442627,
+      0,
+      0.20000004768371582,
+      0.10000002384185791,
+      0
+    ]
+  },
+  "medianMs": {
+    "rawThenStrip": 34.700000047683716,
+    "metadata": 5.100000023841858,
+    "unchanged": 0.10000002384185791
+  },
+  "checks": [
+    "schema 5 upgrade preserves raw text and vectors",
+    "metadata equals original projection",
+    "unchanged refresh reads zero data tables",
+    "cross-page invalidation",
+    "deletion invalidation"
+  ]
+}

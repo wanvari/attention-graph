@@ -1,8 +1,9 @@
+// Frozen output oracle from 183ab41 (5.1.1). Do not optimize this reference.
 // Read-only browsing record model. Topics are suggested labels; episodes are
 // dated groups of observed visits, never inferred intentions or cognition.
 (function(root, factory) {
   const api = typeof module !== 'undefined' && module.exports
-    ? factory(require('./text.js'), require('./relevance.js')) : factory(root.CTText, root.CTRelevance);
+    ? factory(require('../../../lib/text.js'), require('../../../lib/relevance.js')) : factory(root.CTText, root.CTRelevance);
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   root.CTTrails = api;
 })(typeof globalThis !== 'undefined' ? globalThis : this, function(CTText, CTRelevance) {
@@ -23,8 +24,8 @@
     } catch { return null; }
   }
 
-  async function loadData(store, options) {
-    if (typeof store.readSnapshot === 'function') return store.readSnapshot(TABLES, options);
+  async function loadData(store) {
+    if (typeof store.readSnapshot === 'function') return store.readSnapshot(TABLES);
     const values = await Promise.all(TABLES.map(name => store.getAll(name)));
     return Object.fromEntries(TABLES.map((name, i) => [name, values[i] || []]));
   }
@@ -172,27 +173,19 @@
       if (event.measured) stats.activeMs += intervalMs(event.intervals);
       pageEvidence.set(event.normalizedUrl, stats);
     }
-    const groupingByUrl = new Map();
-    for (const [url, evidence] of pageEvidence) {
-      const override = overrides.get(url);
+    for (const event of events) {
+      const override = overrides.get(event.normalizedUrl);
+      const evidence = pageEvidence.get(event.normalizedUrl);
       const utility = CTRelevance.classify(evidence);
       const blocked = utility || !CTRelevance.hasGroupingEvidence(evidence);
       const ids = override ? (override.topicId && topicById.has(override.topicId) ? [override.topicId] : [])
-        : blocked ? [] : Array.from(topicsByUrl.get(url) || []);
-      groupingByUrl.set(url, { ids, reason: override ? 'your-choice' : blocked ? utility ? 'utility_page' : CTRelevance.isOperationalPage(evidence) ? 'operational-page' : 'limited-evidence' : ids.length ? 'suggested' : ownership.get(url)?.length > 1 ? 'conflicting-owners' : 'ungrouped' });
-    }
-    const eventsByTopic = new Map();
-    for (const event of events) {
-      const grouping = groupingByUrl.get(event.normalizedUrl);
-      event.topicIds = grouping.ids.slice(); event.groupingReason = grouping.reason;
-      for (const id of event.topicIds) {
-        if (!eventsByTopic.has(id)) eventsByTopic.set(id, []);
-        eventsByTopic.get(id).push(event);
-      }
+        : blocked ? [] : Array.from(topicsByUrl.get(event.normalizedUrl) || []);
+      event.topicIds = ids;
+      event.groupingReason = override ? 'your-choice' : blocked ? utility ? 'utility_page' : CTRelevance.isOperationalPage(evidence) ? 'operational-page' : 'limited-evidence' : ids.length ? 'suggested' : ownership.get(event.normalizedUrl)?.length > 1 ? 'conflicting-owners' : 'ungrouped';
     }
     const trails = [];
     for (const topic of topicById.values()) {
-      const trailEvents = eventsByTopic.get(topic.topicId) || [];
+      const trailEvents = events.filter(e => e.topicIds.includes(topic.topicId));
       if (!trailEvents.length) continue;
       const personal = custom.get(topic.topicId) || { name: '', note: '', pinned: false };
       trails.push({
