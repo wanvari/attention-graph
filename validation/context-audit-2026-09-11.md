@@ -69,3 +69,6 @@ Reproduce: `npm run check:context` (live local models), `npm run replay:context`
 4. Verify token capacity with truncation disabled and bounded batches on each supported runtime. Character count alone cannot establish token fit, especially across languages.
 5. Evaluate relevant body evidence for labels/adjudication and resistance to common page framing. Longer embeddings alone cannot repair missing evidence in those stages.
 6. Before rollout, use independently reviewed pages, mixed-topic examples, multiple languages, existing-registry attachment and repeated runs. Require no regression in incorrect merges/noise as well as checking coverage, label correctness, timing integrity and laptop residency.
+
+
+Validation: 40/40 tests pass after a fresh local dependency installation, including the complete 33-request offline replay. The [GitHub test run](https://github.com/wanvari/attention-graph/actions/runs/34643659542) also passed on `b234d56`. Production browser checks are documented in the efficiency report; they do not claim validation of an installed longer-context policy.

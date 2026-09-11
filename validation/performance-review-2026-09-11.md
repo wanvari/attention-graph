@@ -32,6 +32,6 @@ Raw reports: [CPU](performance-2026-09-11.json), [Chromium storage](storage-2026
 - Capture E2E passes all 16 checks. Live pipeline E2E passes all four checks. Existing exact production transcript replay remains passing; fixtures/current was not replaced.
 - Real Chromium migration and metadata read E2E passes all five checks.
 
-GitHub's existing workflow was also found to fail before this work because it skipped dependency installation. The final setup installs the lockfile with `npm ci` and uses Node 26, compatible with the test dependencies. The GitHub result is recorded in the implementation checklist.
+GitHub's existing workflow was also found to fail before this work because it skipped dependency installation. The final setup installs the lockfile with `npm ci` and uses Node 26, compatible with the test dependencies. GitHub [run 34643659542](https://github.com/wanvari/attention-graph/actions/runs/34643659542) passed on `b234d56`; a clean local `npm ci` and all 40 tests also passed.
 
 No installed user database was opened or modified, and the installed extension was not reloaded. Upgrading an installation requires the usual extension reload to close older database connections. Schema 6 is forward migration; an old schema-5 binary cannot open the upgraded database. Packaging/onboarding improvements and broader hardware validation remain outside these two authorized steps.
