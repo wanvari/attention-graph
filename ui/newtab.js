@@ -14,6 +14,22 @@
   const clock = at => new Date(at).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
   const date = (at, full) => new Date(at).toLocaleDateString(undefined, { month: full ? 'long' : 'short', day: 'numeric', year: full ? 'numeric' : undefined });
 
+  function homeMessage(record, now) {
+    const bucket = Math.floor(now / (2 * 3600000)), boundary = bucket * 2 * 3600000;
+    const recent = record.events.filter(e => e.time < boundary).at(-1);
+    const trail = recent && record.trails.find(t => t.id === recent.topicIds[0]);
+    const subject = trail?.label.length <= 42 ? trail.label : null;
+    const messages = [
+      subject ? `Back to ${subject}?` : 'Pick up where you left off.',
+      'What would you like to revisit?',
+      'A fresh tab. A place to continue.',
+      subject ? `${subject}, ready to revisit.` : 'Your recent pages are close by.',
+      'Find that page again.',
+      'Where next? Start with your trails.'
+    ];
+    return { bucket, title: messages[bucket % messages.length] };
+  }
+
   function render(container, snapshot, options) {
     const opts = options || {};
     const doc = container.ownerDocument;
@@ -64,9 +80,10 @@
     header.appendChild(nav); shell.appendChild(header);
 
     const hero = el('section', 'nt-hero');
-    const eyebrow = el('div', 'nt-eyebrow', opts.readOnly ? 'A sample browsing record' : 'Your browsing, kept close');
-    hero.append(eyebrow, el('h1', null, 'Your browsing, in view.'),
-      el('p', 'nt-intro', 'Find the page, revisit the trail, and carry on. Your record stays on this device.'));
+    let greeting = homeMessage(record, now);
+    const eyebrow = el('div', 'nt-eyebrow', opts.readOnly ? 'A sample browsing record' : 'Your saved pages');
+    const headline = el('h1', null, greeting.title);
+    hero.append(eyebrow, headline, el('p', 'nt-intro', 'Search your history or reopen a trail. Everything stays on this device.'));
     const searchForm = el('form', 'nt-search'); searchForm.setAttribute('role', 'search');
     const searchIcon = el('span', 'nt-search-icon', '⌕'); searchIcon.setAttribute('aria-hidden', 'true');
     const input = el('input', 'nt-search-input'); input.type = 'search'; input.name = 'q';
@@ -224,7 +241,7 @@
       const heading = el('h3');
       const open = button(trail.label, 'nt-trail-title', () => openTrail(trail.id, true));
       heading.appendChild(open); card.appendChild(heading);
-      card.appendChild(el('p', 'nt-trail-meta', `${count(trail.pageCount, 'page')} · ${count(trail.sourceCount, 'website')} · ${trail.returnDays ? `returned on ${count(trail.returnDays, 'later day')}` : 'first recorded day'}${trail.dayCount > 1 ? ` · ${count(trail.episodes.length, 'episode')}` : ''}`));
+      card.appendChild(el('p', 'nt-trail-meta', `${count(trail.pageCount, 'page')} · ${count(trail.sourceCount, 'website')} · ${count(trail.visitCount, 'visit')}`));
       if (trail.personal.note) card.appendChild(el('p', 'nt-card-note', trail.personal.note));
       const previews = el('div', 'nt-previews');
       const seen = new Set();
@@ -276,7 +293,7 @@
       content.appendChild(button('Start session in this trail', 'nt-secondary-button', () => dailyView.startSession(trail)));
       const sessionHeading = el('div', 'nt-section-heading nt-recent-heading');
       sessionHeading.appendChild(el('h3', null, 'The pages along this trail'));
-      content.append(sessionHeading, el('p', 'nt-help', 'Recorded episodes start after a 30-minute gap between visits in this trail, or on a new day. Pages are ordered by visit time.'));
+      content.append(sessionHeading, el('p', 'nt-help', 'Pages in visit order. A new section starts after 30 minutes away from this trail or a new day.'));
       const sessions = trail.episodes.slice().reverse();
       for (const session of sessions.slice(0, limit)) {
         const block = el('section', 'nt-episode');
@@ -320,10 +337,12 @@
       const fromDay = CTText.addDays(today, -6);
       const events = selected ? selected.events : record.events.filter(e => e.day >= fromDay && e.day <= today);
       const summary = CTTrails.summarize(events);
+      const week = selected ? null : CTExplore.buildSeries(record);
+      if (week) summary.estimatedMs = week.ms;
       const card = el('section', 'nt-record-card');
       card.append(el('div', 'nt-eyebrow', selected ? 'This trail, in the record' : 'The past 7 days'), el('h2', null, selected ? 'Trail overview' : 'Your week at a glance'));
       if (!selected) {
-        const week = CTExplore.buildSeries(record), max = Math.max(1, ...week.days.map(d => d.ms));
+        const max = Math.max(1, ...week.days.map(d => d.ms));
         const chart = el('div', 'nt-mini-week'); chart.setAttribute('aria-label', 'Estimated browsing time over the past seven days');
         for (const day of week.days) { const a = link('', opts.readOnly ? 'explore.html?demo=1' : 'explore.html', 'nt-mini-day'); a.setAttribute('aria-label', `${date(day.bounds.from)}: ${duration(day.ms)} estimated. Explore this week`); a.title = a.getAttribute('aria-label'); const bar = el('span'); bar.style.height = `${Math.max(1, day.ms / max * 100)}%`; a.append(bar); chart.append(a); }
         card.append(chart, link('Explore your week →', opts.readOnly ? 'explore.html?demo=1' : 'explore.html', 'nt-week-link'));
@@ -334,10 +353,10 @@
       }
       card.appendChild(stats);
       const timing = el('div', 'nt-time-estimate');
-      timing.append(el('strong', null, summary.visitCount ? duration(summary.estimatedMs) : '—'), el('span', null, selected ? 'entire trail · all recorded dates' : 'estimated browsing time · past 7 days'));
+      timing.append(el('strong', null, summary.visitCount || summary.estimatedMs ? duration(summary.estimatedMs) : '—'), el('span', null, selected ? 'entire trail · all recorded dates' : 'estimated browsing time · past 7 days'));
       card.appendChild(timing);
       const coverage = el('p', 'nt-coverage', summary.visitCount
-        ? `${count(summary.categorizedCount, 'visit')} grouped of ${number(summary.visitCount)} recorded. Interaction timing available for ${number(summary.measuredCount)} of ${number(summary.visitCount)}.`
+        ? `${number(summary.categorizedCount)} of ${number(summary.visitCount)} visits grouped. Timing measured for ${number(summary.measuredCount)}.`
         : 'Counts describe recorded pages only. Your record will appear as you browse.');
       card.appendChild(coverage);
       if (summary.pendingCount) card.appendChild(el('p', 'nt-help', `${count(summary.pendingCount, 'recent capture')} included before history processing.`));
@@ -423,6 +442,10 @@
         const preserveContent = active && content.contains(active) && active !== content;
         now = opts.now || Date.now(); today = CTText.dayKeyFromMs(now);
         data = next; record = CTTrails.buildRecord(data, { now });
+        if (studioPage === 'home' && Math.floor(now / (2 * 3600000)) !== greeting.bucket) {
+          greeting = homeMessage(record, now); headline.textContent = greeting.title;
+        }
+        fromInput.max = today; toInput.max = today;
         dailyView?.update(record);
         if (!preserveContent) drawContent();
         drawAside();
@@ -438,13 +461,17 @@
     if (store.resetStats) store.resetStats();
     const data = await CTTrails.loadData(store);
     const reads = store.stats ? store.stats.transactions : null;
-    return { ...render(d.container || document.getElementById('app'), data, {
+    const view = render(d.container || document.getElementById('app'), data, {
       ...d,
       loadSnapshot: d.loadSnapshot || (() => CTTrails.loadData(store)),
       onSaveMetadata: d.readOnly ? null : d.onSaveMetadata || (row => store.put('corrections', row))
-    }), readTransactions: reads };
+    });
+    const dispose = view.dispose;
+    view.dispose = () => { dispose(); if (!d.store) store.close(); };
+    view.readTransactions = reads;
+    return view;
   }
-  return { main, render, loadData: CTTrails.loadData, duration };
+  return { main, render, homeMessage, loadData: CTTrails.loadData, duration };
 });
 
 if (typeof chrome !== 'undefined' && chrome.runtime && chrome.runtime.id &&

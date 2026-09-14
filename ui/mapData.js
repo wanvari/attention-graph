@@ -56,6 +56,45 @@
     return Math.round((ms || 0) / 60000);
   }
 
+  // A read-only visual layer over the saved trails. Shared distinctive title
+  // words suggest related subjects, never a click, intention or new membership.
+  const GROUP_STOP_WORDS = new Set(('the and for with from your this that into how what why are all new best top online free local personal human source sources material references practice guide tips information profile company comapny welcome homepage home page pages website web site app application ai job jobs listing listings career careers role roles product service services search results login sign sign-in account notifications feed library book books article articles notes tools tool system systems data design research programming preparation planning route routes google linkedin youtube microsoft github facebook amazon').split(/\s+/));
+  const groupWords = title => [...new Set((String(title).toLowerCase().match(/[\p{L}][\p{L}\p{N}]*/gu) || [])
+    .filter(word => word.length >= 4 && !GROUP_STOP_WORDS.has(word)))];
+
+  function buildTopicGroups(topics) {
+    const sorted = topics.slice().sort((a, b) => String(a.id).localeCompare(String(b.id)));
+    const words = new Map(sorted.map(t => [t.id, groupWords(t.label)])), index = new Map();
+    for (const topic of sorted) for (const word of words.get(topic.id)) {
+      if (!index.has(word)) index.set(word, []);
+      index.get(word).push(topic);
+    }
+    const assigned = new Set(), groups = [];
+    // Every member must share the SAME cue. Do not chain A~B~C into a group
+    // when A and C share no title evidence. Ignore ubiquitous vocabulary.
+    const candidates = [...index].filter(([, rows]) => rows.length >= 2 && rows.length <= Math.max(4, Math.ceil(sorted.length * .25)))
+      .sort((a, b) => b[1].length - a[1].length || a[0].localeCompare(b[0]));
+    for (const [cue, matches] of candidates) {
+      const members = matches.filter(t => !assigned.has(t.id));
+      if (members.length < 2) continue;
+      const common = words.get(members[0].id).filter(word => members.every(t => words.get(t.id).includes(word)));
+      const labelWords = String(members[0].label).match(/[\p{L}][\p{L}\p{N}]*/gu) || [];
+      const sharedLabel = labelWords.filter(word => common.includes(word.toLowerCase())).slice(0, 3).join(' ');
+      const label = sharedLabel.charAt(0).toUpperCase() + sharedLabel.slice(1);
+      groups.push({ id: `subject:${cue}`, label, cue, topicIds: members.map(t => t.id), related: true });
+      members.forEach(t => assigned.add(t.id));
+    }
+    const other = sorted.filter(t => !assigned.has(t.id));
+    if (other.length) groups.push({ id: 'subject:other', label: 'Other trails', topicIds: other.map(t => t.id), related: false });
+    const byId = new Map(topics.map(t => [t.id, t]));
+    for (const group of groups) {
+      const members = group.topicIds.map(id => byId.get(id));
+      group.visitCount = members.reduce((sum, t) => sum + t.visitCount, 0);
+      group.pageCount = members.reduce((sum, t) => sum + t.pageCount, 0);
+    }
+    return groups.sort((a, b) => Number(b.related) - Number(a.related) || b.visitCount - a.visitCount || a.id.localeCompare(b.id));
+  }
+
   // windowDays: 7 | 30 | 90. Returns the analysis-shaped object map.js renders.
   async function build(store, options) {
     const opts = options || {};
@@ -68,7 +107,8 @@
     const record = Trails.buildRecord(snapshot, { now });
     const [year, month, day] = fromDay.split('-').map(Number);
     const measured = Dashboard.measure(record, { from: new Date(year, month - 1, day).getTime(), to: now });
-    const topicRows = (snapshot.topics || []).map(t => ({ ...t, label: record.trails.find(r => r.id === t.topicId)?.label || t.label }));
+    const trailById = new Map(record.trails.map(t => [t.id, t]));
+    const topicRows = (snapshot.topics || []).map(t => ({ ...t, label: trailById.get(t.topicId)?.label || t.label }));
     const runRows = snapshot.runs || [];
     const pageRows = [...new Map(record.events.map(e => [e.normalizedUrl, { normalizedUrl: e.normalizedUrl, url: e.url, title: e.title, domain: e.domain, source: e.source }])).values()];
     const memberships = [...new Map(record.events.filter(e => e.topicIds.length).map(e => [e.normalizedUrl, { normalizedUrl: e.normalizedUrl, topicId: e.topicIds[0] }])).values()];
@@ -190,8 +230,9 @@
     const uncoveredTransitions = measured.flow.uncovered;
     const lastOkRun = runRows.filter(r => r.status === 'ok').sort((a, b) => b.startedAt - a.startedAt)[0] || null;
     const ungroupedUrls = new Set(measured.events.filter(e => !e.topicIds.length).map(e => e.normalizedUrl));
+    const eventByUrl = new Map(measured.events.map(e => [e.normalizedUrl, e]));
     const uncategorizedPages = [...ungroupedUrls].map(url => {
-      const page = pageByUrl.get(url), stats = windowStatsByUrl.get(url), event = measured.events.find(e => e.normalizedUrl === url);
+      const page = pageByUrl.get(url), stats = windowStatsByUrl.get(url), event = eventByUrl.get(url);
       return { id: url, title: page.title, url: page.url, domain: page.domain, reason: event.groupingReason, visitCount: stats.visitCount,
         estimatedDwellMs: stats.dwellMs, estimatedDwellMinutes: msToMinutes(stats.dwellMs), firstVisitTime: stats.firstSeen, lastVisitTime: stats.lastSeen };
     });
@@ -230,6 +271,9 @@
       windowDays,
       models: { embedding: 'bge-m3:latest', chat: 'qwen3:4b' },
       topics: ranked,
+      groups: buildTopicGroups(ranked),
+      sequenceAudit: measured.flow,
+      timeline: measured.events,
       transitions, singleTransitions,
       coverage: {
         days: windowDays,
@@ -246,7 +290,7 @@
         const categorizedUrls = new Set(windowMemberships.map(m => m.normalizedUrl));
         const categorizedVisits = visitRows.filter(v => categorizedUrls.has(v.normalizedUrl)).length;
         return {
-          pagesAvailable: pageRows.length,
+          pagesAvailable: windowStatsByUrl.size,
           pagesAnalyzed: categorizedUrls.size,
           visitsCategorized: categorizedVisits,
           visitsInWindow: visitRows.length,
@@ -281,5 +325,5 @@
     };
   }
 
-  return { ATTENTION_BANDS, TRANSITION_TYPES, build };
+  return { ATTENTION_BANDS, TRANSITION_TYPES, buildTopicGroups, build };
 });

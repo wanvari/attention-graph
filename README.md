@@ -21,11 +21,15 @@ Search matches titles, website names, suggested topics, personal notes, and date
 
 ## Today and optional sessions
 
-Studio opens in dark mode, with a saved Light/Dark switch shared across Home, Graph, Explore, Settings and record inspection. Home puts continuation and search first, with compact evidence cards and a seven-day preview.
+Studio opens in dark mode, with a saved Light/Dark switch shared across Home, Graph, Explore, Settings and record inspection. Home puts continuation and search first, with compact evidence cards and a seven-day preview. Its headline changes every two hours using local message templates and, when available, a recent trail name. Opening Home never runs a model.
 
 **Explore** shows 7 or 14 days of stacked activity. Switch between estimated time and recorded visit starts, move to an earlier period, or select a day to inspect its trail totals and source pages. Other trails and ungrouped pages remain in every total. Day boundaries use the local time zone; a page crossing midnight contributes time on both days but starts only once.
 
-**Graph** opens with a readable trail overview. Labels keep a fixed screen size and yield when they would overlap. Select a trail to zoom into its pages, or use the searchable inspector to read full titles and open page or connection evidence. All recorded pages remain available; ungrouped pages have a single expandable entry instead of stretching the overview. Dragging a trail moves its attached pages. Page detail and labels can be toggled; **Overview** returns to all trails. Colors identify trails consistently across the workspace.
+**Graph** places trails with distinctive words in common into named boxes. For example, FINNY company-profile and job-listing titles appear together. These are suggested visual groups; they do not rewrite saved page memberships. Generic terms such as “company,” “jobs,” and common platform names do not establish a group. Other trails and ungrouped pages remain accessible.
+
+Larger circles mean more recorded visits, within readable size limits. Select a box to see its trails, busiest websites, and dated browsing order; select a trail to see pages and related titles. Small screens start with group names. Search finds every page included by the selected trail and date filters. Labels avoid collisions and stay inside their group in the overview. **All routes** reveals the selected number of repeated routes; selecting a trail shows all its repeated routes, even beyond that overview limit.
+
+Arrows mean the trails were visited consecutively at least twice in the same direction. They describe timestamp order across tabs, not verified hyperlinks or a stream of thought. Single sequences remain in the dated list. **How connections are counted** reconciles every candidate visit step and offers timestamped source links for ungrouped steps. It separately reports repeated steps, distinct directed page pairs, distinct directed hostname pairs, and ungrouped page count. A repeated A→B step counts again; the distinct pair does not.
 
 Home shows estimated recorded time and three compact literal rings. Select any ring to see its formula, counts, contributing pages, timing coverage and comparison details. The continuation card opens your last page or starts an optional session in a selected trail.
 
@@ -63,7 +67,7 @@ Version 5.1 upgrades the database to schema 5. Reload the extension in `chrome:/
 
 ## Laptop profile
 
-The default is `bge-m3:latest` for embeddings and `qwen3:4b` for short structured labels. Downloads total roughly 3.7 GB. The [current validation report](validation/report-2026-09-10.md) records code-review findings, regression tests and measured performance on an **M3 Pro with 18 GiB RAM**, including model residency, stage times, backlog completion, and fixture quality.
+The default is `bge-m3:latest` for embeddings and `qwen3:4b` for short structured labels. Downloads total roughly 3.7 GB. The [current validation report](validation/report-2026-09-13.md) records code-review findings, regression tests and measured performance on an **M3 Pro with 18 GiB RAM**, including model residency, stage times, backlog completion, and fixture quality.
 
 - 100 pending pages and at most 12 new topics per run; configurable page budget is bounded at 200.
 - Embeddings use batches of 8. Labeling uses at most two batches of 6 with four short page excerpts per topic.
@@ -85,6 +89,7 @@ npm test                 # unit, protocol, migration, copy and DOM tests; no mod
 npm run e2e              # Chrome capture/privacy tests; disposable profile
 npm run e2e:studio   # Studio themes, graph interactions, chart totals and responsive screens
 npm run e2e:graph-scale # 117 trails, 1,025 pages: label geometry, search and responsive overview
+npm run e2e:connections  # related FINNY titles, visit density, timelines and count evidence
 npm run e2e:trails       # actual UI -> worker -> persistence and reload
 npm run e2e:pipeline     # Chrome offscreen lifecycle + live Ollama
 npm run check:laptop     # cold vector cache, synthetic month, current live models

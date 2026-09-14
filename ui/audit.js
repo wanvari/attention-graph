@@ -52,7 +52,10 @@
       coverage.appendChild(statRow('Grouped share of estimated time', detail.totalMs ? fmtPct(detail.groupedMs / detail.totalMs) : 'No timed evidence'));
       coverage.appendChild(statRow('Visits with interaction timing', `${detail.coverage.measuredVisits} of ${detail.coverage.visits}`));
       coverage.appendChild(statRow('Visits with timestamped activity', `${detail.coverage.exactTimingVisits} of ${detail.coverage.visits}`));
-      coverage.appendChild(statRow('Transitions with ungrouped endpoints', detail.flow.uncovered));
+      coverage.appendChild(statRow('Visit steps with an ungrouped page', detail.flow.uncovered));
+      coverage.appendChild(statRow('Distinct directed page pairs in those steps', detail.flow.uniqueUngroupedPagePairs));
+      coverage.appendChild(statRow('Distinct directed website pairs in those steps', detail.flow.uniqueUngroupedWebsitePairs));
+      coverage.appendChild(el('div', 'stat-note', 'Steps count repeat visits again. Website pairs count hostnames. These counts do not establish clicked links. Inspect the steps in Graph.'));
       coverage.appendChild(el('div', 'stat-note', 'Shared with Home and Map: overlapping time counts once. History gaps and older interaction totals remain estimates; missing past measurements cannot be recovered.'));
       const audit = data.settings.evidenceAudit;
       if (audit) coverage.appendChild(el('div', 'stat-note', `Last evidence recalculation: ${new Date(audit.checkedAt).toLocaleString()}. Updated ${audit.changedPages} page totals, ${audit.changedVisits} visit totals and removed ${audit.removedMemberships} automatic memberships.`));

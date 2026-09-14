@@ -254,3 +254,17 @@ html[data-theme] .demo-view > .nt-page { padding: 0; }
   [data-studio-page="graph"] .studio-nav a { flex-shrink: 0; padding: 8px 12px; font-size: 12px; }
   [data-studio-page="graph"] .studio-pins, [data-studio-page="graph"] .studio-sidebar-bottom { display: none; }
 }
+
+/* Named regions separate related titles; visit volume remains visible at any zoom. */
+.studio-shell .group-label { fill: var(--text); font-size: 14px; font-weight: 650; cursor: pointer; }
+.studio-shell .graph-region { cursor: pointer; }
+.studio-shell .graph-region:focus-visible { stroke: var(--accent); stroke-width: 3px; outline: none; }
+.studio-shell .graph-sites { margin-top: 24px; }
+.studio-shell .graph-site-row { display: grid; gap: 5px; padding: 10px 0; font-size: 12px; overflow-wrap: anywhere; }
+.studio-shell .graph-site-row small { color: var(--text-dim); }
+.studio-shell .graph-site-row i { height: 4px; border-radius: 2px; background: var(--accent); opacity: .65; }
+.studio-shell .graph-timeline { list-style: none; padding: 0 0 0 12px; border-left: 1px solid var(--line); }
+.studio-shell .graph-timeline li { display: grid; gap: 6px; padding: 10px 0 10px 8px; }
+.studio-shell .graph-timeline time { color: var(--text-dim); font-size: 11px; }
+.studio-shell .graph-timeline a { color: var(--text); line-height: 1.5; overflow-wrap: anywhere; }
+.studio-shell .graph-sequence-break { border-top: 1px dashed var(--line); padding-top: 12px; color: var(--text-dim); }

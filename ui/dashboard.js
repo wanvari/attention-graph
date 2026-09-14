@@ -45,15 +45,15 @@
     const paragraph = (parent, text, cls = 'nt-help') => parent.appendChild(el('p', cls, text));
     function comparison(key) {
       const range = signals.comparisons[key];
-      if (!signals[key].eligible) return 'More recorded evidence needed for a comparison';
-      if (range.n < 7) return `Building your comparison: ${range.n} of 7 days`;
+      if (!signals[key].eligible) return 'Not enough data to compare';
+      if (range.n < 7) return `Comparison needs 7 days · ${range.n} recorded`;
       return `${range.direction[0].toUpperCase() + range.direction.slice(1)} recent range`;
     }
-    const raw = key => key === 'continuity' ? `${signals.continuity.numerator} of ${signals.continuity.denominator} classified transitions stayed in one trail`
+    const raw = key => key === 'continuity' ? `${signals.continuity.numerator} of ${signals.continuity.denominator} grouped steps stayed in one trail`
       : `${minutes(signals[key].numerator)} of ${minutes(signals[key].denominator)} grouped time`;
     function coverage(parent, stats) {
       const c = stats.coverage;
-      paragraph(parent, `${c.groupedVisits} of ${c.visits} recorded visits grouped · interaction timing for ${c.measuredVisits} of ${c.visits} · ${c.exactTimingVisits} with timestamped activity`, 'nt-signal-coverage');
+      paragraph(parent, `${c.groupedVisits} of ${c.visits} visits grouped · timing measured for ${c.measuredVisits}`, 'nt-signal-coverage');
     }
     function pageRows(parent, events, bounds) {
       const list = el('ol', 'nt-evidence-list'); let limit = 30;
@@ -213,7 +213,7 @@
         rings.append(ring);
       }
       dashboard.append(rings); paragraph(dashboard, signals.observation, 'nt-observation'); coverage(dashboard, signals);
-      paragraph(dashboard, 'Your recent range describes your own recorded days.', 'nt-signal-note'); main.append(dashboard);
+      paragraph(dashboard, 'Select a number to see its calculation and pages.', 'nt-signal-note'); main.append(dashboard);
       const resume = D.continuation(record);
       if (resume.page || resume.session) {
         const card = el('section', 'nt-continuation'); card.setAttribute('aria-label', 'Continue your trail');

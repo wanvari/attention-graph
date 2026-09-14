@@ -176,6 +176,21 @@ function search(window, document, query) {
 }
 
 (async () => {
+  // Weekly time includes only the part of a visit inside the seven-day window.
+  {
+    const boundary = new Date(2026, 7, 30).getTime();
+    const m = await mount(async store => {
+      await store.put('captures', {captureId:'overnight',url:a,title:'Rust across midnight',startedAt:boundary-60000,endedAt:boundary+60000,activeMs:120000,activityIntervals:[[boundary-60000,boundary+60000]]});
+      await store.put('visits', {visitId:'in-week',url:b,title:'Async',visitTime:at(1),dwellMs:60000});
+    });
+    assert.equal(m.document.querySelector('.nt-time-estimate strong').textContent,'2m');
+    assert.equal(m.document.querySelectorAll('.nt-mini-day').length,7);
+    const oldRecord=m.result.record;
+    m.result.update({visits:[]});
+    assert.notEqual(m.result.record,oldRecord,'main must preserve the live record getter');
+    assert.equal(m.result.record.events.length,0);
+    await m.close();
+  }
   // Unknown operational durations must not appear as observed zero time.
   {
     const m = await mount(async store => {
@@ -205,9 +220,9 @@ function search(window, document, query) {
     const m = await mount(seed);
     assert.equal(m.result.state, 'rendered');
     assert.equal(m.result.readTransactions, 1);
-    assert.ok(m.document.body.textContent.includes('returned on 1 later day'));
-    assert.ok(m.document.body.textContent.includes('3 visits grouped of 4 recorded'));
-    assert.ok(m.document.body.textContent.includes('Interaction timing available for 1 of 4'));
+    assert.equal(m.result.record.trails[0].returnDays, 1);
+    assert.ok(m.document.body.textContent.includes('3 of 4 visits grouped'));
+    assert.ok(m.document.body.textContent.includes('Timing measured for 1'));
     assert.ok(m.document.querySelector('.nt-freshness').textContent.includes('Latest recorded visit'));
     assert.equal(m.document.querySelectorAll('.nt-ring, .nt-band').length, 0);
     click(m.window, m.document.querySelector('.nt-trail-title'));

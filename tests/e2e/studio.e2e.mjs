@@ -33,6 +33,8 @@ try {
   await page.reload();assert.equal(await page.locator('html').getAttribute('data-theme'),'light');
   assert.equal(await second.locator('.page-node').count(),16,'full graph includes all pages and ungrouped records');
   assert.equal(await second.locator('.flow-link').count(),2,'repeated sequences in both directions remain clickable');
+  assert.equal(await second.locator('.flow-link:visible').count(),0,'overview keeps routes off until requested');
+  await second.locator('#show-flows').check();
   await second.locator('.flow-link').first().focus();await second.keyboard.press('Enter');
   await second.getByRole('heading',{name:'Recorded page sequences'}).waitFor();
   await second.getByRole('searchbox',{name:'Find a trail or page'}).fill('Async Rust');await second.keyboard.press('Enter');

@@ -20,10 +20,10 @@ try {
   const assertLegible=async(label,minimum=1)=>{
     const geometry=await page.evaluate(()=>{
       const canvas=document.getElementById('graph-container').getBoundingClientRect();
-      const labels=[...document.querySelectorAll('.topic-label,.page-label')].filter(n=>getComputedStyle(n).display!=='none').map(n=>{const r=n.getBoundingClientRect();return {text:n.textContent,x:r.x,y:r.y,w:r.width,h:r.height};});
+      const labels=[...document.querySelectorAll('.topic-label,.page-label,.group-label')].filter(n=>getComputedStyle(n).display!=='none').map(n=>{const r=n.getBoundingClientRect();return {text:n.textContent,x:r.x,y:r.y,w:r.width,h:r.height};});
       const overlaps=[];
       for(let i=0;i<labels.length;i++)for(let j=i+1;j<labels.length;j++){const a=labels[i],b=labels[j];if(a.x<b.x+b.w&&a.x+a.w>b.x&&a.y<b.y+b.h&&a.y+a.h>b.y)overlaps.push([a.text,b.text]);}
-      return {count:labels.length,overlaps,outside:labels.filter(r=>r.x<canvas.x||r.y<canvas.y||r.x+r.w>canvas.right||r.y+r.h>canvas.bottom),sizes:[...document.querySelectorAll('.topic-node')].map(n=>n.getBoundingClientRect().width)};
+      return {count:labels.length,overlaps,outside:labels.filter(r=>r.x<canvas.x||r.y<canvas.y||r.x+r.w>canvas.right||r.y+r.h>canvas.bottom),sizes:[...document.querySelectorAll('.topic-node')].filter(n=>getComputedStyle(n).display!=='none').map(n=>n.getBoundingClientRect().width)};
     });
     if (geometry.count < minimum || geometry.overlaps.length || geometry.outside.length) { await page.screenshot({path:path.join(os.tmpdir(),'ct-graph-narrow-failure.png'),fullPage:true}); console.log(await page.evaluate(()=>({canvas:document.getElementById('graph-container').getBoundingClientRect().toJSON(),zoom:document.getElementById('graph').__zoom,roots:[...document.querySelectorAll('.topic-node')].slice(0,3).map(n=>({x:n.__data__.x,y:n.__data__.y,r:n.__data__.renderRadius,box:n.getBoundingClientRect().toJSON()}))}))); }
     assert.ok(geometry.count>=minimum,`${label}: expected readable labels, got ${geometry.count}`);

@@ -16,7 +16,7 @@
     <header>
       <div class="topbar">
         <div>
-          <h1>Your trails, connected.</h1>
+          <h1>Explore your trails.</h1>
           <div id="status-line" class="status-line">Loading the topic registry...</div>
         </div>
         <div id="health-pill" class="health-pill">Registry</div>
@@ -53,6 +53,7 @@
         </label>
         <label class="control-field"><span>Find</span><input id="graph-search" type="search" placeholder="A trail or page" aria-label="Find a trail or page"></label>
         <label class="control-field"><input id="show-pages" type="checkbox" checked> Page detail</label>
+        <label class="control-field"><input id="show-flows" type="checkbox"> All routes</label>
         <label class="control-field"><span>Labels</span><select id="graph-labels"><option value="auto">Automatic</option><option value="all">More</option><option value="off">Off</option></select></label>
       </div>
       <div id="staleness-banner" class="staleness-banner" hidden></div>
@@ -67,7 +68,7 @@
       <aside id="evidence-panel" class="evidence-panel">
         <div class="empty-state">
           <h2>Evidence</h2>
-          <p>Select a topic or flow to inspect the visits, evidence strength, and rationale behind it.</p>
+          <p>Select a group or trail to see its pages and browsing order.</p>
         </div>
       </aside>
     </div>
