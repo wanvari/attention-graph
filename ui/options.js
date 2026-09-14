@@ -13,7 +13,7 @@
       else resolve(reply);
     });
   });
-  document.addEventListener('DOMContentLoaded', async () => {
+  CTStudio.onPage('options.html', async () => {
     const byId = id => document.getElementById(id);
     const status = text => { byId('status').textContent = text; };
     const form = byId('settings-form');
@@ -94,6 +94,6 @@
         }, 3000);
       } catch (error) { status(error.message); await check(); }
     });
-    window.addEventListener('pagehide', () => clearInterval(poll), { once: true });
+    const dispose=()=>{clearInterval(poll);store.close();window.removeEventListener('pagehide',dispose);};window.CTPageDispose=dispose;window.addEventListener('pagehide',dispose,{once:true});
   });
 })();

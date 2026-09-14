@@ -27,9 +27,11 @@ class TopicMapVisualizer {
     this.setupControls();
     this.addZoomControls();
     const params = new URLSearchParams(window.location.search);
-    this.loadAnalysis(params.get('refresh') === '1' || params.get('forceRefresh') === '1');
-    window.addEventListener('resize', () => this.handleResize());
+    this.ready=this.loadAnalysis(params.get('refresh') === '1' || params.get('forceRefresh') === '1');
+    this.resizeListener=()=>this.handleResize();window.addEventListener('resize',this.resizeListener);
   }
+
+  dispose() {this.loadVersion++;this.svg?.interrupt();this.simulation?.stop();window.removeEventListener('resize',this.resizeListener);this.store.close?.();}
 
   setupSVG() {
     const container = document.getElementById('graph-container');
@@ -76,7 +78,7 @@ class TopicMapVisualizer {
         this.updateLevelOfDetail(event.transform.k);
       });
     this.svg.call(this.zoom);
-    this.svg.on('click', () => this.clearSelection());
+    this.svg.on('click', () => this.hideTooltip());
   }
 
   setupControls() {
@@ -88,8 +90,8 @@ class TopicMapVisualizer {
       });
     }
     document.getElementById('graph-labels')?.addEventListener('change', () => this.updateLevelOfDetail(this.currentScale));
-    document.getElementById('show-pages')?.addEventListener('change', () => this.updateLevelOfDetail(this.currentScale));
-    document.getElementById('show-flows')?.addEventListener('change', () => this.updateLevelOfDetail(this.currentScale));
+    document.getElementById('show-pages')?.addEventListener('change', () => { if(document.getElementById('show-pages').checked)document.getElementById('show-flows').checked=false; if(this.selected)this.layoutFocus(); this.updateLevelOfDetail(this.currentScale); });
+    document.getElementById('show-flows')?.addEventListener('change', () => { if(document.getElementById('show-flows').checked)document.getElementById('show-pages').checked=false; if(this.selected)this.layoutFocus(); this.updateLevelOfDetail(this.currentScale); });
     document.getElementById('graph-search')?.addEventListener('input', () => this.searchGraph());
     document.getElementById('graph-search')?.addEventListener('keydown', event => {
       if (event.key === 'Enter') { const node = this.searchMatches?.[0]; if (node) this.openNode(node); }
@@ -114,6 +116,12 @@ class TopicMapVisualizer {
       <button class="zoom-control" type="button" data-zoom="clear" aria-label="Clear selection" title="Clear selection">Clear</button>
     `;
     container.appendChild(controls);
+    const modes=document.createElement('div');modes.className='graph-focus-tabs';modes.setAttribute('role','group');modes.setAttribute('aria-label','Map detail');
+    for(const [label,id] of [['Pages','show-pages'],['Connections','show-flows']]) {
+      const button=document.createElement('button');button.type='button';button.textContent=label;button.dataset.graphMode=id;
+      button.addEventListener('click',()=>{const input=document.getElementById(id);input.checked=true;input.dispatchEvent(new Event('change'));});modes.append(button);
+    }
+    container.append(modes);
     controls.addEventListener('click', event => {
       const action = event.target.dataset.zoom;
       if (!action) return;
@@ -133,7 +141,7 @@ class TopicMapVisualizer {
     this.svg.attr('width', this.width).attr('height', this.height);
     if (!this.selected && this.updatePositions) {
       this.renderGraph(this.graphData);
-    } else this.updateLevelOfDetail(this.currentScale);
+    } else if(this.selected) this.layoutFocus(); else this.updateLevelOfDetail(this.currentScale);
   }
 
   async loadAnalysis(forceRefresh) {
@@ -243,7 +251,7 @@ class TopicMapVisualizer {
     this.renderSummary(analysis);
     this.renderLegend();
     this.renderGraph(this.graphData);
-    this.renderDefaultEvidence(analysis);
+    this.renderAtlas();
     this.searchGraph();
     const when = this.isDemo ? ' Synthetic sample, March 2026.' : analysis.generatedAt ? ` Analyzed ${timeAgo(analysis.generatedAt)}.` : '';
     this.setStatus(`${analysis.topics.length} trails · ${analysis.coverage.visitsExpanded} recorded visits.${when}`);
@@ -415,6 +423,68 @@ class TopicMapVisualizer {
     this.fitToViewport(true);
   }
 
+  atlasFrame(title, subtitle, back=false) {
+    const atlas=document.getElementById('graph-atlas');
+    if(!atlas)return document.getElementById('evidence-panel');
+    document.querySelector('.workspace').hidden=true;atlas.hidden=false;atlas.replaceChildren();
+    const head=document.createElement('div');head.className='atlas-heading';
+    const text=document.createElement('div'),h=document.createElement('h2'),p=document.createElement('p');h.textContent=title;p.textContent=subtitle;text.append(h,p);head.append(text);
+    if(back){const b=document.createElement('button');b.type='button';b.className='graph-back';b.textContent='← All trails';b.addEventListener('click',()=>{document.getElementById('graph-search').value='';this.clearSelection();});head.prepend(b);}
+    atlas.append(head);return atlas;
+  }
+
+  renderAtlas() {
+    if(!document.getElementById('graph-atlas')){this.renderDefaultEvidence(this.analysis);return;}
+    this.selected=null;this.focusIds=null;
+    const related=this.graphData.groups.filter(g=>g.related),others=this.graphData.groups.filter(g=>!g.related);
+    const atlas=this.atlasFrame('Find a place to return to', `${this.visibleTopicCount} trails, organized by related titles. Choose a group, then a trail to explore its pages.`);
+    const all=document.createElement('button');all.type='button';all.className='atlas-all';all.textContent='Browse all trails ↗';
+    all.addEventListener('click',()=>{const frame=this.atlasFrame('All trails',`${this.visibleTopicCount} trails in this period.`,true);this.appendNodeList(frame,this.graphData.nodes.filter(n=>n.type==='topic'));});atlas.firstElementChild.append(all);
+    const grid=document.createElement('div');grid.className='atlas-grid';
+    for(const group of [...related,...others]) {
+      const nodes=this.graphData.nodes.filter(n=>n.type==='topic'&&group.topicIds.includes(n.id));
+      const card=document.createElement('button');card.type='button';card.className='atlas-group';card.setAttribute('aria-label',`Group: ${group.label}, ${nodes.length} trails`);
+      card.style.setProperty('--group-color',CTStudio.topicColor(group.id));
+      const top=document.createElement('div');top.className='atlas-card-heading';
+      const title=document.createElement('strong');title.textContent=group.label;
+      const count=document.createElement('span');count.textContent=`${nodes.length} trails`;top.append(title,count);
+      const preview=document.createElement('div');preview.className='atlas-preview';
+      for(const node of nodes.slice(0,3)){const row=document.createElement('span');row.textContent=node.label;preview.append(row);}
+      const foot=document.createElement('span');foot.className='atlas-card-foot';foot.textContent=`${nodes.reduce((sum,n)=>sum+n.topic.visitCount,0).toLocaleString()} visits · Open group ↗`;
+      card.append(top,preview,foot);card.addEventListener('click',()=>this.selectGroup(group));grid.append(card);
+    }
+    atlas.append(grid);
+    const ungrouped=this.graphData.nodes.find(n=>n.type==='collection');
+    if(ungrouped){const b=document.createElement('button');b.type='button';b.className='atlas-ungrouped';b.textContent=`${this.analysis.uncategorized.pages.length.toLocaleString()} pages without a trail`;b.addEventListener('click',()=>this.openNode(ungrouped));atlas.append(b);}
+    this.appendConnectionAudit(atlas);
+  }
+
+  revealGraph() {
+    const atlas=document.getElementById('graph-atlas');if(atlas){atlas.hidden=true;atlas.replaceChildren();}
+    document.querySelector('.workspace').hidden=false;
+    const r=document.getElementById('graph-container').getBoundingClientRect();
+    this.width=r.width||this.width;this.height=r.height||this.height;this.svg.attr('width',this.width).attr('height',this.height);
+  }
+
+  layoutFocus() {
+    const active=this.selected;if(!active||active.kind==='collection'||active.kind==='group')return;
+    const nodes=this.graphData.nodes;
+    const topicId=active.kind==='topic'?active.id:active.topicId;
+    const root=nodes.find(n=>n.id===topicId)||nodes.find(n=>n.page?.id===active.id);
+    if(!root)return;
+    const routes=document.getElementById('show-flows')?.checked;
+    const links=routes?this.graphData.transitionLinks.filter(l=>l.source.id===root.id||l.target.id===root.id).sort((a,b)=>b.weight-a.weight).slice(0,8):[];
+    const neighbors=[...new Set(links.map(l=>l.source.id===root.id?l.target:l.source))];
+    const pages=topicId?nodes.filter(n=>n.type==='page'&&n.parentTopicId===topicId):[];
+    const chosen=pages.find(n=>n.page.id===active.id);
+    const leaves=routes?neighbors:[...(chosen?[chosen]:[]),...pages.filter(n=>n!==chosen)].slice(0,8);
+    this.focusIds=new Set([root.id,...leaves.map(n=>n.id)]);
+    Object.assign(root,{x:-150,y:0});
+    leaves.forEach((node,i)=>Object.assign(node,{x:160,y:(i-(leaves.length-1)/2)*85}));
+    if(!leaves.length)Object.assign(root,{x:0,y:0});
+    this.overviewMode=false;this.updatePositions();this.zoomToNodes([root,...leaves],100,true);
+  }
+
   computeTopicAnchors(nodes) {
     this.topicAnchors.clear();
     const groups = this.graphData.groups.map(g => ({...g, nodes: nodes.filter(n => g.topicIds.includes(n.id))}));
@@ -481,11 +551,11 @@ class TopicMapVisualizer {
     if (group.id === 'subject:ungrouped') { this.openNode(this.graphData.nodes.find(n => n.type === 'collection')); return; }
     this.selected = {kind:'group',id:group.id};
     const nodes = this.graphData.nodes.filter(n => n.type === 'topic' && group.topicIds.includes(n.id));
-    this.renderBrowser(nodes, group.label, group.related ? `Related titles share “${group.cue}”. ${nodes.length} saved trails.` : 'Trails without a shared title match.', true);
-    const panel = document.getElementById('evidence-panel');
-    this.appendSites(panel, nodes.flatMap(n => n.topic.pages));
-    this.appendTimeline(panel, group.topicIds);
-    this.zoomToNodes(nodes); this.updateLevelOfDetail(this.currentScale);
+    const atlas=this.atlasFrame(group.label, group.related ? `These ${nodes.length} trails share “${group.cue}” in their titles.` : `${nodes.length} trails without a shared title match.`, true);
+    const columns=document.createElement('div');columns.className='atlas-group-content';
+    const list=document.createElement('div'), context=document.createElement('div');context.className='atlas-context';
+    this.appendNodeList(list,nodes);this.appendSites(context,nodes.flatMap(n=>n.topic.pages));this.appendTimeline(context,group.topicIds);
+    columns.append(list,context);atlas.append(columns);
   }
 
   appendSites(panel, pages) {
@@ -550,21 +620,20 @@ class TopicMapVisualizer {
     const search = document.getElementById('graph-search');
     if (search) search.value = '';
     this.query = '';
+    this.revealGraph();
     this.setStatus(`${this.analysis.topics.length} trails · ${this.graphData.nodes.filter(n => n.type === 'page').length} recorded pages. Selected: ${node.type === 'page' ? node.page.title : node.label}`);
     if (node.type === 'topic') { this.selectTopic(node.topic); this.zoomToTopic(node.id); }
     else if (node.type === 'collection') {
       this.selected = {kind: 'collection', id: node.id};
       const pages = this.graphData.nodes.filter(n => n.type === 'page' && !n.parentTopicId);
-      this.renderBrowser(pages, 'Ungrouped pages', `${pages.length} recorded pages without a trail.`, true);
-      this.appendSites(document.getElementById('evidence-panel'), pages.map(n => n.page));
-      this.appendConnectionAudit(document.getElementById('evidence-panel'));
-      this.updateLevelOfDetail(this.currentScale);
-      this.zoomToNodes([node, ...pages]);
+      const atlas=this.atlasFrame('Ungrouped pages', `${pages.length} recorded pages without a trail. Search by title or website, or browse the full list.`, true);
+      this.appendNodeList(atlas,pages);this.appendConnectionAudit(atlas);
+      return;
     } else {
       this.selectPage(node.page, node.parentTopicId);
       this.zoomToNodes([node], Math.min(100, this.width / 4));
     }
-    this.addOverviewButton();
+    this.layoutFocus();this.addOverviewButton();
   }
 
   addOverviewButton() {
@@ -699,7 +768,7 @@ class TopicMapVisualizer {
   }
 
   clearSelection() {
-    this.selected = null;
+    this.selected = null; this.focusIds=null;
     this.searchGraph();
   }
 
@@ -709,16 +778,18 @@ class TopicMapVisualizer {
     this.searchMatches = query ? this.graphData.nodes.filter(node => `${node.label} ${node.page?.title || ''} ${node.page?.url || ''}`.toLocaleLowerCase().includes(query)) : [];
     this.updateLevelOfDetail(this.currentScale);
     if (query) {
-      this.renderBrowser(this.searchMatches, 'Search results', `${this.searchMatches.length} matches for “${query}”`);
+      const atlas=this.atlasFrame('Search results', `${this.searchMatches.length} matches for “${query}”`, true);
+      if(this.searchMatches.length)this.appendNodeList(atlas,this.searchMatches);else {const p=document.createElement('p');p.textContent='No matching trails or pages. Try a different title or website.';atlas.append(p);}
       this.setStatus(`${this.searchMatches.length} matching trails and pages. Press Enter to inspect the first match.`);
     } else {
-      if (!this.selected && this.analysis?.ok) this.renderDefaultEvidence(this.analysis);
+      if (!this.selected && this.analysis?.ok) this.renderAtlas();
       if (this.analysis?.ok) this.setStatus(`${this.analysis.topics.length} trails · ${this.graphData.nodes.filter(n => n.type === 'page').length} pages in this period.`);
     }
   }
 
   updateLevelOfDetail(scale) {
     this.currentScale = scale;
+    document.querySelectorAll('[data-graph-mode]').forEach(b=>b.setAttribute('aria-pressed',String(document.getElementById(b.dataset.graphMode)?.checked)));
     if (!this.labelSelection || !this.nodeSelection) return;
     const transform = this.svg.node().__zoom || {x: 0, y: 0, k: scale};
     const mode = document.getElementById('graph-labels')?.value || 'auto';
@@ -733,6 +804,7 @@ class TopicMapVisualizer {
       (active.kind === 'collection' && (node.type === 'collection' || (node.type === 'page' && !node.parentTopicId))) ||
       (selectedEdge && [selectedEdge.sourceTopicId, selectedEdge.targetTopicId].includes(node.id));
     const visible = node => {
+      if(this.focusIds && !this.focusIds.has(node.id))return false;
       if (node.type !== 'page') return !(this.narrowOverview && this.overviewMode && !active);
       if (!showPages) return false;
       if (node.page?.id === active?.id) return true;
@@ -750,7 +822,7 @@ class TopicMapVisualizer {
     const path = link => flowPath(link.source, link.target, link.source.renderRadius + 4 / scale, link.target.renderRadius + 8 / scale,
       link.hasReciprocal ? (link.transition.sourceTopicId < link.transition.targetTopicId ? 1 : -1) : 0);
     const showFlow = (link,index) => active?.kind === 'transition' ? link.id === active.id
-      : selectedTopic ? link.source.id === selectedTopic || link.target.id === selectedTopic
+      : selectedTopic ? document.getElementById('show-flows')?.checked && this.focusIds?.has(link.source.id) && this.focusIds?.has(link.target.id) && (link.source.id === selectedTopic || link.target.id === selectedTopic)
       : active?.kind === 'group' ? link.source.groupId === active.id && link.target.groupId === active.id
       : !active && document.getElementById('show-flows')?.checked && index < this.graphData.overviewFlowLimit;
     this.linkSelection.attr('d', path).style('display', (l,i) => showFlow(l,i) ? null : 'none').style('opacity',1);
@@ -762,7 +834,7 @@ class TopicMapVisualizer {
     const intersects = (a,b) => a.x < b.x+b.w && a.x+a.w > b.x && a.y < b.y+b.h && a.y+a.h > b.y;
     const screen = node => ({x: node.x * scale + transform.x, y: node.y * scale + transform.y, r: node.renderRadius * scale});
     const regionById = new Map((this.groupBounds || []).map(g => [g.id,{x:g.x*scale+transform.x,y:g.y*scale+transform.y,w:g.w*scale,h:g.h*scale}]));
-    this.groupSelection?.style('opacity', g => !active || active.kind==='group' && active.id===g.id || g.topicIds.includes(selectedTopic) ? 1 : .25);
+    this.groupSelection?.style('display',active?'none':null).style('opacity', g => !active || active.kind==='group' && active.id===g.id || g.topicIds.includes(selectedTopic) ? 1 : .25);
     this.groupLabelSelection?.style('display','none').each((group,index,elements)=>{
       const x=group.x*scale+transform.x+12,y=group.y*scale+transform.y+12,w=group.w*scale-24;
       if (mode==='off'||w<80||x<12||y<58||x+w>this.width-12||y+24>this.height-65||active) return;
@@ -776,11 +848,11 @@ class TopicMapVisualizer {
       const p = screen(n); occupied.push({x:p.x-p.r-3, y:p.y-p.r-3, w:p.r*2+6, h:p.r*2+6});
     }
     const labels = [];
-    const chars = this.width < 400 ? 12 : this.width < 600 ? 15 : this.visibleTopicCount > 60 ? 21 : 30;
+    const chars = this.width < 400 ? 12 : this.width < 600 ? 15 : !this.focusIds && this.visibleTopicCount > 60 ? 21 : 30;
     if (this.labelCharLimit !== chars) { this.labelSelection.text(n => truncate(n.label, n.type === 'collection' ? 30 : chars)); this.labelCharLimit = chars; }
     this.labelSelection.style('display','none').style('stroke-width', '3px').style('font-size', n => `${n.type === 'page' ? 12 : 13}px`).each((n,i,elements) => {
       if (mode === 'off' || !n.visible || (active && !related(n)) || (this.query && !matches.has(n.id) && !matchedParents.has(n.id))) return;
-      if (n.type === 'page' && scale < (mode === 'all' ? .8 : 1.3) && n.page?.id !== active?.id) return;
+      if (!this.focusIds && n.type === 'page' && scale < (mode === 'all' ? .8 : 1.3) && n.page?.id !== active?.id) return;
       const point = screen(n);
       if (point.x < 0 || point.x > this.width || point.y < 0 || point.y > this.height) return;
       const element = elements[i], text = element.textContent;
@@ -816,7 +888,7 @@ class TopicMapVisualizer {
     }
     this.labelPlacements = placements;
     const hint = document.getElementById('graph-view-status');
-    if (hint) hint.textContent = active ? 'Selected detail · Overview returns to all trails' : `${this.graphData.groups.filter(g=>g.related).length} related groups · ${this.visibleTopicCount} trails`;
+    if (hint) hint.textContent = active ? document.getElementById('show-flows')?.checked ? `${this.graphData.nodes.filter(n=>n.visible&&n.type==='topic').length-1} connected trails · repeated visit order` : `${this.graphData.nodes.filter(n=>n.visible&&n.type==='page').length} pages shown · all pages in the list` : `${this.graphData.groups.filter(g=>g.related).length} related groups · ${this.visibleTopicCount} trails`;
   }
 
   zoomToNodes(nodes, padding = 95, immediate = false) {
@@ -829,11 +901,10 @@ class TopicMapVisualizer {
     else this.svg.transition().duration(duration).call(this.zoom.transform,target);
   }
 
-  zoomToTopic(topicId) {
-    this.zoomToNodes(this.graphData.nodes.filter(n => n.id === topicId || n.parentTopicId === topicId));
-  }
+  zoomToTopic(topicId) { this.layoutFocus(); }
 
   fitToViewport(immediate) {
+    if(this.selected) {this.layoutFocus();return;}
     this.overviewMode = true;
     this.zoomToNodes((this.groupBounds || []).flatMap(g=>[{x:g.x,y:g.y},{x:g.x+g.w,y:g.y+g.h}]), this.width < 600 ? 24 : 50, immediate);
   }
@@ -844,7 +915,7 @@ class TopicMapVisualizer {
   }
 
   dragged(event, d) {
-    const group=this.groupBounds.find(g=>g.nodes.some(n=>n.id===d.id));
+    const group=this.focusIds?null:this.groupBounds.find(g=>g.nodes.some(n=>n.id===d.id));
     const x=group?Math.max(group.x+40,Math.min(group.x+group.w-40,event.x)):event.x;
     const y=group?Math.max(group.y+75,Math.min(group.y+group.h-35,event.y)):event.y;
     const dx = x - d.x, dy = y - d.y;
@@ -1045,10 +1116,10 @@ if (typeof module !== 'undefined' && module.exports) {
 }
 
 // Extension and read-only sample boot use the same map renderer.
-if (typeof document !== 'undefined' && (typeof module === 'undefined' || !module.exports) && !globalThis.__CT_DEMO__) {
-  document.addEventListener('DOMContentLoaded', async () => {
+if (typeof document !== 'undefined' && (typeof module === 'undefined' || !module.exports)) {
+  CTStudio.onPage('map.html', async () => {
     if (typeof d3 === 'undefined') { document.getElementById('loading').textContent = 'Map library unavailable. Reload this page.'; return; }
-    if (new URLSearchParams(location.search).get('demo') !== '1') { new TopicMapVisualizer(); return; }
+    if (new URLSearchParams(location.search).get('demo') !== '1') { const view=new TopicMapVisualizer();window.CTPageDispose=()=>view.dispose();await view.ready;return; }
     try {
       const response = await fetch('../fixtures/current/snapshot.json');
       if (!response.ok) throw new Error('Sample record is unavailable.');
@@ -1062,7 +1133,7 @@ if (typeof document !== 'undefined' && (typeof module === 'undefined' || !module
       for (const a of document.querySelectorAll('.buttons a')) {
         a.href = a.textContent === 'Audit' ? 'demo.html?view=audit' : a.textContent === 'Settings' ? 'demo.html?view=setup' : 'demo.html';
       }
-      new TopicMapVisualizer({ store, now: CTText.dayKeyToNoonMs(lastDay) + 9 * 3600000, isDemo: true });
+      const view=new TopicMapVisualizer({ store, now: CTText.dayKeyToNoonMs(lastDay) + 9 * 3600000, isDemo: true });window.CTPageDispose=()=>view.dispose();await view.ready;
     } catch (error) { document.getElementById('loading').textContent = error.message; }
   });
 }

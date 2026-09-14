@@ -11,6 +11,7 @@ try {
   context=await chromium.launchPersistentContext(profile,{channel:'chromium',headless:false,args:[`--disable-extensions-except=${root}`,`--load-extension=${root}`]});
   const worker=context.serviceWorkers()[0]||await context.waitForEvent('serviceworker');
   const origin=`chrome-extension://${new URL(worker.url()).host}`;
+  await context.addInitScript(()=>{window.addEventListener('pagereveal',e=>{if(e.viewTransition)e.viewTransition.ready.then(()=>window.ctTransitionReady=true).catch(()=>{});});});
   const page=await context.newPage(), errors=[];page.on('pageerror',e=>errors.push(e.message));
   await page.goto(`${origin}/ui/newtab.html`);await page.locator('.studio-shell').waitFor();
   assert.equal(await page.locator('html').getAttribute('data-theme'),'dark');
@@ -39,14 +40,16 @@ try {
   assert.equal(await page.locator('.nt-layout:visible').count(),0);
   await page.getByRole('link',{name:'Your trails',exact:true}).click();
   await page.getByRole('button',{name:'Async Rust',exact:true}).waitFor();
-  const second=await context.newPage();second.on('pageerror',e=>errors.push(e.message));await second.goto(`${origin}/ui/map.html`);await second.locator('.topic-node').first().waitFor();
+  assert.equal(await page.evaluate(()=>!!window.ctLastNavigationTransition),true,'extension navigation animates the content');
+  const second=await context.newPage();second.on('pageerror',e=>errors.push(e.message));await second.goto(`${origin}/ui/map.html`);await second.locator('.atlas-group').first().waitFor();
   await page.getByRole('button',{name:'Light theme',exact:true}).click();
   await second.waitForFunction(()=>document.documentElement.dataset.theme==='light');
   await page.reload();assert.equal(await page.locator('html').getAttribute('data-theme'),'light');
   assert.equal(await second.locator('.page-node').count(),16,'full graph includes all pages and ungrouped records');
   assert.equal(await second.locator('.flow-link').count(),2,'repeated sequences in both directions remain clickable');
   assert.equal(await second.locator('.flow-link:visible').count(),0,'overview keeps routes off until requested');
-  await second.locator('#show-flows').check();
+  await second.getByRole('searchbox').fill('Async Rust');await second.keyboard.press('Enter');
+  await second.getByRole('button',{name:'Connections',exact:true}).click();
   await second.locator('.flow-link').first().focus();await second.keyboard.press('Enter');
   await second.getByRole('heading',{name:'Recorded page sequences'}).waitFor();
   await second.getByRole('searchbox',{name:'Find a trail or page'}).fill('Async Rust');await second.keyboard.press('Enter');
@@ -57,12 +60,14 @@ try {
   await second.getByRole('button',{name:'Dark theme',exact:true}).click();
   assert.equal(await second.evaluate(()=>document.querySelector('#graph > g').getAttribute('transform')),transform);
   assert.deepEqual(await second.locator('.topic-node').evaluateAll(nodes=>nodes.map(n=>[n.getAttribute('cx'),n.getAttribute('cy')])),positions);
-  await second.locator('#show-pages').uncheck();assert.equal(await second.locator('.page-node:visible').count(),0);
-  await second.locator('#show-pages').check();await second.locator('#graph-labels').selectOption('all');assert.ok(await second.locator('.page-label:visible').count()>0);
+  assert.equal(await second.locator('.page-node:visible').count(),0);
+  await second.getByRole('button',{name:'Pages',exact:true}).click();
+  await second.getByText('Map options',{exact:true}).click();await second.locator('#graph-labels').selectOption('all');assert.ok(await second.locator('.page-label:visible').count()>0);
   await second.getByRole('searchbox').fill('no such recorded page');await second.getByText('0 matching trails and pages. Press Enter to inspect the first match.').waitFor();
-  await second.getByRole('button',{name:'Clear selection',exact:true}).click();
-  await second.getByRole('button',{name:'Fit graph to view'}).click();await second.waitForTimeout(400);
-  const topic=second.locator('.topic-node').first(),box=await topic.boundingBox();
+  await second.getByRole('searchbox').press('Escape');
+  await second.getByRole('searchbox').fill('Async Rust');await second.keyboard.press('Enter');
+  await second.waitForTimeout(300);
+  const topic=second.locator('.topic-node:visible').first(),box=await topic.boundingBox();
   const before=await topic.evaluate(n=>({x:n.__data__.x,y:n.__data__.y,id:n.__data__.id}));
   const childrenBefore=await second.locator('.page-node').evaluateAll((nodes,id)=>nodes.filter(n=>n.__data__.parentTopicId===id).map(n=>({x:n.__data__.x,y:n.__data__.y})),before.id);
   await second.mouse.move(box.x+box.width/2,box.y+box.height/2);await second.mouse.down();await second.mouse.move(box.x+box.width/2+45,box.y+box.height/2+20,{steps:8});await second.mouse.up();
@@ -77,6 +82,8 @@ try {
     await page.goto(`${origin}/ui/${file}`);await page.locator('.studio-shell').waitFor();
     for(const theme of ['Light','Dark']){
       if(await page.locator('html').getAttribute('data-theme')!==theme.toLowerCase()) await page.getByRole('button',{name:`${theme} theme`,exact:true}).click();
+      const background=await page.locator('body').evaluate(n=>getComputedStyle(n).backgroundColor);
+      assert.equal(background,theme==='Light'?'rgb(245, 246, 242)':'rgb(12, 16, 14)',`${file}: rendered ${theme} theme`);
       for(const width of [1536,1024,768,390,320]){await page.setViewportSize({width,height:950});assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1),`${file} ${theme}: overflow at ${width}`);}
     }
   }

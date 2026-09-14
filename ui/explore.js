@@ -76,12 +76,12 @@
   }
   return {buildSeries,dayBounds,mount,UNGROUPED,OTHER};
 });
-if(typeof document!=='undefined'&&typeof module==='undefined')document.addEventListener('DOMContentLoaded',async()=>{
+if(typeof document!=='undefined'&&typeof module==='undefined')CTStudio.onPage('explore.html',async()=>{
   const host=document.getElementById('explore-app');if(!host)return;
   try {
     const demo=new URLSearchParams(location.search).get('demo')==='1';let snapshot,now=Date.now();
     if(demo){const response=await fetch('../fixtures/current/snapshot.json');if(!response.ok)throw new Error('Sample unavailable');snapshot=await response.json();const last=(snapshot.daily_metrics||[]).map(d=>d.day).sort().pop();now=CTText.dayKeyToNoonMs(last)+9*3600000;}
-    else snapshot=await CTTrails.loadData(CTStore.createStore({}));
+    else {const store=CTStore.createStore({});try{snapshot=await CTTrails.loadData(store);}finally{store.close();}}
     CTExplore.mount(host,CTTrails.buildRecord(snapshot,{now}),{demo});
   }catch{host.textContent='The record could not be loaded. Reload this page to try again.';}
 });

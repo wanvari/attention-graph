@@ -15,6 +15,7 @@ const FORBIDDEN = ['should', 'focus', 'productive', 'distract', 'goal', 'improve
 // Occurrences that are not user-facing copy: identifiers, CSS, code comments
 // explaining WHY a word is banned, and the test's own word list.
 const ALLOWED_CONTEXTS = [
+  /^(?:Focus search|focusin|focusout|graph-focus-tabs)$/, // Keyboard focus and CSS identifiers, not an inferred state.
   /focused[ _-]?runs?/i,        // "focused run" is a defined measurement term
   /buildFocusedRuns/,
   /focusedRunMinDwellMs/,

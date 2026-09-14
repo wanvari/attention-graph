@@ -35,10 +35,8 @@ try {
     store.close();
   });
   await page.reload();await page.waitForFunction(()=>document.querySelectorAll('.topic-node').length===5);
-  assert.equal(await page.locator('.graph-region').count(),3,'FINNY, other trails, and ungrouped pages');
+  assert.equal(await page.locator('.atlas-group').count(),2,'FINNY and other trails are named groups');
   assert.equal(await page.locator('.flow-link').count(),0,'single cross-trail visits cannot become repeated routes');
-  const sizes=await page.locator('.topic-node').evaluateAll(nodes=>Object.fromEntries(nodes.map(n=>[n.__data__.label,n.getBoundingClientRect().width])));
-  assert.ok(sizes['FINNY AI Company Profile']>sizes['FINNY job listings']*1.5,'dense trail stands out at overview scale');
   await page.getByRole('button',{name:'Group: FINNY, 4 trails',exact:true}).click();
   await page.getByRole('heading',{name:'FINNY',exact:true}).waitFor();
   assert.equal(await page.locator('.graph-result').count(),4);

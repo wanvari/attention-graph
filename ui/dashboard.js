@@ -193,6 +193,12 @@
     function draw() {
       signals = D.buildDailySignals(record); main.textContent = '';
       const dashboard = el('section', `nt-dashboard${options.minimal ? ' nt-dashboard-minimal' : ''}`); dashboard.setAttribute('aria-label', 'Today, so far');
+      if (options.minimal) {
+        const heading=el('div','nt-daily-heading');
+        heading.append(el('h2',null,'Your day, so far'),el('span','nt-scope',new Date(record.now).toLocaleDateString(undefined,{month:'short',day:'numeric'})));
+        const time=button(`${duration(signals.totalMs)} estimated`, 'nt-text-button',()=>openMetric('time'));
+        heading.append(time); dashboard.append(heading);
+      }
       if (!options.minimal) {
         const heading = el('div', 'nt-dashboard-heading'); const title = el('h2', null, 'Today, so far'); title.id = 'nt-today-title';
         heading.append(title, el('span', 'nt-scope', `Through ${new Date(record.now).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' })}`)); dashboard.append(heading);
@@ -218,6 +224,13 @@
         dial.append(svg);
         dial.append(el('strong', null, percent(metric.value))); ring.append(dial, el('span', 'nt-ring-title', labels[key]));
         ring.title = `Today · ${labels[key]} · ${comparison(key)}. Select to inspect evidence.`;
+        if (options.minimal) {
+          const top=key==='top'?record.trails.find(t=>t.id===metric.topicId)?.label:null;
+          const description=key==='continuity'?'Consecutive visits that stayed in one trail.':key==='top'?'Your largest trail by recorded time.':'Time spent revisiting earlier trails.';
+          ring.append(el('span','nt-ring-description',description));
+          if(top)ring.append(el('span','nt-ring-subject',top));
+          ring.append(el('span','nt-ring-raw',raw(key)),el('span','nt-inspect','View details ↗'));
+        }
         if (!options.minimal) {
           const top = key === 'top' ? record.trails.find(t => t.id === metric.topicId)?.label : null;
           ring.append(el('span', 'nt-ring-subject', top || (key === 'continuity' ? 'Stayed in one trail' : key === 'return' ? 'Earlier trails revisited' : 'No grouped time yet')),
@@ -226,6 +239,7 @@
         rings.append(ring);
       }
       dashboard.append(rings); main.append(dashboard);
+      if(options.minimal) coverage(dashboard,signals);
       if (options.minimal && !options.showSessions) return;
       if (!options.minimal) {
         paragraph(dashboard, signals.observation, 'nt-observation'); coverage(dashboard, signals);

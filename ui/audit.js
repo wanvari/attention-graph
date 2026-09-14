@@ -213,10 +213,11 @@
 // The demo page renders these surfaces itself against a recorded store,
 // so the live boot path must not also run there.
 if (typeof chrome !== 'undefined' && chrome.runtime && chrome.runtime.id &&
-    typeof document !== 'undefined' && !globalThis.__CT_DEMO__) {
-  document.addEventListener('DOMContentLoaded', async () => {
+    typeof document !== 'undefined') {
+  CTStudio.onPage('audit.html', async () => {
     const store = CTStore.createStore({});
     await store.open();
+    window.CTPageDispose=()=>store.close();
     const status = document.getElementById('status');
     const refresh = async () => {
       const data = await CTAudit.loadData(store);

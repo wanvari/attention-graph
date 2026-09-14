@@ -1,11 +1,11 @@
 /* A quiet, search-first workspace. Color identifies actions, never a score. */
 html[data-theme] {
   color-scheme: dark;
-  --bg: #080a09; --panel: #121513; --panel-2: #1b1f1c; --text: #e0e7de;
-  --text-dim: #959e94; --line: #2b322c; --accent: #7fee64; --accent-faint: #1b251b;
+  --bg: #0c100e; --panel: #171d19; --panel-2: #242d26; --text: #f0f3eb;
+  --text-dim: #b3bdaf; --line: #3a473d; --accent: #7fee64; --accent-faint: #1b251b;
   --accent-soft: #d7e4d2; --button-ink: #10140f; --rail: #141715; --canvas: #0b0e0c;
-  --trail-0: #b8c6b1; --trail-1: #879981; --trail-2: #d5dcd0; --trail-3: #6a7d67;
-  --trail-4: #a3afa1; --trail-5: #ced6ca; --trail-6: #7b8779; --trail-7: #aeb6aa;
+  --trail-0: #b0c6ff; --trail-1: #83cbbb; --trail-2: #e3c28d; --trail-3: #c6b1e4;
+  --trail-4: #94bfd9; --trail-5: #dac497; --trail-6: #9cc6a2; --trail-7: #c0b8cd;
   --band-within-bg: #252a25; --band-within-fg: #c6cfc2;
   --band-outside-bg: #252a25; --band-outside-fg: #c6cfc2;
   --band-unusual-bg: #252a25; --band-unusual-fg: #c6cfc2;
@@ -14,10 +14,10 @@ html[data-theme] {
 html[data-theme="light"] {
   color-scheme: light;
   --bg: #f5f6f2; --panel: #fafbf8; --panel-2: #e9ece5; --text: #242b23;
-  --text-dim: #606b5d; --line: #d3d9cd; --accent: #42623a; --accent-faint: #e5ecdf;
+  --text-dim: #4c5948; --line: #b9c5b4; --accent: #42623a; --accent-faint: #e5ecdf;
   --accent-soft: #394c33; --button-ink: #f5f6f2; --rail: #eff2eb; --canvas: #f7f8f4;
-  --trail-0: #4c6045; --trail-1: #7a8b73; --trail-2: #384934; --trail-3: #8b9b86;
-  --trail-4: #62745c; --trail-5: #43533d; --trail-6: #82907c; --trail-7: #697964;
+  --trail-0: #4966a3; --trail-1: #317866; --trail-2: #866423; --trail-3: #78569a;
+  --trail-4: #3c728e; --trail-5: #887337; --trail-6: #4e7a4d; --trail-7: #726583;
   --band-within-bg: #e5e9df; --band-within-fg: #42503b;
   --band-outside-bg: #e5e9df; --band-outside-fg: #42503b;
   --band-unusual-bg: #e5e9df; --band-unusual-fg: #42503b;
@@ -43,8 +43,9 @@ html[data-theme] .studio-shell {
   position: relative; display: grid; place-items: center; width: 44px; height: 42px;
   color: var(--text-dim); border: 0; border-radius: 14px; background: transparent; padding: 0; cursor: pointer;
 }
-.studio-sidebar a:hover, .studio-sidebar button:hover { background: var(--panel-2); color: var(--text); text-decoration: none; }
+.studio-sidebar a:hover, .studio-sidebar button:hover { background: transparent; color: var(--text); text-decoration: none; }
 .studio-sidebar a[aria-current] { color: var(--accent); background: var(--accent-faint); }
+.studio-sidebar .studio-brand { color: var(--text); }
 .studio-sidebar [data-tooltip]::after {
   content: attr(data-tooltip); position: absolute; left: calc(100% + 20px); top: 50%; transform: translateY(-50%);
   color: var(--text); background: var(--panel-2); border: 1px solid var(--line); border-radius: 8px;
@@ -257,3 +258,121 @@ html[data-theme] .demo-view > .nt-page { padding: 0; }
 @media(prefers-reduced-motion:no-preference) {
   .studio-sidebar a, .studio-sidebar button, .nt-ring-title, .nt-ring-progress { transition: color .2s ease-out, background-color .2s ease-out, stroke .2s ease-out; }
 }
+
+/* Continuous navigation: the dock stays in place while content changes. */
+@view-transition { navigation: auto; }
+.studio-sidebar { view-transition-name: studio-dock; isolation: isolate; }
+.studio-work { view-transition-name: studio-content; }
+.studio-hover-pill { position: absolute; left: 0; top: 0; z-index: -1; pointer-events: none; background: var(--panel-2); border: 1px solid var(--line); border-radius: 14px; opacity: 0; }
+.studio-sidebar a, .studio-sidebar button { transition: transform .24s cubic-bezier(.2,.8,.2,1); }
+.studio-sidebar a:active, .studio-sidebar button:active { transform: scale(.91); }
+.studio-sidebar [data-tooltip]::after { transition: opacity .18s, translate .18s; translate: -5px 0; }
+.studio-sidebar [data-tooltip]:is(:hover,:focus-visible)::after { translate: 0; }
+@keyframes studio-enter { from { opacity: 0; transform: translateY(14px); } to { opacity: 1; transform: none; } }
+@keyframes studio-leave { to { opacity: 0; transform: translateY(-8px); } }
+::view-transition-old(studio-dock) { display: none; }
+::view-transition-new(studio-dock) { animation: none; }
+::view-transition-group(studio-dock) { animation-duration: 0s; z-index: 10; }
+::view-transition-old(studio-content) { animation: studio-leave .16s ease-in both; }
+::view-transition-new(studio-content) { animation: studio-enter .3s cubic-bezier(.2,.7,.2,1) both; }
+@media(prefers-reduced-motion:no-preference) {
+  .studio-hover-pill { transition: transform .24s cubic-bezier(.2,.8,.2,1), opacity .16s; }
+  .studio-body { animation: studio-enter .32s cubic-bezier(.2,.7,.2,1) both; }
+}
+@media(prefers-reduced-motion:reduce) {
+  @view-transition { navigation: none; }
+  .studio-sidebar a, .studio-sidebar button, .studio-sidebar [data-tooltip]::after { transition: none; }
+}
+/* Literal context beside the numbers; no extra dashboard cards. */
+.studio-shell[data-studio-page="home"] .studio-body { max-width: 1020px; padding-top: clamp(65px,10vh,110px); }
+.studio-shell .nt-hero { margin-bottom: 54px; }
+.nt-daily-heading { display: flex; align-items: baseline; gap: 14px; padding-bottom: 22px; border-bottom: 1px solid var(--line); }
+.studio-shell .nt-daily-heading h2 { font-size: 17px; font-weight: 500; }
+.nt-daily-heading .nt-text-button { margin-left: auto; }
+.studio-shell .nt-rings { padding: 34px 0 28px; gap: 44px; }
+.studio-shell .nt-ring-card { gap: 12px; }
+.studio-shell .nt-ring-title { font-size: 16px; font-weight: 500; color: var(--text); margin-top: 7px; }
+.nt-ring-description { font-size: 13px; color: var(--text-dim); max-width: 220px; line-height: 1.55; }
+.studio-shell .nt-ring-raw { font-size: 11px; line-height: 1.6; min-height: 0; color: var(--text-dim); }
+.studio-shell .nt-ring-subject { color: var(--text); font-size: 12px; max-width: 230px; }
+.studio-shell .nt-ring-card .nt-inspect { color: var(--text-dim); font-size: 11px; margin-top: auto; padding-top: 7px; }
+.studio-shell .nt-signal-coverage { text-align: center; color: var(--text-dim); font-size: 11px; margin-top: 10px; }
+.studio-shell .nt-ring-progress { stroke-width: 3.5px; }
+.studio-shell .nt-ring-track { stroke-width: 2px; }
+html[data-theme="light"] .studio-search:focus-within { border-color: var(--accent); }
+@media(max-width:680px) {
+  .studio-shell .nt-rings { gap: 24px; grid-template-columns: 1fr; padding-top: 28px; }
+  .studio-shell .nt-ring-card { display: grid; grid-template-columns: 100px minmax(0,1fr); text-align: left; column-gap: 22px; row-gap: 7px; align-items: start; padding-bottom: 24px; border-bottom: 1px solid var(--line); border-radius: 0; }
+  .studio-shell .nt-ring-dial { width: 100px; grid-row: 1 / 6; align-self: center; }
+  .studio-shell .nt-ring-title { margin: 0; }
+  .studio-shell .nt-ring-card .nt-inspect { padding: 0; }
+  .nt-daily-heading { flex-wrap: wrap; gap: 8px 12px; }
+  .nt-daily-heading .nt-scope { font-size: 11px; }
+  .studio-shell .nt-hero { margin-bottom: 34px; }
+}
+/* A readable index for large maps; the canvas is reserved for one neighborhood. */
+.studio-shell[data-studio-page="graph"] .studio-body { max-width: 1440px; padding-bottom: 60px; }
+.studio-shell[data-studio-page="graph"] .studio-topbar { display: none; }
+.studio-shell[data-studio-page="graph"] header { padding-top: 26px; }
+.studio-shell[data-studio-page="graph"] .topbar h1 { font-size: 32px; font-weight: 400; }
+.studio-shell .health-pill { background: transparent; color: var(--text-dim); }
+.studio-shell[data-studio-page="graph"] .controls { gap: 16px; position: relative; padding-block: 10px 24px; border-bottom: 1px solid var(--line); }
+.studio-shell .graph-search-field { order: -1; flex: 1; }
+.studio-shell .graph-search-field > span { display: none; }
+.studio-shell .graph-search-field input[type="search"] { max-width: none; width: 100%; font-size: 14px; padding: 14px 16px; border-radius: 12px; }
+.graph-options { position: relative; order: 2; font-size: 12px; }
+.graph-options > summary { cursor: pointer; padding: 10px 0; color: var(--text-dim); }
+.graph-options-body { position: absolute; z-index: 15; top: 100%; right: 0; width: 240px; display: grid; gap: 18px; padding: 20px; background: var(--panel); border: 1px solid var(--line); border-radius: 12px; }
+.studio-shell .graph-options-body .control-field { justify-content: space-between; }
+.studio-shell #summary-strip, .studio-shell #legend { display: none; }
+.atlas-heading { display: flex; gap: 22px; align-items: center; justify-content: space-between; margin: 26px 0; }
+.atlas-heading h2 { margin: 0 0 8px; font-size: 21px; font-weight: 400; }
+.atlas-heading p { color: var(--text-dim); font-size: 13px; margin: 0; max-width: 630px; line-height: 1.6; }
+.studio-shell .atlas-heading .graph-back { margin: 0; flex-shrink: 0; }
+.atlas-all { flex-shrink: 0; border: 0; color: var(--text); background: transparent; font: inherit; font-size: 12px; padding: 12px 0; }
+.atlas-grid { display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); gap: 18px; }
+.atlas-group { display: flex; flex-direction: column; padding: 23px; border-radius: 14px; border: 1px solid var(--line); background: var(--panel); text-align: left; font: inherit; color: var(--text); min-width: 0; }
+.atlas-group:hover { border-color: var(--group-color); background: var(--panel-2); transform: translateY(-3px); }
+.atlas-card-heading { display: flex; flex-wrap: wrap; align-items: baseline; gap: 10px; justify-content: space-between; margin-bottom: 24px; }
+.atlas-card-heading strong { font-size: 20px; font-weight: 500; color: var(--group-color); overflow-wrap: anywhere; }
+.atlas-card-heading > span { font-size: 11px; color: var(--text-dim); }
+.atlas-preview { display: grid; gap: 12px; font-size: 13px; line-height: 1.5; padding-bottom: 23px; }
+.atlas-preview span { overflow-wrap: anywhere; }
+.atlas-card-foot { color: var(--text-dim); font-size: 11px; padding-top: 16px; border-top: 1px solid var(--line); margin-top: auto; }
+.atlas-ungrouped { display: block; width: 100%; border: 1px dashed var(--line); background: transparent; color: var(--text-dim); font: inherit; font-size: 13px; padding: 20px; border-radius: 12px; margin-top: 22px; text-align: left; }
+.atlas-ungrouped:hover { background: var(--panel); color: var(--text); }
+.atlas-group-content { display: grid; grid-template-columns: minmax(0,1fr) 300px; gap: 40px; }
+.atlas-context { border-left: 1px solid var(--line); padding-left: 30px; }
+.atlas-context .graph-sites { margin-top: 0; }
+.studio-shell #graph-atlas > .graph-browser-list { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 12px; }
+.studio-shell #graph-atlas .graph-result { padding: 19px; border-radius: 12px; }
+.studio-shell #graph-atlas .graph-result strong { font-size: 15px; font-weight: 450; }
+.studio-shell #graph-atlas .graph-result small { font-size: 12px; }
+.studio-shell .workspace { border-radius: 14px; overflow: hidden; height: 680px; min-height: 560px; margin-top: 24px; }
+.studio-shell .evidence-panel { width: 340px; }
+.studio-shell .topic-label, .studio-shell .page-label { stroke-width: 4px; }
+.studio-shell .graph-view-status { max-width: calc(100% - 30px); font-size: 11px; border: 0; background: var(--canvas); }
+.studio-shell .graph-record-details { font-size: 12px; }
+html[data-theme] .demo-view.studio-shell:not(#view-home) { padding: 0 0 0 108px; }
+html[data-theme] .demo-header:has(~ #view-home[hidden]) .demo-tabs { display: none; }
+@media(max-width:1100px) { .atlas-grid { grid-template-columns: repeat(2,minmax(0,1fr)); } .atlas-group-content { grid-template-columns: 1fr; } .atlas-context { border-left: 0; padding: 0; } }
+@media(max-width:680px) {
+  .atlas-grid, .studio-shell #graph-atlas > .graph-browser-list { grid-template-columns: minmax(0,1fr); }
+  .atlas-heading { flex-wrap: wrap; gap: 14px; }
+  .atlas-group { padding: 21px; }
+  .studio-shell[data-studio-page="graph"] .controls { flex-wrap: wrap; }
+  .studio-shell .graph-search-field { flex-basis: 100%; }
+  .graph-options { margin-left: auto; }
+  .studio-shell .workspace { height: auto; }
+  .studio-shell .evidence-panel { width: 100%; }
+  html[data-theme] .demo-view.studio-shell:not(#view-home) { padding: 0 0 98px; }
+}
+@media(prefers-reduced-motion:no-preference) {
+  .atlas-group { transition: transform .2s ease, border-color .2s ease, background-color .2s ease; }
+  #graph-atlas, .workspace:not([hidden]) { animation: studio-enter .25s ease both; }
+}
+.graph-focus-tabs { display: flex; gap: 3px; position: absolute; top: 16px; right: 16px; padding: 3px; border: 1px solid var(--line); border-radius: 10px; background: var(--panel); }
+.graph-focus-tabs button { border: 0; background: transparent; color: var(--text-dim); font: inherit; font-size: 11px; padding: 7px 10px; border-radius: 7px; }
+.graph-focus-tabs button[aria-pressed="true"] { background: var(--panel-2); color: var(--text); }
+.studio-shell .graph-view-status { max-width: calc(100% - 210px); padding-left: 0; }
+@media(max-width:680px) { .studio-shell .graph-view-status { top: 61px; max-width: calc(100% - 36px); } }

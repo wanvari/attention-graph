@@ -453,8 +453,8 @@
 });
 
 if (typeof chrome !== 'undefined' && chrome.runtime && chrome.runtime.id &&
-    typeof document !== 'undefined' && !globalThis.__CT_DEMO__) {
-  document.addEventListener('DOMContentLoaded', () => {
+    typeof document !== 'undefined') {
+  CTStudio.onPage('newtab.html', () => {
     const send = message => new Promise((resolve, reject) => {
       chrome.runtime.sendMessage(message, response => {
         if (chrome.runtime.lastError) reject(new Error(chrome.runtime.lastError.message));
@@ -462,7 +462,7 @@ if (typeof chrome !== 'undefined' && chrome.runtime && chrome.runtime.id &&
         else resolve(response);
       });
     });
-    CTNewtab.main({
+    return CTNewtab.main({
       trailId: new URLSearchParams(location.search).get('trail'),
       sessionId: new URLSearchParams(location.search).get('session'),
       onAction: send,
@@ -486,7 +486,8 @@ if (typeof chrome !== 'undefined' && chrome.runtime && chrome.runtime.id &&
       };
       const timer = setInterval(refresh, 30000);
       document.addEventListener('visibilitychange', refresh);
-      window.addEventListener('pagehide', () => { clearInterval(timer); document.removeEventListener('visibilitychange', refresh); view.dispose(); store.close(); }, { once: true });
+      const dispose=()=>{clearInterval(timer);document.removeEventListener('visibilitychange',refresh);view.dispose();store.close();window.removeEventListener('pagehide',dispose);};
+      window.CTPageDispose=dispose;window.addEventListener('pagehide',dispose,{once:true});
     }).catch(error => {
       const app = document.getElementById('app');
       app.textContent = 'Your record could not be opened. Reload this tab to try again. ';
