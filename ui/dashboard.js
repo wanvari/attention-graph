@@ -14,7 +14,7 @@
   function mount(container, initial, options = {}) {
     const doc = container.ownerDocument;
     let record = initial, signals, dialog = null, opener = null;
-    const main = doc.createElement('div'); container.appendChild(main);
+    const main = doc.createElement('div'); main.className = 'nt-daily-content'; container.appendChild(main);
     const el = (tag, cls, text) => { const e = doc.createElement(tag); if (cls) e.className = cls; if (text !== undefined) e.textContent = text; return e; };
     const button = (text, cls, fn) => { const b = el('button', cls, text); b.type = 'button'; if (fn) b.addEventListener('click', fn); return b; };
     const link = event => { const a = el('a', 'nt-page-link', event.title); a.href = event.url; a.target = '_blank'; a.rel = 'noopener noreferrer'; return a; };
@@ -192,28 +192,45 @@
     }
     function draw() {
       signals = D.buildDailySignals(record); main.textContent = '';
-      const dashboard = el('section', 'nt-dashboard'); dashboard.setAttribute('aria-labelledby', 'nt-today-title');
-      const heading = el('div', 'nt-dashboard-heading'); const title = el('h2', null, 'Today, so far'); title.id = 'nt-today-title';
-      heading.append(title, el('span', 'nt-scope', `Through ${new Date(record.now).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' })}`)); dashboard.append(heading);
-      const time = button('', 'nt-time-headline', () => openMetric('time'));
-      time.append(el('strong', null, duration(signals.totalMs)), el('span', null, 'estimated time recorded'));
-      const timeRow = el('div', 'nt-time-row'); timeRow.append(time);
-      const timeCompare = el('div', `nt-comparison nt-direction-${signals.comparisons.time.direction}`); timeCompare.append(el('span', null, comparison('time')));
-      if (signals.comparisons.time.n) timeCompare.append(el('small', null, `${duration(signals.comparisons.time.median)} recent median · ${signals.comparisons.time.n} days`));
-      timeRow.append(timeCompare); dashboard.append(timeRow);
+      const dashboard = el('section', `nt-dashboard${options.minimal ? ' nt-dashboard-minimal' : ''}`); dashboard.setAttribute('aria-label', 'Today, so far');
+      if (!options.minimal) {
+        const heading = el('div', 'nt-dashboard-heading'); const title = el('h2', null, 'Today, so far'); title.id = 'nt-today-title';
+        heading.append(title, el('span', 'nt-scope', `Through ${new Date(record.now).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' })}`)); dashboard.append(heading);
+        const time = button('', 'nt-time-headline', () => openMetric('time'));
+        time.append(el('strong', null, duration(signals.totalMs)), el('span', null, 'estimated time recorded'));
+        const timeRow = el('div', 'nt-time-row'); timeRow.append(time);
+        const timeCompare = el('div', `nt-comparison nt-direction-${signals.comparisons.time.direction}`); timeCompare.append(el('span', null, comparison('time')));
+        if (signals.comparisons.time.n) timeCompare.append(el('small', null, `${duration(signals.comparisons.time.median)} recent median · ${signals.comparisons.time.n} days`));
+        timeRow.append(timeCompare); dashboard.append(timeRow);
+      }
       const rings = el('div', 'nt-rings');
       for (const key of ['continuity', 'top', 'return']) {
         const metric = signals[key], range = signals.comparisons[key];
         const ring = button('', `nt-ring-card nt-direction-${range.direction}`, () => openMetric(key)); ring.setAttribute('aria-label', `${labels[key]} ${percent(metric.value)}. ${raw(key)}. Inspect evidence.`);
-        const dial = el('span', 'nt-ring-dial'); dial.style.setProperty('--ring-turn', `${(metric.value || 0) * 360}deg`); dial.setAttribute('aria-hidden', 'true');
+        const dial = el('span', 'nt-ring-dial'); dial.setAttribute('aria-hidden', 'true');
+        const svg = doc.createElementNS('http://www.w3.org/2000/svg', 'svg'); svg.setAttribute('viewBox', '0 0 144 144');
+        for (const cls of ['nt-ring-track', 'nt-ring-progress']) {
+          const circle = doc.createElementNS(svg.namespaceURI, 'circle');
+          for (const [name, value] of Object.entries({ cx: 72, cy: 72, r: 66, fill: 'none', pathLength: 100, class: cls })) circle.setAttribute(name, value);
+          if (cls === 'nt-ring-progress') { circle.style.strokeDasharray = `${(metric.value || 0) * 100} 100`; if (!metric.value) circle.style.visibility = 'hidden'; }
+          svg.append(circle);
+        }
+        dial.append(svg);
         dial.append(el('strong', null, percent(metric.value))); ring.append(dial, el('span', 'nt-ring-title', labels[key]));
-        const top = key === 'top' ? record.trails.find(t => t.id === metric.topicId)?.label : null;
-        ring.append(el('span', 'nt-ring-subject', top || (key === 'continuity' ? 'Stayed in one trail' : key === 'return' ? 'Earlier trails revisited' : 'No grouped time yet')),
-          el('span', 'nt-ring-raw', raw(key)), el('span', 'nt-comparison', comparison(key)), el('span', 'nt-inspect', 'Inspect evidence ↗'));
+        ring.title = `Today · ${labels[key]} · ${comparison(key)}. Select to inspect evidence.`;
+        if (!options.minimal) {
+          const top = key === 'top' ? record.trails.find(t => t.id === metric.topicId)?.label : null;
+          ring.append(el('span', 'nt-ring-subject', top || (key === 'continuity' ? 'Stayed in one trail' : key === 'return' ? 'Earlier trails revisited' : 'No grouped time yet')),
+            el('span', 'nt-ring-raw', raw(key)), el('span', 'nt-comparison', comparison(key)), el('span', 'nt-inspect', 'Inspect evidence ↗'));
+        }
         rings.append(ring);
       }
-      dashboard.append(rings); paragraph(dashboard, signals.observation, 'nt-observation'); coverage(dashboard, signals);
-      paragraph(dashboard, 'Select a number to see its calculation and pages.', 'nt-signal-note'); main.append(dashboard);
+      dashboard.append(rings); main.append(dashboard);
+      if (options.minimal && !options.showSessions) return;
+      if (!options.minimal) {
+        paragraph(dashboard, signals.observation, 'nt-observation'); coverage(dashboard, signals);
+        paragraph(dashboard, 'Select a number to see its calculation and pages.', 'nt-signal-note');
+      }
       const resume = D.continuation(record);
       if (resume.page || resume.session) {
         const card = el('section', 'nt-continuation'); card.setAttribute('aria-label', 'Continue your trail');

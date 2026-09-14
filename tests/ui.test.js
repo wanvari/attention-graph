@@ -1,5 +1,5 @@
 // UI tests (spec §7.6):
-//  - no red/green hue anywhere in ui/*.css (Whoop's valence is what D4 forbids)
+//  - no red/green judgement colors; the Studio brand uses the requested green palette
 //  - newtab renders an empty DB without throwing (jsdom + fake-indexeddb)
 //  - newtab performs at most 4 IndexedDB transactions on load
 'use strict';
@@ -55,21 +55,28 @@ const hueViolations = [];
 
 for (const name of cssFiles) {
   const source = fs.readFileSync(path.join(uiDir, name), 'utf8');
+  if (name === 'studio.css') {
+    for (const direction of ['below', 'within', 'above', 'neutral']) {
+      assert.ok(source.includes(`--signal-${direction}: var(--ring-ink)`), 'all ring comparison directions use the same neutral ink');
+    }
+    assert.ok(source.includes('--accent: #7fee64'), 'the requested phosphor accent is available for navigation and focus');
+  }
+  const forbidden = hsl => isValenceHue(hsl) && !(name === 'studio.css' && hsl.hue >= 90 && hsl.hue <= 150);
   for (const match of source.matchAll(/#[0-9a-fA-F]{3,8}\b/g)) {
     const hsl = parseHex(match[0]);
-    if (isValenceHue(hsl)) {
+    if (forbidden(hsl)) {
       hueViolations.push(`${name}: ${match[0]} (hue ${hsl.hue}, sat ${hsl.saturation.toFixed(0)}%)`);
     }
   }
   for (const match of source.matchAll(/rgba?\(\s*(\d+)[,\s]+(\d+)[,\s]+(\d+)/g)) {
     const hsl = hslFromRgb(Number(match[1]), Number(match[2]), Number(match[3]));
-    if (isValenceHue(hsl)) {
+    if (forbidden(hsl)) {
       hueViolations.push(`${name}: ${match[0]}) (hue ${hsl.hue}, sat ${hsl.saturation.toFixed(0)}%)`);
     }
   }
   for (const match of source.matchAll(/hsla?\(\s*(\d+)[,\s]+(\d+)%/g)) {
     const hsl = { hue: Number(match[1]), saturation: Number(match[2]), lightness: 50 };
-    if (isValenceHue(hsl)) hueViolations.push(`${name}: ${match[0]}) (hue ${hsl.hue})`);
+    if (forbidden(hsl)) hueViolations.push(`${name}: ${match[0]}) (hue ${hsl.hue})`);
   }
   for (const word of ['red', 'green', 'crimson', 'firebrick', 'tomato', 'lime', 'forestgreen', 'seagreen']) {
     const pattern = new RegExp(`:\\s*${word}\\b|\\b${word};`, 'i');
@@ -161,7 +168,7 @@ async function seed(store) {
   await store.put('captures', { captureId: 'fresh', normalizedUrl: c, url: c, title: 'Sourdough hydration', startedAt: at(5), updatedAt: at(5, 12, 2), activeMs: 40000 });
 }
 async function mount(populate, extra = {}) {
-  const dom = new JSDOM('<!doctype html><html><body><main id="app"></main></body></html>', { pretendToBeVisual: true, url: 'https://localhost/ui/newtab.html' });
+  const dom = new JSDOM('<!doctype html><html><body><main id="app"></main></body></html>', { pretendToBeVisual: true, url: 'https://localhost/ui/newtab.html?view=trails' });
   const store = CTStore.createStore({ indexedDB: new IDBFactory(), IDBKeyRange });
   await store.open();
   if (populate) await populate(store);
@@ -210,7 +217,7 @@ function search(window, document, query) {
     assert.ok(m.document.body.textContent.includes('Search works before they are installed.'));
     assert.ok(m.document.querySelector('a[href="demo.html"]'));
     assert.ok(m.document.querySelector('a[href="options.html"]'));
-    assert.ok(m.document.querySelector('.nt-footer'));
+    assert.ok(m.document.querySelector('.studio-sidebar a[aria-label="Record & privacy"]'));
     assert.equal(m.result.readTransactions, 1);
     assert.equal(m.document.querySelectorAll('.nt-ring').length, 0);
     await m.close();
@@ -334,7 +341,7 @@ function search(window, document, query) {
   {
     const m = await mount(seed, { readOnly: true, links: { home: '#home', map: '#map', audit: '#audit', settings: '#setup' } });
     assert.equal(m.document.querySelector('.nt-pin').disabled, true);
-    assert.equal(m.document.querySelector('.nt-nav a').getAttribute('href'), '#map');
+    assert.equal(m.document.querySelector('.studio-nav a[aria-label="Graph"]').getAttribute('href'), '#map');
     click(m.window, m.document.querySelector('.nt-trail-title'));
     assert.equal(m.document.querySelector('.nt-edit-form'), null);
     assert.ok(m.document.querySelector('.nt-edit').textContent.includes('sample record'));

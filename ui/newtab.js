@@ -14,26 +14,11 @@
   const clock = at => new Date(at).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
   const date = (at, full) => new Date(at).toLocaleDateString(undefined, { month: full ? 'long' : 'short', day: 'numeric', year: full ? 'numeric' : undefined });
 
-  function homeMessage(record, now) {
-    const bucket = Math.floor(now / (2 * 3600000)), boundary = bucket * 2 * 3600000;
-    const recent = record.events.filter(e => e.time < boundary).at(-1);
-    const trail = recent && record.trails.find(t => t.id === recent.topicIds[0]);
-    const subject = trail?.label.length <= 42 ? trail.label : null;
-    const messages = [
-      subject ? `Back to ${subject}?` : 'Pick up where you left off.',
-      'What would you like to revisit?',
-      'A fresh tab. A place to continue.',
-      subject ? `${subject}, ready to revisit.` : 'Your recent pages are close by.',
-      'Find that page again.',
-      'Where next? Start with your trails.'
-    ];
-    return { bucket, title: messages[bucket % messages.length] };
-  }
-
   function render(container, snapshot, options) {
     const opts = options || {};
     const doc = container.ownerDocument;
     const win = doc.defaultView;
+    const studioPage = opts.view || (new URLSearchParams(win.location.search).get('view') === 'trails' ? 'trails' : 'home');
     let now = opts.now || Date.now();
     let today = CTText.dayKeyFromMs(now);
     let data = { ...snapshot };
@@ -69,32 +54,24 @@
     container.textContent = '';
     const shell = el('div', 'nt-page');
     container.appendChild(shell);
-    const skip = link('Skip to your record', '#record-content', 'nt-skip');
+    const skip = link('Skip to search', '#record-search', 'nt-skip');
     shell.appendChild(skip);
-    const header = el('header', 'nt-header');
-    const brand = link('Cognitive Trails', links.home, 'nt-brand');
-    const mark = el('span', 'nt-brand-mark', '⋮'); mark.setAttribute('aria-hidden', 'true');
-    brand.prepend(mark); header.appendChild(brand);
-    const nav = el('nav', 'nt-nav'); nav.setAttribute('aria-label', 'Main');
-    nav.append(link('Map', links.map), link('Settings', links.settings));
-    header.appendChild(nav); shell.appendChild(header);
-
     const hero = el('section', 'nt-hero');
-    let greeting = homeMessage(record, now);
-    const eyebrow = el('div', 'nt-eyebrow', opts.readOnly ? 'A sample browsing record' : 'Your saved pages');
-    const headline = el('h1', null, greeting.title);
-    hero.append(eyebrow, headline, el('p', 'nt-intro', 'Search your history or reopen a trail. Everything stays on this device.'));
+    const headline = el('h1', studioPage === 'home' ? 'studio-sr-only' : '', studioPage === 'home' ? 'Cognitive Trails' : 'Your trails');
+    hero.append(headline);
     const searchForm = el('form', 'nt-search'); searchForm.setAttribute('role', 'search');
-    const searchIcon = el('span', 'nt-search-icon', '⌕'); searchIcon.setAttribute('aria-hidden', 'true');
+    const searchIcon = CTStudio.icon(doc, 'search');
     const input = el('input', 'nt-search-input'); input.type = 'search'; input.name = 'q';
-    input.placeholder = 'Search titles, topics, or websites'; input.autocomplete = 'off';
-    input.setAttribute('aria-label', 'Search your browsing record'); input.setAttribute('aria-controls', 'record-content');
-    const submit = el('button', 'nt-search-submit', 'Search'); submit.type = 'submit';
+    input.id = 'record-search'; input.autofocus = studioPage === 'home';
+    input.placeholder = 'Search your trails'; input.autocomplete = 'off';
+    input.setAttribute('aria-keyshortcuts', '/'); input.setAttribute('aria-label', 'Search your browsing record'); input.setAttribute('aria-controls', 'record-content');
+    const submit = el('button', 'nt-search-submit'); submit.type = 'submit'; submit.setAttribute('aria-label', 'Search'); submit.title = 'Search your browsing record'; submit.append(CTStudio.icon(doc, 'enter'));
     searchForm.append(searchIcon, input, submit);
     searchForm.addEventListener('submit', event => { event.preventDefault(); runSearch(); });
-    input.addEventListener('input', () => { if (!input.value) runSearch(); });
+    input.addEventListener('input', () => { searchTools.hidden = studioPage === 'home' && !input.value && filterPanel.hidden; if (!input.value) runSearch(); });
     hero.appendChild(searchForm);
     const searchTools = el('div', 'nt-search-tools');
+    searchTools.hidden = studioPage === 'home';
     const filters = button('Filter by date', 'nt-text-button', () => {
       filterPanel.hidden = !filterPanel.hidden;
       filters.setAttribute('aria-expanded', String(!filterPanel.hidden));
@@ -132,15 +109,11 @@
     const live = el('p', 'nt-live'); live.setAttribute('role', 'status'); live.setAttribute('aria-live', 'polite');
     shell.appendChild(live);
     const dashboardHost = el('div', 'nt-daily-host'); shell.appendChild(dashboardHost);
-    let dailyView, studioView;
+    let dailyView;
     const layout = el('div', 'nt-layout'); shell.appendChild(layout);
     const content = el('section', 'nt-content'); content.id = 'record-content'; content.tabIndex = -1;
     const aside = el('aside', 'nt-sidebar'); aside.setAttribute('aria-label', 'About this record');
     layout.append(content, aside);
-    const footer = el('footer', 'nt-footer');
-    footer.append(link('Record & privacy', links.audit), el('span', null, 'Local by design. Yours to revisit.'));
-    shell.appendChild(footer);
-
     function resetSearch() {
       input.value = ''; query = ''; fromInput.value = ''; toInput.value = '';
       from = ''; to = ''; ungrouped = false; ungroupedInput.checked = false; limit = 8;
@@ -184,6 +157,14 @@
     function drawContent() {
       content.textContent = '';
       const selected = record.trails.find(t => t.id === selectedId);
+      const resting = studioPage === 'home' && !selected && mode === 'recent';
+      shell.dataset.homeResting = String(resting);
+      layout.hidden = resting;
+      searchTools.hidden = resting && !input.value && filterPanel.hidden;
+      // Keep dialogs mounted even when the rings are out of view.
+      dashboardHost.classList.toggle('nt-daily-concealed', !resting);
+      live.textContent = '';
+      if (resting) return;
       if (selected) { drawTrail(selected); return; }
       const top = el('div', 'nt-section-heading');
       top.appendChild(el('h2', null, mode === 'search' ? 'Search your record' : 'Your trails'));
@@ -266,7 +247,7 @@
       empty.appendChild(actions); content.appendChild(empty);
     }
     function drawTrail(trail) {
-      content.appendChild(button('← All trails', 'nt-text-button nt-back', () => { selectedId = null; mode = 'recent'; drawContent(); drawAside(); content.focus(); }));
+      content.appendChild(button('← All trails', 'nt-text-button nt-back', () => { selectedId = null; mode = studioPage === 'home' ? 'trails' : 'recent'; drawContent(); drawAside(); content.focus(); }));
       const heading = el('div', 'nt-detail-heading'); heading.append(el('h2', null, trail.label), pinControl(trail)); content.appendChild(heading);
       content.appendChild(el('p', 'nt-detail-description', `Recorded from ${date(trail.firstAt, true)} to ${date(trail.lastAt, true)}. ${count(trail.visitCount, 'visit')} across ${count(trail.dayCount, 'day')}.`));
       if (trail.personal.name) content.appendChild(el('p', 'nt-suggested-label', `Your title · Suggested topic: ${trail.suggestedLabel}`));
@@ -331,8 +312,9 @@
       if (paginate && events.length > limit) target.appendChild(button(`Show more (${number(events.length - limit)} remaining)`, 'nt-secondary-button nt-load-more', () => { limit += 20; drawContent(); }));
     }
     function drawAside() {
-      studioView?.update(record);
       aside.textContent = '';
+      aside.hidden = studioPage === 'home';
+      if (studioPage === 'home') return;
       const selected = record.trails.find(t => t.id === selectedId);
       const fromDay = CTText.addDays(today, -6);
       const events = selected ? selected.events : record.events.filter(e => e.day >= fromDay && e.day <= today);
@@ -418,11 +400,10 @@
       dailyView.update(record); drawContent(); drawAside();
       return reply;
     }
-    dailyView = CTDailyView.mount(dashboardHost, record, { readOnly: opts.readOnly, openTrail, sessionId: opts.sessionId, action: opts.onAction ? action : null });
-    const studioPage = new URLSearchParams(win.location.search).get('view') === 'trails' ? 'trails' : 'home';
-    if (studioPage === 'trails') hero.querySelector('h1').textContent = 'A place for every trail.';
-    studioView = CTStudio.mount(shell, { view: studioPage, demo: opts.readOnly, links });
+    dailyView = CTDailyView.mount(dashboardHost, record, { minimal: true, showSessions: studioPage === 'trails', readOnly: opts.readOnly, openTrail, sessionId: opts.sessionId, action: opts.onAction ? action : null });
+    CTStudio.mount(shell, { view: studioPage, demo: opts.readOnly, links });
     drawContent(); drawAside();
+    if (studioPage === 'home' && !opts.sessionId && !selectedId) input.focus({ preventScroll: true });
     const keyboard = event => {
       const target = event.target;
       if (event.key === '/' && !event.metaKey && !event.ctrlKey && !event.altKey && !/INPUT|TEXTAREA|SELECT/.test(target.tagName) && !target.isContentEditable) {
@@ -442,9 +423,6 @@
         const preserveContent = active && content.contains(active) && active !== content;
         now = opts.now || Date.now(); today = CTText.dayKeyFromMs(now);
         data = next; record = CTTrails.buildRecord(data, { now });
-        if (studioPage === 'home' && Math.floor(now / (2 * 3600000)) !== greeting.bucket) {
-          greeting = homeMessage(record, now); headline.textContent = greeting.title;
-        }
         fromInput.max = today; toInput.max = today;
         dailyView?.update(record);
         if (!preserveContent) drawContent();
@@ -471,7 +449,7 @@
     view.readTransactions = reads;
     return view;
   }
-  return { main, render, homeMessage, loadData: CTTrails.loadData, duration };
+  return { main, render, loadData: CTTrails.loadData, duration };
 });
 
 if (typeof chrome !== 'undefined' && chrome.runtime && chrome.runtime.id &&

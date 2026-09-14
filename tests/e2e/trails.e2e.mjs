@@ -15,6 +15,7 @@ try {
   const page = await context.newPage();
   const errors = []; page.on('pageerror', e => errors.push(e.message));
   await page.goto(`${origin}/ui/newtab.html`);
+  await page.getByRole('link', { name: 'Your trails', exact: true }).click();
   await page.getByText('The next page is a place to begin.').waitFor();
   const status = await page.evaluate(() => new Promise(resolve => chrome.runtime.sendMessage({ type: 'GET_STATUS' }, resolve)));
   assert.equal(typeof status.paused, 'boolean', 'home and settings use the real worker status route');
@@ -49,11 +50,13 @@ try {
     assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1), `no overflow at ${width}`);
   }
   // Literal signals expose their denominators and restore keyboard focus.
+  await page.getByRole('link', { name: 'Home', exact: true }).click();
   const ring = page.getByRole('button', { name: /^Continuity .*Inspect evidence/ });
   await ring.click();
   await page.getByRole('dialog').getByText(/Same-trail transitions ÷/).waitFor();
   await page.keyboard.press('Escape');
   assert.equal(await ring.evaluate(el => document.activeElement === el), true);
+  await page.getByRole('link', { name: 'Your trails', exact: true }).click();
   await page.getByRole('searchbox').fill('');
   await page.getByRole('button', { name: 'Search', exact: true }).click();
   await page.getByRole('button', { name: 'Weekend Rust project', exact: true }).click();

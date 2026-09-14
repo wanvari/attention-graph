@@ -21,7 +21,9 @@ Search matches titles, website names, suggested topics, personal notes, and date
 
 ## Today and optional sessions
 
-Studio opens in dark mode, with a saved Light/Dark switch shared across Home, Graph, Explore, Settings and record inspection. Home puts continuation and search first, with compact evidence cards and a seven-day preview. Its headline changes every two hours using local message templates and, when available, a recent trail name. Opening Home never runs a model.
+Home opens with a focused search bar and three evidence rings: Continuity, Top trail, and Return share. The interface uses a near-black canvas, pale text, and a restrained green navigation accent, with a rounded sidebar centered vertically. On small screens the sidebar becomes a bottom dock. The theme control in the dock saves your Light/Dark preference across every screen. Opening Home never runs a model.
+
+Search with Enter; Escape clears the query and returns to the rings. Press `/` to focus search again. Your trails holds saved trails, pins, notes, recent pages, continuation, and the seven-day preview. Search results and evidence appear when requested.
 
 **Explore** shows 7 or 14 days of stacked activity. Switch between estimated time and recorded visit starts, move to an earlier period, or select a day to inspect its trail totals and source pages. Other trails and ungrouped pages remain in every total. Day boundaries use the local time zone; a page crossing midnight contributes time on both days but starts only once.
 
@@ -31,7 +33,7 @@ Larger circles mean more recorded visits, within readable size limits. Select a 
 
 Arrows mean the trails were visited consecutively at least twice in the same direction. They describe timestamp order across tabs, not verified hyperlinks or a stream of thought. Single sequences remain in the dated list. **How connections are counted** reconciles every candidate visit step and offers timestamped source links for ungrouped steps. It separately reports repeated steps, distinct directed page pairs, distinct directed hostname pairs, and ungrouped page count. A repeated A→B step counts again; the distinct pair does not.
 
-Home shows estimated recorded time and three compact literal rings. Select any ring to see its formula, counts, contributing pages, timing coverage and comparison details. The continuation card opens your last page or starts an optional session in a selected trail.
+Home shows three literal rings for today. Select any ring to see its formula, counts, contributing pages, timing coverage and comparison details. The continuation card in Your trails opens your last page or starts an optional session in a selected trail.
 
 | Ring | Calculation | How to use it |
 | --- | --- | --- |
@@ -39,7 +41,7 @@ Home shows estimated recorded time and three compact literal rings. Select any r
 | Top trail | Largest trail's estimated minutes ÷ grouped estimated minutes | Identify the subject with the most grouped time and return to its pages. |
 | Return share | Grouped minutes in trails first seen before today ÷ grouped minutes | Find earlier trails that you revisited. |
 
-Comparisons use the preceding 28 local calendar days, each through the same clock time as today. The middle 50% (Tukey quartiles) and median require at least seven eligible days. Continuity requires three classified transitions; time shares require ten grouped minutes. Below (ochre), within (blue) and above (plum) are directions relative to your own record, with no preferred direction. Gray means insufficient evidence. Reloads, repeated URLs, simultaneous timestamps, capture pauses, day boundaries, gaps over 30 minutes and ungrouped endpoints do not enter the Continuity denominator.
+Comparisons use the preceding 28 local calendar days, each through the same clock time as today. The middle 50% (Tukey quartiles) and median require at least seven eligible days. Continuity requires three classified transitions; time shares require ten grouped minutes. Below, within and above are described in the evidence drawer relative to your own record, with no preferred direction. All three rings use the same muted ink; missing values show an em dash. Reloads, repeated URLs, simultaneous timestamps, capture pauses, day boundaries, gaps over 30 minutes and ungrouped endpoints do not enter the Continuity denominator.
 
 Sessions are optional: 25, 50 or 90 minutes, or untimed, plus a private next-step note. One session can run at a time. Timed sessions survive a closed tab or worker restart; a generic browser notification opens the recap. The recap shows selected-trail, other-trail and ungrouped estimated time alongside elapsed wall time. Pausing capture ends the session. Corrections can update its grouping later. No session action loads a model.
 

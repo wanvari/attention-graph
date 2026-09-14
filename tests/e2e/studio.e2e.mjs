@@ -26,7 +26,19 @@ try {
     }
     await store.put('visits',{visitId:'studio-today',url:'https://example.test/today',title:'Today page',visitTime:Math.max(midnight,now-60000),dwellMs:1000});
   });
-  await page.reload();await page.getByRole('button',{name:'Async Rust',exact:true}).waitFor();
+  await page.reload();await page.locator('.nt-ring-card').first().waitFor();
+  assert.equal(await page.locator('.nt-search-input').evaluate(n=>document.activeElement===n),true);
+  assert.equal(await page.locator('.nt-ring-card:visible').count(),3);
+  assert.equal(await page.locator('.nt-layout:visible').count(),0);
+  const ring=page.locator('.nt-ring-card').first();await ring.click();
+  await page.getByRole('dialog').waitFor();await page.keyboard.press('Escape');
+  assert.equal(await ring.evaluate(n=>document.activeElement===n),true);
+  await page.getByRole('searchbox').fill('Recorded page 1');await page.keyboard.press('Enter');
+  await page.locator('.nt-content .nt-page-link').first().waitFor();
+  await page.getByRole('searchbox').press('Escape');
+  assert.equal(await page.locator('.nt-layout:visible').count(),0);
+  await page.getByRole('link',{name:'Your trails',exact:true}).click();
+  await page.getByRole('button',{name:'Async Rust',exact:true}).waitFor();
   const second=await context.newPage();second.on('pageerror',e=>errors.push(e.message));await second.goto(`${origin}/ui/map.html`);await second.locator('.topic-node').first().waitFor();
   await page.getByRole('button',{name:'Light theme',exact:true}).click();
   await second.waitForFunction(()=>document.documentElement.dataset.theme==='light');
@@ -64,7 +76,7 @@ try {
   for(const file of ['newtab.html','map.html','explore.html','options.html','audit.html','diagnostics.html']) {
     await page.goto(`${origin}/ui/${file}`);await page.locator('.studio-shell').waitFor();
     for(const theme of ['Light','Dark']){
-      await page.getByRole('button',{name:`${theme} theme`,exact:true}).click();
+      if(await page.locator('html').getAttribute('data-theme')!==theme.toLowerCase()) await page.getByRole('button',{name:`${theme} theme`,exact:true}).click();
       for(const width of [1536,1024,768,390,320]){await page.setViewportSize({width,height:950});assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1),`${file} ${theme}: overflow at ${width}`);}
     }
   }
