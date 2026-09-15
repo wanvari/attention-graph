@@ -19,7 +19,7 @@ Choices made with the user (2026-09-14):
 Why the current UI is weak:
 - Legacy per-page CSS (`ui/shared.css`, `ui/newtab.css`, `ui/map.css` at 1,181 lines) is re-skinned by overrides in `ui/studio.css`: duplicate selectors, 34 `!important`s.
 - Low-chroma palette, no bundled fonts.
-- Graph regressed from the approved prototype (`design/mockups/studio-graph-dark.png`, `design/prototype/mockup-graph.js`) to cards that hide the canvas.
+- Graph regressed from the approved prototype (`design/mockups/studio-graph-dark.png` and `design/prototype/mockup-graph.js`, removed after the redesign and kept in git history) to cards that hide the canvas.
 
 ## Constraints (verified in code)
 - **Copy test** (`tests/copy.test.js`) bans *should, focus, productive, distract, goal, improve, better, worse, good, bad* in UI strings. So the greeting is "Welcome back." or "Hello again.", not "Good evening".
