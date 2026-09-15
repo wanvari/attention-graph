@@ -28,7 +28,8 @@
     if(topics.length>4)categories.push(OTHER);
     if(totals.has(UNGROUPED))categories.push(UNGROUPED);
     const label=id=>id===UNGROUPED?'Ungrouped pages':id===OTHER?'Other trails':record.trails.find(t=>t.id===id)?.label||'Recorded trail';
-    const color=id=>id===UNGROUPED?'var(--text-dim)':id===OTHER?'var(--trail-7)':Studio.topicColor(id);
+    // Named trails keep their color; the remainder stays neutral so it never outshouts them.
+    const color=id=>id===UNGROUPED?'var(--line-strong)':id===OTHER?'var(--text-faint)':Studio.topicColor(id);
     const bucket=(day,id,metric)=>id===OTHER?topics.slice(4).reduce((sum,t)=>sum+(day.values.get(t)?.[metric]||0),0):day.values.get(id)?.[metric]||0;
     return {days,totals,categories,label,color,bucket,ms:days.reduce((n,d)=>n+d.ms,0),visits:days.reduce((n,d)=>n+d.visits,0)};
   }
@@ -40,7 +41,7 @@
     function draw() {
       const active = container.contains(doc.activeElement) ? { label: doc.activeElement.getAttribute('aria-label'), text: doc.activeElement.textContent, tag: doc.activeElement.tagName } : null;
       const series=buildSeries(record,{days,endDay}); container.textContent='';
-      const intro=el('div','explore-heading');intro.append(el('p','studio-kicker',demo?'A recorded sample':'Explore your record'),el('h1',null,'A little perspective.'),el('p','explore-sub','See when you browsed, which trails you visited, and the pages behind each day.'));
+      const intro=el('header','page-head explore-heading'),introText=el('div');introText.append(el('h1',null,'Your week'),el('p','page-sub',`${demo?'A recorded sample. ':''}When you browsed, which trails you visited, and the pages behind each day.`));intro.append(introText);
       container.append(intro);
       const card=el('section','explore-card'),head=el('div','explore-card-head'),title=el('div');title.append(el('p','studio-kicker','Recorded activity'),el('h2',null,`${shortDate(series.days[0].day)} – ${shortDate(endDay)}`));
       const tools=el('div','explore-controls');

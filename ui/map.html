@@ -3,41 +3,37 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Cognitive Trails Map</title>
+  <title>Cognitive Trails · Graph</title>
   <link rel="icon" type="image/png" href="../icon48.png">
-  <link rel="stylesheet" href="shared.css">
+  <link rel="preload" href="../vendor/fonts/inter-latin-opsz-normal.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="preload" href="../vendor/fonts/fraunces-latin-opsz-normal.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="stylesheet" href="studio.css">
   <link rel="stylesheet" href="map.css">
   <script src="../vendor/d3.min.js"></script>
-  <link rel="stylesheet" href="studio.css">
   <script src="studio.js"></script>
 </head>
 <body>
-  <div class="container" data-studio-view="graph">
-    <header>
-      <div class="topbar">
-        <div>
-          <h1>Your trail map</h1>
-          <div id="status-line" class="status-line">Loading the topic registry...</div>
-        </div>
-        <div id="health-pill" class="health-pill">Registry</div>
+  <div class="container graph-page" data-studio-view="graph">
+    <header class="graph-head">
+      <div>
+        <h1>Your trail map</h1>
+        <p id="status-line" class="status-line">Loading your record…</p>
       </div>
-      <div class="controls">
-        <div class="buttons">
-          <a class="secondary-btn" href="newtab.html">Home</a>
-          <a id="dashboard-link" class="secondary-btn" href="audit.html">Audit</a>
-          <a class="secondary-btn" href="options.html" title="Capture, window, and local model settings.">Settings</a>
-        </div>
+      <span id="health-pill" class="health-pill">Registry</span>
+    </header>
+    <div class="controls">
+      <label class="control-field graph-search-field"><span class="sr-only">Search the map</span><input id="graph-search" type="search" placeholder="Find a trail, page, or website" aria-label="Find a trail or page"></label>
+      <label class="control-field">
+        <span>Period</span>
+        <select id="window-days">
+          <option value="7">7 days</option>
+          <option value="30" selected>30 days</option>
+          <option value="90">90 days</option>
+        </select>
+      </label>
+      <details class="graph-options"><summary>Map options</summary><div class="graph-options-body">
         <label class="control-field">
-          <span>Window</span>
-          <select id="window-days">
-            <option value="7">7 days</option>
-            <option value="30" selected>30 days</option>
-            <option value="90">90 days</option>
-          </select>
-        </label>
-        <details class="graph-options"><summary>Map options</summary><div class="graph-options-body">
-        <label class="control-field">
-          <span>Flow lines</span>
+          <span>Routes in overview</span>
           <select id="flow-limit">
             <option value="25">Top 25</option>
             <option value="50">Top 50</option>
@@ -52,32 +48,28 @@
             <option value="all" selected>All</option>
           </select>
         </label>
-
-        <label class="control-field"><input id="show-pages" type="checkbox" checked> Page detail</label>
-        <label class="control-field"><input id="show-flows" type="checkbox"> Connections</label>
         <label class="control-field"><span>Labels</span><select id="graph-labels"><option value="auto">Automatic</option><option value="all">More</option><option value="off">Off</option></select></label>
-        </div></details>
-        <label class="control-field graph-search-field"><span>Search</span><input id="graph-search" type="search" placeholder="Find a trail, page, or website" aria-label="Find a trail or page"></label>
-      </div>
-      <div id="staleness-banner" class="staleness-banner" hidden></div>
-      <div id="summary-strip" class="summary-strip"></div>
-      <div id="legend" class="legend"></div>
-    </header>
-    <section id="graph-atlas" aria-label="Browse the trail map"></section>
+        <label class="control-field control-check"><input id="show-pages" type="checkbox" checked> Page satellites</label>
+        <label class="control-field control-check"><input id="show-flows" type="checkbox" checked> Connections</label>
+      </div></details>
+    </div>
+    <div id="staleness-banner" class="staleness-banner" hidden></div>
+    <div id="summary-strip" class="summary-strip"></div>
     <div class="workspace">
       <div id="graph-container">
         <svg id="graph" aria-label="Trail graph"></svg>
         <div id="graph-view-status" class="graph-view-status" aria-live="polite"></div>
+        <div id="legend" class="legend" aria-hidden="true"></div>
       </div>
-      <aside id="evidence-panel" class="evidence-panel">
-        <div class="empty-state">
-          <h2>Evidence</h2>
-          <p>Select a group or trail to see its pages and browsing order.</p>
+      <aside id="evidence-panel" class="evidence-panel" aria-label="Trail details">
+        <div class="evidence-section">
+          <h2>Your trails</h2>
+          <p>Select a trail, a halo, or an arrow to see its pages and browsing order.</p>
         </div>
       </aside>
     </div>
-    <div id="loading" class="loading">Loading the registry...</div>
-    <div id="tooltip" class="tooltip"></div>
+    <div id="loading" class="loading">Loading your record…</div>
+    <div id="tooltip" class="tooltip" role="tooltip"></div>
   </div>
   <script src="../lib/text.js"></script>
   <script src="../lib/privacy.js"></script>

@@ -41,16 +41,16 @@ try {
   await page.getByRole('link',{name:'Your trails',exact:true}).click();
   await page.getByRole('button',{name:'Async Rust',exact:true}).waitFor();
   assert.equal(await page.evaluate(()=>!!window.ctLastNavigationTransition),true,'extension navigation animates the content');
-  const second=await context.newPage();second.on('pageerror',e=>errors.push(e.message));await second.goto(`${origin}/ui/map.html`);await second.locator('.atlas-group').first().waitFor();
+  const second=await context.newPage();second.on('pageerror',e=>errors.push(e.message));await second.goto(`${origin}/ui/map.html`);await second.locator('.topic-node').first().waitFor();
   await page.getByRole('button',{name:'Light theme',exact:true}).click();
   await second.waitForFunction(()=>document.documentElement.dataset.theme==='light');
   await page.reload();assert.equal(await page.locator('html').getAttribute('data-theme'),'light');
   assert.equal(await second.locator('.page-node').count(),16,'full graph includes all pages and ungrouped records');
   assert.equal(await second.locator('.flow-link').count(),2,'repeated sequences in both directions remain clickable');
-  assert.equal(await second.locator('.flow-link:visible').count(),0,'overview keeps routes off until requested');
+  assert.equal(await second.locator('.flow-link:visible').count(),2,'the overview draws repeated routes');
+  assert.equal(await second.locator('.topic-node:visible').count(),2,'every trail is on the map');
   await second.getByRole('searchbox').fill('Async Rust');await second.keyboard.press('Enter');
-  await second.getByRole('button',{name:'Connections',exact:true}).click();
-  await second.locator('.flow-link').first().focus();await second.keyboard.press('Enter');
+  await second.locator('.flow-link:visible').first().focus();await second.keyboard.press('Enter');
   await second.getByRole('heading',{name:'Recorded page sequences'}).waitFor();
   await second.getByRole('searchbox',{name:'Find a trail or page'}).fill('Async Rust');await second.keyboard.press('Enter');
   await second.getByRole('heading',{name:'Async Rust',exact:true}).waitFor();await second.getByRole('button',{name:'Zoom to this trail'}).click();
@@ -60,10 +60,9 @@ try {
   await second.getByRole('button',{name:'Dark theme',exact:true}).click();
   assert.equal(await second.evaluate(()=>document.querySelector('#graph > g').getAttribute('transform')),transform);
   assert.deepEqual(await second.locator('.topic-node').evaluateAll(nodes=>nodes.map(n=>[n.getAttribute('cx'),n.getAttribute('cy')])),positions);
-  assert.equal(await second.locator('.page-node:visible').count(),0);
-  await second.getByRole('button',{name:'Pages',exact:true}).click();
+  assert.ok(await second.locator('.page-node:visible').count()>0,'a selected trail shows its page satellites');
   await second.getByText('Map options',{exact:true}).click();await second.locator('#graph-labels').selectOption('all');assert.ok(await second.locator('.page-label:visible').count()>0);
-  await second.getByRole('searchbox').fill('no such recorded page');await second.getByText('0 matching trails and pages. Press Enter to inspect the first match.').waitFor();
+  await second.getByRole('searchbox').fill('no such recorded page');await second.getByText('0 matching trails and pages.',{exact:true}).waitFor();
   await second.getByRole('searchbox').press('Escape');
   await second.getByRole('searchbox').fill('Async Rust');await second.keyboard.press('Enter');
   await second.waitForTimeout(300);
@@ -83,7 +82,7 @@ try {
     for(const theme of ['Light','Dark']){
       if(await page.locator('html').getAttribute('data-theme')!==theme.toLowerCase()) await page.getByRole('button',{name:`${theme} theme`,exact:true}).click();
       const background=await page.locator('body').evaluate(n=>getComputedStyle(n).backgroundColor);
-      assert.equal(background,theme==='Light'?'rgb(245, 246, 242)':'rgb(12, 16, 14)',`${file}: rendered ${theme} theme`);
+      assert.equal(background,theme==='Light'?'rgb(247, 248, 251)':'rgb(11, 14, 20)',`${file}: rendered ${theme} theme`);
       for(const width of [1536,1024,768,390,320]){await page.setViewportSize({width,height:950});assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1),`${file} ${theme}: overflow at ${width}`);}
     }
   }

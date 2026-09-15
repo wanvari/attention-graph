@@ -70,7 +70,8 @@
     const styles=[...next.querySelectorAll('link[rel="stylesheet"]')].map(n=>new URL(n.getAttribute('href'),url).href);
     const oldStyles=[...doc.querySelectorAll('link[rel="stylesheet"]')].filter(n=>!styles.includes(n.href));
     for(const href of styles)if(![...doc.querySelectorAll('link[rel="stylesheet"]')].some(n=>n.href===href)) {
-      await new Promise((resolve,reject)=>{const link=doc.createElement('link');link.rel='stylesheet';link.href=href;link.onload=resolve;link.onerror=reject;doc.head.insertBefore(link,doc.querySelector('link[href$="studio.css"]'));});
+      // Page stylesheets follow studio.css, whose tokens they build on.
+      await new Promise((resolve,reject)=>{const link=doc.createElement('link');link.rel='stylesheet';link.href=href;link.onload=resolve;link.onerror=reject;doc.head.append(link);});
     }
     const update=async()=>{
       win.CTPageDispose?.();win.CTPageDispose=null;
@@ -140,7 +141,7 @@
     for(const [key,label,glyph,href] of [['settings','Settings','settings',links.settings],['audit','Record & privacy','lock',links.audit]]) {
       const a=el('a');a.href=href;a.setAttribute('aria-label',label);a.dataset.tooltip=label;a.append(icon(doc,glyph));if(key===view)a.setAttribute('aria-current','page');bottom.append(a);
     }
-    const work=el('div','studio-work'),bar=el('div','studio-topbar'),crumb=el('div','studio-breadcrumb','Workspace / ');crumb.append(el('strong',null,({home:'Overview',graph:'Graph',explore:'Explore',trails:'Your trails',settings:'Settings',audit:'Record & privacy',diagnostics:'Page evidence'})[view]||'Record'));
+    const work=el('div','studio-work'),bar=el('div','studio-topbar');
     const status=el('span','studio-theme-status');status.setAttribute('aria-live','polite');
     const toggle=el('button');toggle.type='button';toggle.dataset.studioThemeToggle='';
     toggle.addEventListener('click',async()=>{
@@ -151,7 +152,7 @@
       catch{apply(doc,previous);status.textContent='Theme could not be saved. Try again.';}finally{toggle.disabled=false;}
     });
     bottom.append(toggle);side.append(bottom);
-    bar.append(crumb,status);const body=el('div','studio-body');body.append(...children);work.append(bar,body);host.append(side,work);
+    bar.append(status);const body=el('div','studio-body');body.append(...children);work.append(bar,body);host.append(side,work);
     const search=body.querySelector('.nt-search');if(search)search.classList.add('studio-search');
     if(doc.studioDock)side.replaceWith(doc.studioDock);else doc.studioDock=side;
     const currentLinks={home:links.home,trails:`${links.home}${links.home.includes('?')?'&':'?'}view=trails`,graph:links.map,explore:links.explore,settings:links.settings,audit:links.audit};

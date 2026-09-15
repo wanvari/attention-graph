@@ -1,5 +1,9 @@
 const FLOW_COLORS = CTMapData.TRANSITION_TYPES;
+const GOLDEN_ANGLE = Math.PI * (3 - Math.sqrt(5));
 
+// The graph is a constellation: every trail is a circle, related titles share
+// a soft halo, and arrows are repeated recorded sequences. Layout is seeded
+// and fixed-length, so the same record always draws the same map.
 class TopicMapVisualizer {
   // `deps.store` is the seam a headless render test drives this through; the
   // extension page passes nothing and gets the real IndexedDB store.
@@ -14,11 +18,11 @@ class TopicMapVisualizer {
     this.zoom = null;
     this.simulation = null;
     this.analysis = null;
-    this.graphData = { nodes: [], links: [] };
+    this.graphData = { nodes: [], links: [], transitionLinks: [], groups: [] };
     this.currentScale = 1;
     this.selected = null;
-    this.topicAnchors = new Map();
     this.savedPositions = new Map();
+    this.initialTrail = new URLSearchParams(window.location.search).get('trail');
     this.init();
   }
 
@@ -45,26 +49,29 @@ class TopicMapVisualizer {
 
     this.svg.selectAll('*').remove();
     const defs = this.svg.append('defs');
-    // One marker per flow type so arrowheads match their line color, sized in
-    // user space so thick lines don't produce giant arrows.
-    for (const [type, item] of Object.entries(FLOW_COLORS)) {
+    // Arrowheads are sized in user space so thick lines don't produce giant arrows.
+    for (const type of Object.keys(FLOW_COLORS)) {
       defs.append('marker')
         .attr('id', `flow-arrow-${type}`)
         .attr('viewBox', '0 -5 10 10')
         .attr('refX', 9)
         .attr('refY', 0)
-        .attr('markerWidth', 12)
-        .attr('markerHeight', 12)
+        .attr('markerWidth', 11)
+        .attr('markerHeight', 11)
         .attr('markerUnits', 'userSpaceOnUse')
         .attr('orient', 'auto')
         .append('path')
         .attr('d', 'M0,-4.5 L10,0 L0,4.5 L2.5,0 Z')
-        .attr('fill', 'var(--text-dim, #a9a2c9)');
+        .attr('fill', 'var(--text-dim, #a9b2c4)');
     }
 
     this.g = this.svg.append('g');
     this.zoom = d3.zoom()
-      .scaleExtent([0.05, 4])
+      .scaleExtent([0.08, 5])
+      // When the inspector sits below the canvas, a plain wheel scrolls the
+      // page; pinch or Ctrl/⌘ + wheel still zooms the map.
+      .filter(event => (!event.ctrlKey || event.type === 'wheel') && !event.button &&
+        (event.type !== 'wheel' || event.ctrlKey || event.metaKey || !this.stackedLayout()))
       .wheelDelta(event => {
         // Trackpad pinches arrive as wheel events with ctrlKey set and tiny
         // deltas, so they need a boost while two-finger scroll stays gentle.
@@ -78,7 +85,17 @@ class TopicMapVisualizer {
         this.updateLevelOfDetail(event.transform.k);
       });
     this.svg.call(this.zoom);
-    this.svg.on('click', () => this.hideTooltip());
+    // A click on empty canvas returns to the overview; d3-zoom suppresses the
+    // click that ends a pan, so dragging the map never clears a selection.
+    this.svg.on('click', event => {
+      this.hideTooltip();
+      if (event.target === this.svg.node() && this.selected) this.clearSelection();
+    });
+  }
+
+  stackedLayout() {
+    const workspace = document.querySelector('.workspace');
+    return !!workspace && getComputedStyle(workspace).gridTemplateColumns.trim().split(/\s+/).length < 2;
   }
 
   setupControls() {
@@ -90,8 +107,7 @@ class TopicMapVisualizer {
       });
     }
     document.getElementById('graph-labels')?.addEventListener('change', () => this.updateLevelOfDetail(this.currentScale));
-    document.getElementById('show-pages')?.addEventListener('change', () => { if(document.getElementById('show-pages').checked)document.getElementById('show-flows').checked=false; if(this.selected)this.layoutFocus(); this.updateLevelOfDetail(this.currentScale); });
-    document.getElementById('show-flows')?.addEventListener('change', () => { if(document.getElementById('show-flows').checked)document.getElementById('show-pages').checked=false; if(this.selected)this.layoutFocus(); this.updateLevelOfDetail(this.currentScale); });
+    for (const id of ['show-pages', 'show-flows']) document.getElementById(id)?.addEventListener('change', () => this.updateLevelOfDetail(this.currentScale));
     document.getElementById('graph-search')?.addEventListener('input', () => this.searchGraph());
     document.getElementById('graph-search')?.addEventListener('keydown', event => {
       if (event.key === 'Enter') { const node = this.searchMatches?.[0]; if (node) this.openNode(node); }
@@ -111,25 +127,28 @@ class TopicMapVisualizer {
     controls.className = 'zoom-controls';
     controls.innerHTML = `
       <button class="zoom-control" type="button" data-zoom="in" aria-label="Zoom in" title="Zoom in">+</button>
-      <button class="zoom-control" type="button" data-zoom="out" aria-label="Zoom out" title="Zoom out">-</button>
-      <button class="zoom-control" type="button" data-zoom="reset" aria-label="Fit graph to view" title="Fit graph to view">Overview</button>
+      <button class="zoom-control" type="button" data-zoom="out" aria-label="Zoom out" title="Zoom out">−</button>
+      <button class="zoom-control" type="button" data-zoom="reset" aria-label="Fit every trail in view" title="Fit every trail in view">Fit</button>
       <button class="zoom-control" type="button" data-zoom="clear" aria-label="Clear selection" title="Clear selection">Clear</button>
     `;
     container.appendChild(controls);
     const modes=document.createElement('div');modes.className='graph-focus-tabs';modes.setAttribute('role','group');modes.setAttribute('aria-label','Map detail');
     for(const [label,id] of [['Pages','show-pages'],['Connections','show-flows']]) {
       const button=document.createElement('button');button.type='button';button.textContent=label;button.dataset.graphMode=id;
-      button.addEventListener('click',()=>{const input=document.getElementById(id);input.checked=true;input.dispatchEvent(new Event('change'));});modes.append(button);
+      button.addEventListener('click',()=>{const input=document.getElementById(id);input.checked=!input.checked;input.dispatchEvent(new Event('change'));});modes.append(button);
     }
     container.append(modes);
     controls.addEventListener('click', event => {
       const action = event.target.dataset.zoom;
       if (!action) return;
       if (action === 'in' || action === 'out') this.overviewMode = false;
-      if (action === 'in') this.svg.transition().duration(180).call(this.zoom.scaleBy, 1.7);
-      if (action === 'out') this.svg.transition().duration(180).call(this.zoom.scaleBy, 1 / 1.7);
-      if (action === 'reset') { const search = document.getElementById('graph-search'); if (search) search.value = ''; this.query = ''; this.clearSelection(); this.fitToViewport(); }
-      if (action === 'clear') { const search = document.getElementById('graph-search'); if (search) search.value = ''; this.clearSelection(); }
+      if (action === 'in') this.svg.transition().duration(180).call(this.zoom.scaleBy, 1.6);
+      if (action === 'out') this.svg.transition().duration(180).call(this.zoom.scaleBy, 1 / 1.6);
+      if (action === 'reset' || action === 'clear') {
+        const search = document.getElementById('graph-search'); if (search) search.value = '';
+        this.query = ''; this.clearSelection();
+        if (action === 'reset') this.fitToViewport();
+      }
     });
   }
 
@@ -139,9 +158,8 @@ class TopicMapVisualizer {
     this.width = rect.width || this.width;
     this.height = rect.height || this.height;
     this.svg.attr('width', this.width).attr('height', this.height);
-    if (!this.selected && this.updatePositions) {
-      this.renderGraph(this.graphData);
-    } else if(this.selected) this.layoutFocus(); else this.updateLevelOfDetail(this.currentScale);
+    if (!this.updatePositions) return;
+    if (this.selected) this.updateLevelOfDetail(this.currentScale); else this.fitToViewport(true);
   }
 
   async loadAnalysis(forceRefresh) {
@@ -158,9 +176,10 @@ class TopicMapVisualizer {
         return;
       }
       this.analysis = analysis;
-      this.setHealth('ok', this.isDemo ? 'Recorded sample' : `Registry · last run ${timeAgo(analysis.generatedAt)}`);
+      this.setHealth('ok', this.isDemo ? 'Recorded sample' : `Grouped ${timeAgo(analysis.generatedAt)}`);
       this.renderAnalysis(analysis);
       this.setLoading(false);
+      this.openInitialTrail();
       this.checkStaleness(analysis);
     } catch (error) {
       if (version !== this.loadVersion) return;
@@ -171,6 +190,13 @@ class TopicMapVisualizer {
         warnings: ['Analysis failed before the topic map could be built.']
       });
     }
+  }
+
+  // A trail link from Home or Your trails opens that trail once.
+  openInitialTrail() {
+    const id = this.initialTrail; this.initialTrail = null;
+    const node = id && this.graphData.nodes.find(n => n.type === 'topic' && n.id === id);
+    if (node) this.openNode(node);
   }
 
   // If the stored analysis is being shown but the user has browsed since it
@@ -199,7 +225,7 @@ class TopicMapVisualizer {
     banner.innerHTML = `
       <span>${escapeHtml(count)} newer history entries are available. Refresh to read the latest saved pages.</span>
       <a class="banner-link" href="map.html?refresh=1">Refresh graph</a>
-      <button type="button" id="staleness-dismiss" class="banner-dismiss" title="Dismiss">×</button>
+      <button type="button" id="staleness-dismiss" class="banner-dismiss" title="Dismiss" aria-label="Dismiss">×</button>
     `;
     document.getElementById('staleness-dismiss').addEventListener('click', () => {
       banner.hidden = true;
@@ -214,10 +240,10 @@ class TopicMapVisualizer {
     this.svg.interrupt();
     this.g.selectAll('*').remove();
     this.svg.selectAll('.label-overlay').remove();
-    this.graphData = { nodes: [], links: [], transitionLinks: [] };
+    this.graphData = { nodes: [], links: [], transitionLinks: [], groups: [] };
     this.selected = null;
     this.searchMatches = [];
-    this.nodeSelection = this.labelSelection = this.updatePositions = null;
+    this.nodeSelection = this.labelSelection = this.haloSelection = this.groupLabelSelection = this.updatePositions = null;
     const hint = document.getElementById('graph-view-status');
     if (hint) hint.textContent = 'No trails in this view';
     this.setLoading(false);
@@ -245,15 +271,14 @@ class TopicMapVisualizer {
   renderAnalysis(analysis) {
     this.hideTooltip();
     this.analysis = analysis;
-    for (const node of this.graphData.nodes) if (Number.isFinite(node.x)) this.savedPositions.set(node.id, { x: node.x, y: node.y, fx: node.fx, fy: node.fy });
+    for (const node of this.graphData.nodes) if (Number.isFinite(node.x)) this.savedPositions.set(node.id, { x: node.x, y: node.y });
     this.selected = null;
     this.graphData = this.buildGraphData(analysis);
     this.renderSummary(analysis);
     this.renderLegend();
     this.renderGraph(this.graphData);
-    this.renderAtlas();
     this.searchGraph();
-    const when = this.isDemo ? ' Synthetic sample, March 2026.' : analysis.generatedAt ? ` Analyzed ${timeAgo(analysis.generatedAt)}.` : '';
+    const when = this.isDemo ? ' Synthetic sample, March 2026.' : analysis.generatedAt ? ` Grouped ${timeAgo(analysis.generatedAt)}.` : '';
     this.setStatus(`${analysis.topics.length} trails · ${analysis.coverage.visitsExpanded} recorded visits.${when}`);
   }
 
@@ -268,82 +293,81 @@ class TopicMapVisualizer {
       : rankedTopics.slice(0, Number(topicLimitValue));
     const visibleTopicIds = new Set(visibleTopics.map(topic => topic.id));
     this.visibleTopicCount = visibleTopics.length;
-    // Keep density visible even when the whole record is zoomed out.
-    const attentionMass = topic => topic.visitCount;
+    // Circle area follows visit count, within readable bounds.
     const topicRadius = d3.scaleSqrt()
-      .domain([0, Math.max(100, d3.max(visibleTopics, attentionMass) || 1)])
-      .range([11, 28]);
-    const groups = CTMapData.buildTopicGroups(visibleTopics);
-    const groupByTopic = new Map(groups.flatMap(g => g.topicIds.map(id => [id, g])));
+      .domain([0, Math.max(8, d3.max(visibleTopics, topic => topic.visitCount) || 1)])
+      .range([7, 30]);
+    // Trails keep the same color here as on Home and Your trails.
+    const colorFor = topic => globalThis.CTStudio ? CTStudio.topicColor(topic.id) : topic.color;
     const topicNodes = visibleTopics.map((topic, index) => ({
       id: topic.id,
       type: 'topic',
       topic,
       label: topic.label,
-      groupId: groupByTopic.get(topic.id)?.id,
-      color: globalThis.CTStudio ? CTStudio.topicColor(groupByTopic.get(topic.id)?.related ? groupByTopic.get(topic.id).id : topic.id) : topic.color,
+      color: colorFor(topic),
       attentionBand: topic.attentionBand,
       attentionRank: topic.attentionRank,
-      radius: topicRadius(attentionMass(topic)),
+      radius: Math.max(8, topicRadius(topic.visitCount)),
       index
     }));
+    const nodeById = new Map(topicNodes.map(n => [n.id, n]));
+    const groups = CTMapData.buildTopicGroups(visibleTopics);
+    for (const group of groups) {
+      const members = group.topicIds.map(id => nodeById.get(id));
+      for (const member of members) member.groupId = group.id;
+      // A halo takes the color of its busiest trail.
+      group.color = members.slice().sort((a, b) => b.topic.visitCount - a.topic.visitCount || a.id.localeCompare(b.id))[0].color;
+    }
 
     const maxPageVisits = d3.max(visibleTopics, topic => d3.max(topic.topPages, page => page.visitCount)) || 1;
-    const pageRadius = d3.scaleSqrt().domain([0, maxPageVisits]).range([4, 12]);
+    const pageRadius = d3.scaleSqrt().domain([0, maxPageVisits]).range([3.5, 9]);
     const pageNodes = [];
     const membershipLinks = [];
     for (const topic of visibleTopics) {
+      const parent = nodeById.get(topic.id);
       for (const [pageIndex, page] of (topic.pages || topic.topPages).entries()) {
         const node = {
           id: `${topic.id}:${page.id}`,
           type: 'page',
           pageIndex,
-          siblingCount: (topic.pages || topic.topPages).length,
           page,
           parentTopicId: topic.id,
           label: page.title,
-          groupId: groupByTopic.get(topic.id)?.id,
-          color: topicNodes.find(n => n.id === topic.id).color,
-          radius: Math.max(4.5, pageRadius(page.visitCount))
+          groupId: parent.groupId,
+          color: parent.color,
+          radius: Math.max(3.5, pageRadius(page.visitCount))
         };
         pageNodes.push(node);
-        membershipLinks.push({
-          id: `member:${topic.id}:${page.id}`,
-          type: 'membership',
-          source: topic.id,
-          target: node.id,
-          weight: 1,
-          color: globalThis.CTStudio ? CTStudio.topicColor(topic.id) : topic.color
-        });
+        membershipLinks.push({ id: `member:${topic.id}:${page.id}`, type: 'membership', source: topic.id, target: node.id, color: parent.color });
       }
     }
 
     for (const [pageIndex, page] of (analysis.uncategorized?.pages || []).entries()) {
-      pageNodes.push({ id: `ungrouped:${page.id}`, type: 'page', page, pageIndex, siblingCount: analysis.uncategorized.pages.length, parentTopicId: null, label: page.title, color: 'var(--text-dim, #a5b1c5)', radius: 6 });
+      pageNodes.push({ id: `ungrouped:${page.id}`, type: 'page', page, pageIndex, parentTopicId: null, label: page.title, color: 'var(--text-faint, #838da1)', radius: 3.5 });
     }
     const crossTopic = analysis.transitions.filter(t =>
       t.sourceTopicId !== t.targetTopicId &&
       visibleTopicIds.has(t.sourceTopicId) &&
       visibleTopicIds.has(t.targetTopicId)
     );
-    const limited = crossTopic;
     // When both directions between two topics are visible (A->B and B->A),
     // straight lines overlap almost exactly. Curve each one so both remain
     // legible instead of looking like one line with an arrow on each end.
-    const limitedKeys = new Set(limited.map(t => `${t.sourceTopicId}->${t.targetTopicId}`));
-    const transitionLinks = limited.map(transition => ({
+    const keys = new Set(crossTopic.map(t => `${t.sourceTopicId}->${t.targetTopicId}`));
+    const transitionLinks = crossTopic.map(transition => ({
       id: transition.id,
       type: 'transition',
       source: transition.sourceTopicId,
       target: transition.targetTopicId,
       transition,
       weight: transition.visitCount,
-      color: transition.color,
-      hasReciprocal: limitedKeys.has(`${transition.targetTopicId}->${transition.sourceTopicId}`)
+      hasReciprocal: keys.has(`${transition.targetTopicId}->${transition.sourceTopicId}`)
     }));
-
+    const collection = analysis.uncategorized?.pages?.length
+      ? [{ id: 'collection:ungrouped', type: 'collection', label: `${analysis.uncategorized.pages.length} pages without a trail`, color: 'var(--text-faint, #838da1)', radius: 18, index: topicNodes.length }]
+      : [];
     return {
-      nodes: [...topicNodes, ...(analysis.uncategorized?.pages?.length ? [{id:'collection:ungrouped',type:'collection',label:`${analysis.uncategorized.pages.length} ungrouped pages`,color:'var(--text-dim, #a5b1c5)',radius:28,index:topicNodes.length}] : []), ...pageNodes],
+      nodes: [...topicNodes, ...collection, ...pageNodes],
       links: [...membershipLinks, ...transitionLinks],
       transitionLinks, groups, overviewFlowLimit: flowLimitValue === 'all' ? Infinity : Number(flowLimitValue)
     };
@@ -356,21 +380,19 @@ class TopicMapVisualizer {
     this.width = rect.width || this.width;
     this.height = rect.height || this.height;
     this.svg.attr('width', this.width).attr('height', this.height);
-    const roots = data.nodes.filter(n => n.type !== 'page');
-    this.computeTopicAnchors(roots);
-    for (const node of roots) Object.assign(node, this.topicAnchors.get(node.id));
+    this.layoutConstellation(data);
     for (const node of data.nodes.filter(n => n.type === 'page')) Object.assign(node, this.anchorForNode(node));
     const byId = new Map(data.nodes.map(n => [n.id, n]));
     for (const link of data.links) {
       if (typeof link.source === 'string') link.source = byId.get(link.source);
       if (typeof link.target === 'string') link.target = byId.get(link.target);
     }
-    const groupLayer = this.g.append('g').attr('class', 'group-layer');
-    this.groupSelection = groupLayer.selectAll('rect').data(this.groupBounds).enter().append('rect')
-      .attr('class', 'graph-region').attr('x', g => g.x).attr('y', g => g.y).attr('width', g => g.w).attr('height', g => g.h)
-      .attr('rx', 18).attr('fill', g => g.color).attr('fill-opacity', .055).attr('stroke', g => g.color).attr('stroke-opacity', .35)
+    const related = data.groups.filter(g => g.related);
+    const haloLayer = this.g.append('g').attr('class', 'halo-layer');
+    this.haloSelection = haloLayer.selectAll('path').data(related).enter().append('path')
+      .attr('class', 'graph-region').attr('fill', g => g.color).attr('stroke', g => g.color)
       .attr('vector-effect', 'non-scaling-stroke').attr('role', 'button').attr('tabindex', 0)
-      .attr('aria-label', g => `Group: ${g.label}, ${g.topicIds.length} trails`)
+      .attr('aria-label', g => `Related titles: ${g.label}, ${g.topicIds.length} trails`)
       .on('click', (event, group) => { event.stopPropagation(); this.selectGroup(group); })
       .on('keydown', (event, group) => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); this.selectGroup(group); } });
     const transitionLayer = this.g.append('g').attr('class', 'transition-layer');
@@ -378,15 +400,15 @@ class TopicMapVisualizer {
     const nodeLayer = this.g.append('g').attr('class', 'node-layer');
     this.svg.selectAll('.label-overlay').remove();
     const labelLayer = this.svg.append('g').attr('class', 'label-layer label-overlay');
-    this.groupLabelSelection = labelLayer.selectAll('.group-label').data(this.groupBounds).enter().append('text')
-      .attr('class', 'group-label').attr('aria-hidden', 'true')
+    this.groupLabelSelection = labelLayer.selectAll('.group-label').data(related).enter().append('text')
+      .attr('class', 'group-label').attr('aria-hidden', 'true').style('fill', g => g.color)
       .on('click', (event, group) => { event.stopPropagation(); this.selectGroup(group); });
     this.membershipSelection = membershipLayer.selectAll('line').data(data.links.filter(l => l.type === 'membership')).enter().append('line')
-      .attr('class', 'membership-link').attr('stroke', l => l.color).attr('stroke-opacity', .4).attr('vector-effect', 'non-scaling-stroke').attr('stroke-width', 1);
-    const activateLink = (event, link) => { event.stopPropagation(); this.selectTransition(link.transition); this.zoomToNodes([link.source, link.target]); };
+      .attr('class', 'membership-link').attr('stroke', l => l.color).attr('vector-effect', 'non-scaling-stroke').attr('stroke-width', 1);
+    const activateLink = (event, link) => { event.stopPropagation(); this.selectTransition(link.transition); this.zoomToNodes([link.source, link.target], 110); };
     this.linkSelection = transitionLayer.selectAll('path.flow-link').data(data.transitionLinks).enter().append('path')
-      .attr('class', 'flow-link').attr('fill', 'none').attr('stroke', 'var(--text-dim, #a5b1c5)')
-      .attr('stroke-width', l => Math.min(3, 1 + Math.sqrt(l.weight) / 3)).attr('vector-effect', 'non-scaling-stroke').attr('stroke-opacity', .5)
+      .attr('class', 'flow-link').attr('fill', 'none')
+      .attr('stroke-width', l => Math.min(3.2, 1 + Math.sqrt(l.weight) / 3)).attr('vector-effect', 'non-scaling-stroke')
       .attr('marker-end', l => `url(#flow-arrow-${l.transition.type})`).attr('role', 'button').attr('tabindex', 0)
       .attr('aria-label', l => `${l.transition.sourceLabel} to ${l.transition.targetLabel}, ${l.weight} recorded sequences`)
       .on('click', activateLink).on('keydown', (event, link) => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); activateLink(event, link); } })
@@ -397,9 +419,8 @@ class TopicMapVisualizer {
     const activateNode = (event, node) => { event.stopPropagation(); this.openNode(node); };
     this.nodeSelection = nodeLayer.selectAll('circle').data(data.nodes).enter().append('circle')
       .attr('class', n => n.type === 'topic' ? 'topic-node' : n.type === 'collection' ? 'collection-node' : 'page-node')
-      .attr('fill', n => n.type === 'topic' ? n.color : 'var(--panel, #fff)').attr('stroke', n => n.color)
-      .attr('stroke-width', n => n.type === 'collection' ? 2 : 1.5).attr('vector-effect', 'non-scaling-stroke')
-      .attr('stroke-dasharray', n => n.type === 'collection' ? '4 3' : null)
+      .attr('fill', n => n.type === 'topic' ? n.color : null).attr('stroke', n => n.type === 'page' ? n.color : null)
+      .attr('vector-effect', 'non-scaling-stroke')
       .attr('role', 'button').attr('tabindex', 0)
       .attr('aria-label', n => n.type === 'topic' ? `Trail: ${n.label}, ${n.topic.pageCount} pages` : n.type === 'collection' ? n.label : `Page: ${n.page.title}`)
       .on('click', activateNode).on('keydown', (event, node) => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); activateNode(event, node); } if (event.key === 'Escape') this.clearSelection(); })
@@ -411,115 +432,94 @@ class TopicMapVisualizer {
       .call(d3.drag().on('start', (e,n) => this.dragStarted(e,n)).on('drag', (e,n) => this.dragged(e,n)).on('end', (e,n) => this.dragEnded(e,n)));
     this.labelSelection = labelLayer.selectAll('.node-label').data(data.nodes).enter().append('text')
       .attr('class', n => n.type === 'page' ? 'page-label' : 'topic-label').attr('aria-hidden', 'true')
-      .text(n => truncate(n.label, n.type === 'collection' ? 30 : roots.length > 60 ? 21 : 30)).on('click', activateNode);
+      .text(n => truncate(n.label, 30)).on('click', activateNode);
     this.labelWidths = new Map();
     this.labelCharLimit = null;
     this.updatePositions = () => {
       this.nodeSelection.attr('cx', n => n.x).attr('cy', n => n.y);
       this.membershipSelection.attr('x1', l => l.source.x).attr('y1', l => l.source.y).attr('x2', l => l.target.x).attr('y2', l => l.target.y);
+      this.updateHalos();
       this.updateLevelOfDetail(this.currentScale);
     };
     this.updatePositions();
     this.fitToViewport(true);
   }
 
-  atlasFrame(title, subtitle, back=false) {
-    const atlas=document.getElementById('graph-atlas');
-    if(!atlas)return document.getElementById('evidence-panel');
-    document.querySelector('.workspace').hidden=true;atlas.hidden=false;atlas.replaceChildren();
-    const head=document.createElement('div');head.className='atlas-heading';
-    const text=document.createElement('div'),h=document.createElement('h2'),p=document.createElement('p');h.textContent=title;p.textContent=subtitle;text.append(h,p);head.append(text);
-    if(back){const b=document.createElement('button');b.type='button';b.className='graph-back';b.textContent='← All trails';b.addEventListener('click',()=>{document.getElementById('graph-search').value='';this.clearSelection();});head.prepend(b);}
-    atlas.append(head);return atlas;
-  }
-
-  renderAtlas() {
-    if(!document.getElementById('graph-atlas')){this.renderDefaultEvidence(this.analysis);return;}
-    this.selected=null;this.focusIds=null;
-    const related=this.graphData.groups.filter(g=>g.related),others=this.graphData.groups.filter(g=>!g.related);
-    const atlas=this.atlasFrame('Find a place to return to', `${this.visibleTopicCount} trails, organized by related titles. Choose a group, then a trail to explore its pages.`);
-    const all=document.createElement('button');all.type='button';all.className='atlas-all';all.textContent='Browse all trails ↗';
-    all.addEventListener('click',()=>{const frame=this.atlasFrame('All trails',`${this.visibleTopicCount} trails in this period.`,true);this.appendNodeList(frame,this.graphData.nodes.filter(n=>n.type==='topic'));});atlas.firstElementChild.append(all);
-    const grid=document.createElement('div');grid.className='atlas-grid';
-    for(const group of [...related,...others]) {
-      const nodes=this.graphData.nodes.filter(n=>n.type==='topic'&&group.topicIds.includes(n.id));
-      const card=document.createElement('button');card.type='button';card.className='atlas-group';card.setAttribute('aria-label',`Group: ${group.label}, ${nodes.length} trails`);
-      card.style.setProperty('--group-color',CTStudio.topicColor(group.id));
-      const top=document.createElement('div');top.className='atlas-card-heading';
-      const title=document.createElement('strong');title.textContent=group.label;
-      const count=document.createElement('span');count.textContent=`${nodes.length} trails`;top.append(title,count);
-      const preview=document.createElement('div');preview.className='atlas-preview';
-      for(const node of nodes.slice(0,3)){const row=document.createElement('span');row.textContent=node.label;preview.append(row);}
-      const foot=document.createElement('span');foot.className='atlas-card-foot';foot.textContent=`${nodes.reduce((sum,n)=>sum+n.topic.visitCount,0).toLocaleString()} visits · Open group ↗`;
-      card.append(top,preview,foot);card.addEventListener('click',()=>this.selectGroup(group));grid.append(card);
+  // Groups of related titles, then every other trail, take slots on a
+  // sunflower spiral: the largest groups sit near the middle and the layout
+  // fills a disc without a grid. A short, seeded force relaxation then pulls
+  // repeatedly sequenced trails together and removes overlaps.
+  layoutConstellation(data) {
+    const topics = data.nodes.filter(n => n.type === 'topic');
+    const byId = new Map(topics.map(n => [n.id, n]));
+    const slots = data.groups.filter(g => g.related).map(g => ({ id: g.id, members: g.topicIds.map(id => byId.get(id)).filter(Boolean), related: true }));
+    const grouped = new Set(slots.flatMap(s => s.members.map(n => n.id)));
+    for (const node of topics) if (!grouped.has(node.id)) slots.push({ id: node.id, members: [node], related: false });
+    const weight = slot => slot.members.reduce((sum, n) => sum + n.topic.visitCount, 0);
+    slots.sort((a, b) => b.members.length - a.members.length || weight(b) - weight(a) || a.id.localeCompare(b.id));
+    let area = 0;
+    slots.forEach((slot, index) => {
+      const size = slot.members.reduce((sum, n) => sum + (n.radius + 24) ** 2, 0);
+      const distance = Math.sqrt((area + size / 2) / Math.PI) * 1.9;
+      area += size;
+      const angle = index * GOLDEN_ANGLE;
+      slot.x = Math.cos(angle) * distance; slot.y = Math.sin(angle) * distance;
+      for (const node of slot.members) {
+        const kept = this.savedPositions.get(node.id);
+        node.slotX = slot.x; node.slotY = slot.y; node.related = slot.related;
+        node.x = kept ? kept.x : slot.x + (hashUnit(node.id) - .5) * 48;
+        node.y = kept ? kept.y : slot.y + (hashUnit(`${node.id}:y`) - .5) * 48;
+        node.fx = node.fy = null; node.vx = node.vy = 0;
+      }
+    });
+    const links = data.transitionLinks.map(l => ({ source: typeof l.source === 'string' ? l.source : l.source.id, target: typeof l.target === 'string' ? l.target : l.target.id, weight: l.weight }));
+    const simulation = d3.forceSimulation(topics)
+      .force('slot-x', d3.forceX(n => n.slotX).strength(n => n.related ? .2 : .07))
+      .force('slot-y', d3.forceY(n => n.slotY).strength(n => n.related ? .2 : .07))
+      .force('link', d3.forceLink(links).id(n => n.id).distance(l => 60 + l.source.radius + l.target.radius).strength(l => Math.min(.3, .07 * Math.log1p(l.weight))))
+      .force('charge', d3.forceManyBody().strength(-30).distanceMax(240))
+      .force('collide', d3.forceCollide(n => n.radius + 16).strength(.95).iterations(2))
+      .stop();
+    if (typeof simulation.randomSource === 'function' && typeof d3.randomLcg === 'function') simulation.randomSource(d3.randomLcg(0.42));
+    simulation.tick(Math.min(420, 160 + topics.length * 2));
+    for (const node of topics) { node.vx = node.vy = 0; }
+    const collection = data.nodes.find(n => n.type === 'collection');
+    if (collection) {
+      const extent = Math.max(160, ...topics.map(n => Math.hypot(n.x, n.y) + n.radius));
+      const kept = this.savedPositions.get(collection.id);
+      collection.x = kept ? kept.x : extent * .74 + 70;
+      collection.y = kept ? kept.y : extent * .74 + 40;
     }
-    atlas.append(grid);
-    const ungrouped=this.graphData.nodes.find(n=>n.type==='collection');
-    if(ungrouped){const b=document.createElement('button');b.type='button';b.className='atlas-ungrouped';b.textContent=`${this.analysis.uncategorized.pages.length.toLocaleString()} pages without a trail`;b.addEventListener('click',()=>this.openNode(ungrouped));atlas.append(b);}
-    this.appendConnectionAudit(atlas);
   }
 
-  revealGraph() {
-    const atlas=document.getElementById('graph-atlas');if(atlas){atlas.hidden=true;atlas.replaceChildren();}
-    document.querySelector('.workspace').hidden=false;
-    const r=document.getElementById('graph-container').getBoundingClientRect();
-    this.width=r.width||this.width;this.height=r.height||this.height;this.svg.attr('width',this.width).attr('height',this.height);
-  }
-
-  layoutFocus() {
-    const active=this.selected;if(!active||active.kind==='collection'||active.kind==='group')return;
-    const nodes=this.graphData.nodes;
-    const topicId=active.kind==='topic'?active.id:active.topicId;
-    const root=nodes.find(n=>n.id===topicId)||nodes.find(n=>n.page?.id===active.id);
-    if(!root)return;
-    const routes=document.getElementById('show-flows')?.checked;
-    const links=routes?this.graphData.transitionLinks.filter(l=>l.source.id===root.id||l.target.id===root.id).sort((a,b)=>b.weight-a.weight).slice(0,8):[];
-    const neighbors=[...new Set(links.map(l=>l.source.id===root.id?l.target:l.source))];
-    const pages=topicId?nodes.filter(n=>n.type==='page'&&n.parentTopicId===topicId):[];
-    const chosen=pages.find(n=>n.page.id===active.id);
-    const leaves=routes?neighbors:[...(chosen?[chosen]:[]),...pages.filter(n=>n!==chosen)].slice(0,8);
-    this.focusIds=new Set([root.id,...leaves.map(n=>n.id)]);
-    Object.assign(root,{x:-150,y:0});
-    leaves.forEach((node,i)=>Object.assign(node,{x:160,y:(i-(leaves.length-1)/2)*85}));
-    if(!leaves.length)Object.assign(root,{x:0,y:0});
-    this.overviewMode=false;this.updatePositions();this.zoomToNodes([root,...leaves],100,true);
-  }
-
-  computeTopicAnchors(nodes) {
-    this.topicAnchors.clear();
-    const groups = this.graphData.groups.map(g => ({...g, nodes: nodes.filter(n => g.topicIds.includes(n.id))}));
-    const collection = nodes.find(n => n.type === 'collection');
-    if (collection) groups.push({id:'subject:ungrouped',label:'Pages without a trail',topicIds:[],nodes:[collection]});
-    this.narrowOverview = this.width < 600 && nodes.length > 30;
-    const aspect = this.width / Math.max(350, this.height), area = Math.max(12, nodes.length) * 50000;
-    const w = Math.sqrt(area * aspect), h = Math.sqrt(area / aspect);
-    const tree = d3.hierarchy({children:groups}).sum(g => g.nodes ? Math.max(3, g.nodes.length) : 0);
-    d3.treemap().size([w,h]).paddingInner(24).round(true)(tree);
-    this.groupBounds = tree.leaves().map((leaf, index) => {
-      const group = leaf.data;
-      const cols=this.width<340?1:2, cellWidth=(this.width-20)/cols, cellHeight=cols===1?46:80;
-      const x=this.narrowOverview?(index%cols)*cellWidth-this.width/2+10:leaf.x0-w/2;
-      const y=this.narrowOverview?Math.floor(index/cols)*cellHeight-Math.ceil(groups.length/cols)*cellHeight/2:leaf.y0-h/2;
-      const width=this.narrowOverview?cellWidth-10:leaf.x1-leaf.x0, height=this.narrowOverview?cellHeight-10:leaf.y1-leaf.y0;
-      const columns = Math.max(1, Math.ceil(Math.sqrt(group.nodes.length * Math.max(1,width-64) / Math.max(1,height-110)))) ;
-      const rows = Math.ceil(group.nodes.length / columns);
-      group.nodes.forEach((node,i) => this.topicAnchors.set(node.id, this.narrowOverview
-        ? {x:x+(i%columns+.5)*width/columns,y:y+(Math.floor(i/columns)+.5)*height/rows}
-        : {x:x+32+(i%columns+.5)*(width-64)/columns, y:y+110+(Math.floor(i/columns)+.5)*(height-150)/rows}));
-      return {...group,x,y,w:width,h:height,color:group.related && globalThis.CTStudio ? CTStudio.topicColor(group.id) : 'var(--text-dim, #a5b1c5)'};
+  // Halos are smoothed hulls around each related group's circles.
+  updateHalos() {
+    if (!this.haloSelection) return;
+    const byId = new Map(this.graphData.nodes.map(n => [n.id, n]));
+    const line = d3.line().curve(d3.curveCatmullRomClosed.alpha(.9));
+    this.haloSelection.attr('d', group => {
+      const points = [];
+      for (const id of group.topicIds) {
+        const node = byId.get(id); if (!node) continue;
+        const pad = node.radius + 24;
+        for (let i = 0; i < 12; i++) { const a = i / 12 * Math.PI * 2; points.push([node.x + Math.cos(a) * pad, node.y + Math.sin(a) * pad]); }
+      }
+      const hull = d3.polygonHull(points) || points;
+      const xs = hull.map(p => p[0]), ys = hull.map(p => p[1]);
+      group.bounds = { x: Math.min(...xs), y: Math.min(...ys), w: Math.max(...xs) - Math.min(...xs), h: Math.max(...ys) - Math.min(...ys) };
+      return line(hull);
     });
   }
 
   anchorForNode(node) {
-    const parent = this.topicAnchors.get(node.parentTopicId || 'collection:ungrouped') || {x: 0, y: 0};
-    const angle = node.pageIndex * Math.PI * (3 - Math.sqrt(5));
-    const radius = 65 + 18 * Math.sqrt(node.pageIndex);
-    return {x: parent.x + Math.cos(angle) * radius, y: parent.y + Math.sin(angle) * radius};
+    const parent = this.graphData.nodes.find(n => n.id === (node.parentTopicId || 'collection:ungrouped')) || { x: 0, y: 0, radius: 10 };
+    const angle = node.pageIndex * GOLDEN_ANGLE;
+    const radius = parent.radius + 30 + 14 * Math.sqrt(node.pageIndex);
+    return { x: parent.x + Math.cos(angle) * radius, y: parent.y + Math.sin(angle) * radius };
   }
 
   renderSummary(analysis) {
     const strip = document.getElementById('summary-strip');
-    const coverage = analysis.coverage;
     const categorized = analysis.categorizedCoverage || {};
     const visibleFlows = this.graphData.transitionLinks || [];
     const metric = (value, label, title) => `
@@ -529,33 +529,44 @@ class TopicMapVisualizer {
       </div>
     `;
     strip.innerHTML = `
-      ${metric(`${this.visibleTopicCount || analysis.topics.length} / ${analysis.topics.length}`, 'trails shown', 'Shown topics are the highest estimated-time topics selected by the Topics control.')}
+      ${metric(`${this.visibleTopicCount || analysis.topics.length} / ${analysis.topics.length}`, 'trails shown', 'Shown topics are the highest estimated-time topics selected by the Trails control.')}
       ${metric(this.graphData.nodes.filter(n => n.type === 'page').length, 'recorded pages', 'Pages available through search and selected trail detail, including ungrouped pages.')}
       ${metric(formatMinutes(categorized.estimatedActiveMinutes || 0), 'grouped estimated time', 'Estimated browsing time represented by the analyzed topic pages. Dwell is estimated from gaps and capped at 30 minutes.')}
       ${metric(visibleFlows.length, 'repeated routes', 'Directed trail pairs with at least two consecutive visit sequences. Select a trail to see its routes.')}
-      <div class="summary-note">Topic coverage: ${formatPercent(categorized.activeTimeCoverage || 0)} of estimated recorded time, ${formatPercent(categorized.visitCoverage || 0)} of visits.</div>
+      <div class="summary-note">Grouped: ${formatPercent(categorized.activeTimeCoverage || 0)} of estimated recorded time, ${formatPercent(categorized.visitCoverage || 0)} of visits.</div>
     `;
   }
 
   renderLegend() {
     document.getElementById('legend').innerHTML = `
-      <span class="graph-key"><i></i>Bigger circle · more visits</span>
-      <span>Boxes · shared words in trail titles</span>
-      <span class="graph-key flow"><i></i>Arrow · visited next, 2+ times</span>
-      <span>Select a group or trail to explore</span>`;
+      <span class="graph-key"><i></i>Larger circle · more visits</span>
+      <span class="graph-key halo"><i></i>Halo · shared words in trail titles</span>
+      <span class="graph-key flow"><i></i>Arrow · visited next, 2+ times</span>`;
+  }
+
+  // The inspector beside the canvas. Every view starts from a fresh frame.
+  panelFrame(title, subtitle, kicker, back = true) {
+    const panel = document.getElementById('evidence-panel'); panel.textContent = ''; panel.scrollTop = 0;
+    const section = document.createElement('div'); section.className = 'evidence-section';
+    if (kicker) { const k = document.createElement('div'); k.className = 'panel-kicker'; k.textContent = kicker; section.append(k); }
+    const heading = document.createElement('h2'); heading.textContent = title;
+    const note = document.createElement('p'); note.className = 'graph-browser-note'; note.textContent = subtitle;
+    section.append(heading, note); panel.append(section);
+    if (back) this.addOverviewButton();
+    return section;
   }
 
   selectGroup(group) {
     this.hideTooltip(); this.query = '';
     const search = document.getElementById('graph-search'); if (search) search.value = '';
-    if (group.id === 'subject:ungrouped') { this.openNode(this.graphData.nodes.find(n => n.type === 'collection')); return; }
-    this.selected = {kind:'group',id:group.id};
+    this.selected = { kind: 'group', id: group.id };
     const nodes = this.graphData.nodes.filter(n => n.type === 'topic' && group.topicIds.includes(n.id));
-    const atlas=this.atlasFrame(group.label, group.related ? `These ${nodes.length} trails share “${group.cue}” in their titles.` : `${nodes.length} trails without a shared title match.`, true);
-    const columns=document.createElement('div');columns.className='atlas-group-content';
-    const list=document.createElement('div'), context=document.createElement('div');context.className='atlas-context';
-    this.appendNodeList(list,nodes);this.appendSites(context,nodes.flatMap(n=>n.topic.pages));this.appendTimeline(context,group.topicIds);
-    columns.append(list,context);atlas.append(columns);
+    const section = this.panelFrame(group.label, `${nodes.length} trails share “${group.cue}” in their titles. This is a visual grouping; saved trails are unchanged.`, 'Related titles');
+    this.appendNodeList(section, nodes);
+    this.appendSites(section, nodes.flatMap(n => n.topic.pages || n.topic.topPages));
+    this.appendTimeline(section, group.topicIds);
+    this.updateLevelOfDetail(this.currentScale);
+    this.zoomToNodes(nodes.flatMap(n => [{ x: n.x - n.radius, y: n.y - n.radius }, { x: n.x + n.radius, y: n.y + n.radius }]), 110);
   }
 
   appendSites(panel, pages) {
@@ -620,21 +631,32 @@ class TopicMapVisualizer {
     const search = document.getElementById('graph-search');
     if (search) search.value = '';
     this.query = '';
-    this.revealGraph();
     this.setStatus(`${this.analysis.topics.length} trails · ${this.graphData.nodes.filter(n => n.type === 'page').length} recorded pages. Selected: ${node.type === 'page' ? node.page.title : node.label}`);
-    if (node.type === 'topic') { this.selectTopic(node.topic); this.zoomToTopic(node.id); }
+    if (node.type === 'topic') { this.selectTopic(node.topic); this.focusTopic(node.id); }
     else if (node.type === 'collection') {
-      this.selected = {kind: 'collection', id: node.id};
+      this.selected = { kind: 'collection', id: node.id };
       const pages = this.graphData.nodes.filter(n => n.type === 'page' && !n.parentTopicId);
-      const atlas=this.atlasFrame('Ungrouped pages', `${pages.length} recorded pages without a trail. Search by title or website, or browse the full list.`, true);
-      this.appendNodeList(atlas,pages);this.appendConnectionAudit(atlas);
-      return;
+      const section = this.panelFrame('Pages without a trail', `${pages.length} recorded pages have no trail. Search by title or website, or browse the full list.`, 'Loose pages');
+      this.appendNodeList(section, pages); this.appendConnectionAudit(section);
+      this.updateLevelOfDetail(this.currentScale);
+      this.zoomToNodes([node, ...pages.slice(0, 120)], 60);
     } else {
       this.selectPage(node.page, node.parentTopicId);
-      this.zoomToNodes([node], Math.min(100, this.width / 4));
+      this.updateLevelOfDetail(this.currentScale);
+      this.zoomToNodes([node, ...(node.parentTopicId ? [this.graphData.nodes.find(n => n.id === node.parentTopicId)] : [])], Math.min(140, this.width / 4));
+      this.addOverviewButton();
     }
-    this.layoutFocus();this.addOverviewButton();
   }
+
+  // Selection zooms to the trail and its page satellites; nothing moves.
+  focusTopic(topicId) {
+    const root = this.graphData.nodes.find(n => n.id === topicId); if (!root) return;
+    const pages = document.getElementById('show-pages')?.checked !== false ? this.graphData.nodes.filter(n => n.parentTopicId === topicId) : [];
+    this.overviewMode = false;
+    this.zoomToNodes([root, ...pages], 90);
+  }
+
+  zoomToTopic(topicId) { this.focusTopic(topicId); }
 
   addOverviewButton() {
     const panel = document.getElementById('evidence-panel');
@@ -669,57 +691,60 @@ class TopicMapVisualizer {
     more.addEventListener('click', appendBatch); host.append(list, more); appendBatch();
   }
 
-  renderBrowser(nodes, title, subtitle, back = false) {
-    const panel = document.getElementById('evidence-panel'); panel.textContent = '';
-    const heading = document.createElement('h2'); heading.textContent = title;
-    const note = document.createElement('p'); note.className = 'graph-browser-note'; note.textContent = subtitle;
-    panel.append(heading, note);
-    if (nodes.length) this.appendNodeList(panel, nodes);
-    else { const empty = document.createElement('p'); empty.textContent = 'No matches. Try part of a trail name, page title, or website.'; panel.append(empty); }
-    if (back) this.addOverviewButton();
-  }
-
   renderDefaultEvidence(analysis) {
-    const nodes = this.graphData.nodes.filter(n => n.type !== 'page');
-    const collection = nodes.find(n => n.type === 'collection');
-    this.renderBrowser(collection ? [collection, ...nodes.filter(n => n !== collection)] : nodes,
-      'Browse your trails', 'Select a box for related trails, or a circle for pages.');
+    const topics = this.graphData.nodes.filter(n => n.type === 'topic');
+    const collection = this.graphData.nodes.find(n => n.type === 'collection');
+    const section = this.panelFrame('All trails', `${topics.length} trails in the last ${analysis.windowDays || this.windowDays || 30} days, busiest first. Select a circle, a halo, or a row.`, 'Browse', false);
+    this.appendNodeList(section, collection ? [...topics, collection] : topics);
     const details = document.createElement('details'); details.className = 'graph-record-details';
-    details.innerHTML = `<summary>About this graph</summary>
-      <p>Boxes use shared words in trail titles. They suggest related subjects. Saved page groupings stay the same.</p>
-      <p>Circle size shows visit volume, with minimum and maximum sizes for readability. Arrows show repeated visit order across any tabs; they do not prove a link was clicked.</p>
+    details.innerHTML = `<summary>About this map</summary>
+      <p>Circle size shows recorded visits, within readable limits. Halos group trails whose titles share a distinctive word; they suggest related subjects and leave saved trails unchanged.</p>
+      <p>Arrows show repeated visit order across any tabs; they do not prove a link was clicked. Positions come from these relationships, not from time.</p>
       <p>${formatDate(analysis.coverage.startTime)} – ${formatDate(analysis.coverage.endTime)}.</p>`;
-    document.getElementById('evidence-panel').append(details);
-    this.appendConnectionAudit(document.getElementById('evidence-panel'));
+    section.append(details);
+    this.appendConnectionAudit(section);
   }
 
   selectTopic(topic) {
     this.selected = { kind: 'topic', id: topic.id };
     this.updateLevelOfDetail(this.currentScale);
     const panel = document.getElementById('evidence-panel');
+    const trailHref = this.isDemo ? `demo.html?trail=${encodeURIComponent(topic.id)}` : `newtab.html?view=trails&trail=${encodeURIComponent(topic.id)}`;
     panel.innerHTML = `
       <div class="evidence-section">
         <div class="panel-kicker">Selected trail</div>
         <h2>${escapeHtml(topic.label)}</h2>
-        <p>${formatCount(topic.pageCount, 'page')} · ${formatCount(topic.visitCount, 'visit')} · ${formatMinutes(topic.estimatedDwellMinutes)} estimated</p>
-        <button type="button" id="graph-neighborhood" class="secondary-btn">Zoom to this trail</button>
+        <p>${formatCount(topic.pageCount, 'page')} · ${formatCount(topic.visitCount, 'visit')} · ${formatMinutes(topic.estimatedDwellMinutes)} estimated in this period</p>
+        <div class="evidence-actions"><a class="secondary-btn" href="${trailHref}">Open trail details</a><button type="button" id="graph-neighborhood" class="secondary-btn">Zoom to this trail</button></div>
         <details class="graph-record-details"><summary>How this trail was made</summary><p>Pages grouped by their recorded content, or your saved correction.</p><p>${escapeHtml(topic.rationale)}</p><p>${formatPercent(topic.attentionShare || 0)} of grouped estimated time in this period.</p></details>
         <h3>Pages</h3>
         <div id="graph-topic-pages"></div>
-        <p><a class="secondary-btn" href="${this.isDemo ? `demo.html?trail=${encodeURIComponent(topic.id)}` : `newtab.html?trail=${encodeURIComponent(topic.id)}`}">Open this trail on Home</a></p>
       </div>
     `;
     this.appendNodeList(document.getElementById('graph-topic-pages'), this.graphData.nodes.filter(n => n.parentTopicId === topic.id));
-    const group = this.groupBounds.find(g => g.related && g.topicIds.includes(topic.id));
+    const section = panel.querySelector('.evidence-section');
+    const group = this.graphData.groups.find(g => g.related && g.topicIds.includes(topic.id));
     if (group) {
       const related=document.createElement('section');related.innerHTML=`<h3>Related titles · ${escapeHtml(group.label)}</h3><p>Shared title word: “${escapeHtml(group.cue)}”.</p>`;
-      this.appendNodeList(related,this.graphData.nodes.filter(n=>n.type==='topic'&&n.id!==topic.id&&group.topicIds.includes(n.id)));panel.append(related);
+      this.appendNodeList(related,this.graphData.nodes.filter(n=>n.type==='topic'&&n.id!==topic.id&&group.topicIds.includes(n.id)));section.append(related);
     }
-    this.appendSites(panel, topic.pages || topic.topPages);
-    this.appendTimeline(panel, [topic.id]);
+    const routes = this.graphData.transitionLinks.filter(l => l.source.id === topic.id || l.target.id === topic.id);
+    if (routes.length) {
+      const connections = document.createElement('section'); connections.innerHTML = `<h3>Repeated routes · ${routes.length}</h3>`;
+      const list = document.createElement('div'); list.className = 'graph-browser-list';
+      for (const link of routes.sort((a, b) => b.weight - a.weight)) {
+        const other = link.source.id === topic.id ? link.target : link.source;
+        const row = document.createElement('button'); row.type = 'button'; row.className = 'graph-result';
+        row.innerHTML = `<i class="studio-dot" style="background:${escapeAttribute(other.color)}"></i><span><strong>${link.source.id === topic.id ? 'To' : 'From'} ${escapeHtml(other.label)}</strong><small>${formatCount(link.weight, 'recorded sequence')}</small></span>`;
+        row.addEventListener('click', () => { this.selectTransition(link.transition); this.zoomToNodes([link.source, link.target], 110); });
+        list.append(row);
+      }
+      connections.append(list); section.append(connections);
+    }
+    this.appendSites(section, topic.pages || topic.topPages);
+    this.appendTimeline(section, [topic.id]);
     this.addOverviewButton();
     document.getElementById('graph-neighborhood').addEventListener('click', () => this.zoomToTopic(topic.id));
-
   }
 
   selectTransition(transition) {
@@ -729,14 +754,12 @@ class TopicMapVisualizer {
     panel.innerHTML = `
       <div class="evidence-section">
         <div class="panel-kicker">Recorded connection</div>
-        <h2>${escapeHtml(transition.sourceLabel)} -> ${escapeHtml(transition.targetLabel)}</h2>
-        <div class="flow-type" style="border-color:${transition.color}">${escapeHtml(transition.label)}</div>
-
+        <h2>${escapeHtml(transition.sourceLabel)} → ${escapeHtml(transition.targetLabel)}</h2>
+        <div class="flow-type">${escapeHtml(transition.label)}</div>
         <p>These trails were visited one after the other ${transition.visitCount} times.</p>
         <div class="metric-list">
           <div><strong>Observed transitions</strong><span>${transition.visitCount}</span></div>
           <div><strong>Days observed</strong><span>${(transition.days || []).length}</span></div>
-
         </div>
         <h3>Recorded page sequences</h3>
         ${transitionExamples(transition.examples?.slice(0, 20))}
@@ -750,10 +773,9 @@ class TopicMapVisualizer {
 
   selectPage(page, topicId) {
     this.selected = { kind: 'page', id: page.id, topicId };
-    this.updateLevelOfDetail(this.currentScale);
     document.getElementById('evidence-panel').innerHTML = `
       <div class="evidence-section">
-        <div class="panel-kicker">Page Evidence</div>
+        <div class="panel-kicker">Page evidence</div>
         <h2>${escapeHtml(page.title)}</h2>
         <div class="metric-list">
           <div><strong>Domain</strong><span>${escapeHtml(page.domain)}</span></div>
@@ -768,7 +790,7 @@ class TopicMapVisualizer {
   }
 
   clearSelection() {
-    this.selected = null; this.focusIds=null;
+    this.selected = null;
     this.searchGraph();
   }
 
@@ -778,81 +800,97 @@ class TopicMapVisualizer {
     this.searchMatches = query ? this.graphData.nodes.filter(node => `${node.label} ${node.page?.title || ''} ${node.page?.url || ''}`.toLocaleLowerCase().includes(query)) : [];
     this.updateLevelOfDetail(this.currentScale);
     if (query) {
-      const atlas=this.atlasFrame('Search results', `${this.searchMatches.length} matches for “${query}”`, true);
-      if(this.searchMatches.length)this.appendNodeList(atlas,this.searchMatches);else {const p=document.createElement('p');p.textContent='No matching trails or pages. Try a different title or website.';atlas.append(p);}
-      this.setStatus(`${this.searchMatches.length} matching trails and pages. Press Enter to inspect the first match.`);
-    } else {
-      if (!this.selected && this.analysis?.ok) this.renderAtlas();
-      if (this.analysis?.ok) this.setStatus(`${this.analysis.topics.length} trails · ${this.graphData.nodes.filter(n => n.type === 'page').length} pages in this period.`);
+      const section = this.panelFrame('Search results', `${formatCount(this.searchMatches.length, 'match')} for “${query}”. Press Enter to open the first.`, 'Search');
+      if (this.searchMatches.length) this.appendNodeList(section, this.searchMatches);
+      else { const p = document.createElement('p'); p.textContent = 'No matching trails or pages. Try a different title or website.'; section.append(p); }
+      this.setStatus(`${this.searchMatches.length} matching trails and pages.`);
+    } else if (this.analysis?.ok) {
+      if (!this.selected) this.renderDefaultEvidence(this.analysis);
+      this.setStatus(`${this.analysis.topics.length} trails · ${this.graphData.nodes.filter(n => n.type === 'page').length} pages in this period.`);
     }
   }
 
   updateLevelOfDetail(scale) {
     this.currentScale = scale;
-    document.querySelectorAll('[data-graph-mode]').forEach(b=>b.setAttribute('aria-pressed',String(document.getElementById(b.dataset.graphMode)?.checked)));
+    document.querySelectorAll('[data-graph-mode]').forEach(b=>b.setAttribute('aria-pressed',String(!!document.getElementById(b.dataset.graphMode)?.checked)));
     if (!this.labelSelection || !this.nodeSelection) return;
     const transform = this.svg.node().__zoom || {x: 0, y: 0, k: scale};
     const mode = document.getElementById('graph-labels')?.value || 'auto';
     const showPages = document.getElementById('show-pages')?.checked !== false;
+    const showFlows = document.getElementById('show-flows')?.checked !== false;
     const active = this.selected;
     const selectedTopic = active?.kind === 'topic' ? active.id : active?.kind === 'page' ? active.topicId : null;
     const selectedEdge = active?.kind === 'transition' ? this.analysis.transitions.find(t => t.id === active.id) : null;
+    const groupTopics = active?.kind === 'group' ? new Set(this.graphData.groups.find(g => g.id === active.id)?.topicIds || []) : null;
+    const neighbors = new Set(selectedTopic ? this.graphData.transitionLinks.filter(l => l.source.id === selectedTopic || l.target.id === selectedTopic).flatMap(l => [l.source.id, l.target.id]) : []);
     const matches = new Set((this.query ? this.searchMatches : []).map(n => n.id));
     const matchedParents = new Set((this.query ? this.searchMatches : []).map(n => n.parentTopicId).filter(Boolean));
-    const related = node => !active || node.id === active.id || node.page?.id === active.id || (selectedTopic && (node.id === selectedTopic || node.parentTopicId === selectedTopic)) ||
-      (active.kind === 'group' && node.groupId === active.id) ||
+    const related = node => !active || node.id === active.id || node.page?.id === active.id ||
+      (selectedTopic && (node.id === selectedTopic || node.parentTopicId === selectedTopic || (showFlows && neighbors.has(node.id)))) ||
+      (groupTopics && (groupTopics.has(node.id) || groupTopics.has(node.parentTopicId))) ||
       (active.kind === 'collection' && (node.type === 'collection' || (node.type === 'page' && !node.parentTopicId))) ||
       (selectedEdge && [selectedEdge.sourceTopicId, selectedEdge.targetTopicId].includes(node.id));
     const visible = node => {
-      if(this.focusIds && !this.focusIds.has(node.id))return false;
-      if (node.type !== 'page') return !(this.narrowOverview && this.overviewMode && !active);
-      if (!showPages) return false;
+      if (node.type !== 'page') return true;
       if (node.page?.id === active?.id) return true;
-      if (!node.parentTopicId) return active?.kind === 'collection' || (active?.kind === 'page' && !active.topicId);
+      if (!node.parentTopicId) return active?.kind === 'collection';
+      if (!showPages) return false;
       if (selectedTopic) return node.parentTopicId === selectedTopic;
-      return !active && !this.overviewMode && scale >= 1.1;
+      if (groupTopics) return groupTopics.has(node.parentTopicId) && scale >= 1.2;
+      return !active && scale >= 1.6;
     };
+    // Trails keep a readable on-screen size when zoomed out, and grow only a
+    // little when zoomed in, so the layout's spacing stays meaningful.
+    const onScreen = Math.max(.55, Math.min(1.35, scale));
     this.nodeSelection.each(node => {
       node.visible = visible(node);
-      node.renderRadius = (node.type === 'page' ? Math.min(8, Math.max(5, node.radius * scale)) : node.type === 'collection' ? 15 : node.radius * Math.min(1.25, Math.max(1,scale))) / scale;
+      node.renderRadius = (node.type === 'page' ? Math.min(7, Math.max(3.5, node.radius * scale)) : node.type === 'collection' ? 16 : node.radius * onScreen) / scale;
     }).attr('r', n => n.renderRadius).style('display', n => n.visible ? null : 'none')
-      .style('opacity', n => this.query ? (matches.has(n.id) || matches.has(n.parentTopicId) || matchedParents.has(n.id) ? 1 : .18) : related(n) ? 1 : .2)
+      .style('opacity', n => this.query ? (matches.has(n.id) || matches.has(n.parentTopicId) || matchedParents.has(n.id) ? 1 : .14) : related(n) ? 1 : .16)
       .attr('aria-pressed', n => String(!!active && (n.id === active.id || n.page?.id === active.id)));
-    this.membershipSelection.style('display', l => l.target.visible ? null : 'none').style('opacity', l => related(l.target) ? 1 : .1);
-    const path = link => flowPath(link.source, link.target, link.source.renderRadius + 4 / scale, link.target.renderRadius + 8 / scale,
-      link.hasReciprocal ? (link.transition.sourceTopicId < link.transition.targetTopicId ? 1 : -1) : 0);
+    this.membershipSelection.style('display', l => l.target.visible ? null : 'none').style('opacity', l => related(l.target) ? .45 : .08);
+    this.haloSelection?.style('opacity', g => this.query ? (g.topicIds.some(id => matches.has(id) || matchedParents.has(id)) ? 1 : .25)
+      : !active || (groupTopics && active.id === g.id) || g.topicIds.includes(selectedTopic) ? 1 : .25);
+    const path = link => flowPath(link.source, link.target, link.source.renderRadius + 4 / scale, link.target.renderRadius + 7 / scale,
+      link.hasReciprocal ? (link.transition.sourceTopicId < link.transition.targetTopicId ? 1 : -1) : .35);
     const showFlow = (link,index) => active?.kind === 'transition' ? link.id === active.id
-      : selectedTopic ? document.getElementById('show-flows')?.checked && this.focusIds?.has(link.source.id) && this.focusIds?.has(link.target.id) && (link.source.id === selectedTopic || link.target.id === selectedTopic)
-      : active?.kind === 'group' ? link.source.groupId === active.id && link.target.groupId === active.id
-      : !active && document.getElementById('show-flows')?.checked && index < this.graphData.overviewFlowLimit;
-    this.linkSelection.attr('d', path).style('display', (l,i) => showFlow(l,i) ? null : 'none').style('opacity',1);
+      : selectedTopic ? showFlows && (link.source.id === selectedTopic || link.target.id === selectedTopic)
+      : groupTopics ? groupTopics.has(link.source.id) && groupTopics.has(link.target.id)
+      : active?.kind === 'collection' ? false
+      : showFlows && index < this.graphData.overviewFlowLimit;
+    this.linkSelection.attr('d', path).style('display', (l,i) => showFlow(l,i) ? null : 'none').style('opacity', active ? .95 : .55);
     this.flowHitSelection?.attr('d', path).style('display', (l,i) => showFlow(l,i) ? null : 'none');
     // Labels are placed in screen coordinates, tested against actual glyph
-    // widths and every visible root. This applies to panning and every label
-    // mode, including “More”; zooming out can never cause a text pile-up.
-    const occupied = [{x:12, y:8, w:Math.min(this.width-24,340), h:44}], placements = new Map(), margin = 12;
+    // widths and every visible circle, so zooming out never piles text up.
+    // Group names claim space first; trail names fill the gaps by rank.
+    const occupied = [{x:12, y:8, w:Math.min(this.width-24,300), h:36}, {x:this.width-230, y:8, w:220, h:44}], placements = new Map(), margin = 12;
     const intersects = (a,b) => a.x < b.x+b.w && a.x+a.w > b.x && a.y < b.y+b.h && a.y+a.h > b.y;
     const screen = node => ({x: node.x * scale + transform.x, y: node.y * scale + transform.y, r: node.renderRadius * scale});
-    const regionById = new Map((this.groupBounds || []).map(g => [g.id,{x:g.x*scale+transform.x,y:g.y*scale+transform.y,w:g.w*scale,h:g.h*scale}]));
-    this.groupSelection?.style('display',active?'none':null).style('opacity', g => !active || active.kind==='group' && active.id===g.id || g.topicIds.includes(selectedTopic) ? 1 : .25);
-    this.groupLabelSelection?.style('display','none').each((group,index,elements)=>{
-      const x=group.x*scale+transform.x+12,y=group.y*scale+transform.y+12,w=group.w*scale-24;
-      if (mode==='off'||w<80||x<12||y<58||x+w>this.width-12||y+24>this.height-65||active) return;
-      const label=truncate(`${group.label} · ${group.topicIds.length || 'ungrouped'}`,Math.floor(w/8));
-      const box={x,y,w:Math.min(w,label.length*8),h:24};
-      if(occupied.some(other=>intersects(box,other)))return;
-      occupied.push(box);
-      d3.select(elements[index]).text(label).attr('x',x).attr('y',y+16).style('display',null);
-    });
-    for (const n of this.graphData.nodes.filter(n => n.visible && n.type !== 'page' && related(n))) {
+    for (const n of this.graphData.nodes.filter(n => n.visible && n.type !== 'page')) {
       const p = screen(n); occupied.push({x:p.x-p.r-3, y:p.y-p.r-3, w:p.r*2+6, h:p.r*2+6});
     }
+    this.groupLabelSelection?.style('display','none').each((group,index,elements)=>{
+      if (mode === 'off' || !group.bounds || (active && !(groupTopics && active.id === group.id)) || this.query) return;
+      // Measure the rendered (uppercase, tracked) name rather than estimating it.
+      const element = elements[index], text = truncate(group.label, 26);
+      element.textContent = text; element.style.display = '';
+      const w = (element.getComputedTextLength ? element.getComputedTextLength() : text.length * 8) + 12;
+      element.style.display = 'none';
+      const x = (group.bounds.x + group.bounds.w / 2) * scale + transform.x, y = group.bounds.y * scale + transform.y - 4;
+      const box = {x: x - w / 2, y: y - 15, w, h: 21};
+      if (box.x < margin || box.x + box.w > this.width - margin || box.y < margin || box.y + box.h > this.height - 60) return;
+      if (occupied.some(other => intersects(box, other))) return;
+      occupied.push(box);
+      d3.select(element).attr('x', x).attr('y', y).attr('text-anchor', 'middle').style('display', null);
+    });
     const labels = [];
-    const chars = this.width < 400 ? 12 : this.width < 600 ? 15 : !this.focusIds && this.visibleTopicCount > 60 ? 21 : 30;
-    if (this.labelCharLimit !== chars) { this.labelSelection.text(n => truncate(n.label, n.type === 'collection' ? 30 : chars)); this.labelCharLimit = chars; }
-    this.labelSelection.style('display','none').style('stroke-width', '3px').style('font-size', n => `${n.type === 'page' ? 12 : 13}px`).each((n,i,elements) => {
+    const chars = this.width < 400 ? 14 : this.width < 600 ? 18 : 28;
+    if (this.labelCharLimit !== chars) { this.labelSelection.text(n => truncate(n.label, n.type === 'collection' ? 32 : chars)); this.labelCharLimit = chars; }
+    this.labelSelection.style('display','none').each((n,i,elements) => {
       if (mode === 'off' || !n.visible || (active && !related(n)) || (this.query && !matches.has(n.id) && !matchedParents.has(n.id))) return;
-      if (!this.focusIds && n.type === 'page' && scale < (mode === 'all' ? .8 : 1.3) && n.page?.id !== active?.id) return;
+      if (n.type === 'page' && !selectedTopic && active?.kind !== 'collection' && n.page?.id !== active?.id && scale < (mode === 'all' ? 1.2 : 1.8)) return;
+      // Far out, only the busiest trails are named; zooming in reveals the rest.
+      if (n.type === 'topic' && mode !== 'all' && !active && !this.query && scale < .5 && n.index >= 14 && n.id !== this.hoveredId) return;
       const point = screen(n);
       if (point.x < 0 || point.x > this.width || point.y < 0 || point.y > this.height) return;
       const element = elements[i], text = element.textContent;
@@ -866,47 +904,43 @@ class TopicMapVisualizer {
     });
     labels.sort((a,b) => a.priority-b.priority);
     for (const {n,element,width} of labels) {
-      const p = screen(n), height = 18, gap = p.r+7, w=width+8;
+      const p = screen(n), height = 18, gap = p.r+6, w=width+8;
       const candidates = [
-        {x:p.x+gap,y:p.y-height/2,w,h:height},
         {x:p.x-w/2,y:p.y+gap,w,h:height},
+        {x:p.x+gap,y:p.y-height/2,w,h:height},
         {x:p.x-gap-w,y:p.y-height/2,w,h:height},
         {x:p.x-w/2,y:p.y-gap-height,w,h:height},
-        {x:p.x+gap,y:p.y-height-5,w,h:height},
-        {x:p.x+gap,y:p.y+5,w,h:height},
-        {x:p.x-gap-w,y:p.y-height-5,w,h:height},
-        {x:p.x-gap-w,y:p.y+5,w,h:height}
+        {x:p.x+gap,y:p.y-height-4,w,h:height},
+        {x:p.x+gap,y:p.y+4,w,h:height},
+        {x:p.x-gap-w,y:p.y-height-4,w,h:height},
+        {x:p.x-gap-w,y:p.y+4,w,h:height}
       ];
-      const region = !active && this.overviewMode && n.type==='topic' ? regionById.get(n.groupId) : null;
-      const box = candidates.find(b => b.x>=margin && b.y>=margin && b.x+b.w<=this.width-margin && b.y+b.h<=this.height-65 &&
-        (!region || b.x>=region.x+4 && b.y>=region.y+4 && b.x+b.w<=region.x+region.w-4 && b.y+b.h<=region.y+region.h-4) &&
-        !occupied.some(other => intersects(b,other)));
+      const box = candidates.find(b => b.x>=margin && b.y>=margin && b.x+b.w<=this.width-margin && b.y+b.h<=this.height-60 && !occupied.some(other => intersects(b,other)));
       if (!box) continue;
-      occupied.push({x:box.x-3,y:box.y-3,w:box.w+6,h:box.h+6}); placements.set(n.id,box);
-      d3.select(element).style('display',null).style('opacity',1).attr('text-anchor','start')
-        .attr('x',box.x+4).attr('y',box.y+13);
+      occupied.push({x:box.x-2,y:box.y-2,w:box.w+4,h:box.h+4}); placements.set(n.id,box);
+      d3.select(element).style('display',null).attr('text-anchor','start').attr('x',box.x+4).attr('y',box.y+13);
     }
     this.labelPlacements = placements;
     const hint = document.getElementById('graph-view-status');
-    if (hint) hint.textContent = active ? document.getElementById('show-flows')?.checked ? `${this.graphData.nodes.filter(n=>n.visible&&n.type==='topic').length-1} connected trails · repeated visit order` : `${this.graphData.nodes.filter(n=>n.visible&&n.type==='page').length} pages shown · all pages in the list` : `${this.graphData.groups.filter(g=>g.related).length} related groups · ${this.visibleTopicCount} trails`;
+    if (hint) hint.textContent = active ? active.kind === 'topic' ? `${this.graphData.nodes.filter(n=>n.visible&&n.type==='page'&&n.parentTopicId===active.id).length} pages around this trail · others dimmed` : 'Selection highlighted · Clear or Esc returns to every trail'
+      : `${this.graphData.groups.filter(g=>g.related).length} related groups · ${this.visibleTopicCount} trails · ${this.stackedLayout() ? 'pinch or ⌘/Ctrl-scroll to zoom' : 'scroll to zoom'}, drag to move`;
   }
 
   zoomToNodes(nodes, padding = 95, immediate = false) {
+    nodes = nodes.filter(Boolean);
     if (!nodes.length) return;
     const x = d3.extent(nodes,n => n.x), y = d3.extent(nodes,n => n.y);
-    const scale = Math.max(.05, Math.min(1.65, (this.width-padding*2)/Math.max(1,x[1]-x[0]), (this.height-padding*2)/Math.max(1,y[1]-y[0])));
+    const scale = Math.max(.08, Math.min(2.2, (this.width-padding*2)/Math.max(1,x[1]-x[0]), (this.height-padding*2)/Math.max(1,y[1]-y[0])));
     const target = d3.zoomIdentity.translate(this.width/2-(x[0]+x[1])/2*scale, this.height/2-(y[0]+y[1])/2*scale).scale(scale);
-    const duration = immediate || window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ? 0 : 260;
+    const duration = immediate || window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ? 0 : 380;
     if (!duration) this.svg.call(this.zoom.transform,target);
-    else this.svg.transition().duration(duration).call(this.zoom.transform,target);
+    else this.svg.transition().duration(duration).ease(d3.easeCubicOut).call(this.zoom.transform,target);
   }
 
-  zoomToTopic(topicId) { this.layoutFocus(); }
-
   fitToViewport(immediate) {
-    if(this.selected) {this.layoutFocus();return;}
     this.overviewMode = true;
-    this.zoomToNodes((this.groupBounds || []).flatMap(g=>[{x:g.x,y:g.y},{x:g.x+g.w,y:g.y+g.h}]), this.width < 600 ? 24 : 50, immediate);
+    const roots = this.graphData.nodes.filter(n => n.type !== 'page');
+    this.zoomToNodes(roots.flatMap(n => [{x:n.x-n.radius-30,y:n.y-n.radius-30},{x:n.x+n.radius+30,y:n.y+n.radius+30}]), this.width < 600 ? 16 : 36, immediate);
   }
 
   dragStarted(event, d) {
@@ -915,22 +949,18 @@ class TopicMapVisualizer {
   }
 
   dragged(event, d) {
-    const group=this.focusIds?null:this.groupBounds.find(g=>g.nodes.some(n=>n.id===d.id));
-    const x=group?Math.max(group.x+40,Math.min(group.x+group.w-40,event.x)):event.x;
-    const y=group?Math.max(group.y+75,Math.min(group.y+group.h-35,event.y)):event.y;
-    const dx = x - d.x, dy = y - d.y;
-    d.x = d.fx = x; d.y = d.fy = y;
+    const dx = event.x - d.x, dy = event.y - d.y;
+    d.x = d.fx = event.x; d.y = d.fy = event.y;
     if (d.type === 'topic' || d.type === 'collection') {
-      this.topicAnchors.set(d.id, { x: d.x, y: d.y });
       for (const page of this.graphData.nodes.filter(n => n.parentTopicId === d.id || (d.type === 'collection' && n.type === 'page' && !n.parentTopicId))) {
-        page.x += dx; page.y += dy; page.fx = page.x; page.fy = page.y;
+        page.x += dx; page.y += dy;
       }
     }
     this.updatePositions();
   }
 
   dragEnded(event, d) {
-    for (const node of this.graphData.nodes) if (node.id === d.id || node.parentTopicId === d.id) this.savedPositions.set(node.id, { x: node.x, y: node.y, fx: node.x, fy: node.y });
+    for (const node of this.graphData.nodes) if (node.id === d.id || node.parentTopicId === d.id) this.savedPositions.set(node.id, { x: node.x, y: node.y });
   }
 
   setLoading(visible, message) {
@@ -939,17 +969,9 @@ class TopicMapVisualizer {
     if (message) loading.textContent = message;
   }
 
-  showProgress(message) {
-    this.setLoading(true, message);
-    this.setStatus(message);
-    if (/ollama/i.test(message)) this.setHealth('checking', 'Checking Ollama');
-    else if (/embedding|labeling|auditing|analyzing/i.test(message)) this.setHealth('checking', 'Analyzing locally');
-    else if (/history|visits/i.test(message)) this.setHealth('checking', 'Reading history');
-  }
-
   setStatus(message) {
     document.getElementById('status-line').textContent = message;
-    document.title = `Cognitive Trails - ${String(message || '').slice(0, 70)}`;
+    document.title = `Cognitive Trails · ${String(message || '').slice(0, 70)}`;
   }
 
   setHealth(state, label) {
@@ -962,12 +984,12 @@ class TopicMapVisualizer {
     const tooltip = d3.select('#tooltip')
       .style('display', 'block')
       .style('position', 'fixed')
-      .style('max-width', `${Math.min(230, window.innerWidth - 32)}px`)
+      .style('max-width', `${Math.min(240, window.innerWidth - 32)}px`)
       .style('opacity', 1)
       .html(html);
     const box = tooltip.node().getBoundingClientRect();
-    tooltip.style('left', `${Math.max(8, Math.min(event.clientX + 12, window.innerWidth - box.width - 12))}px`)
-      .style('top', `${Math.max(8, Math.min(event.clientY + 12, window.innerHeight - box.height - 12))}px`);
+    tooltip.style('left', `${Math.max(8, Math.min(event.clientX + 14, window.innerWidth - box.width - 12))}px`)
+      .style('top', `${Math.max(8, Math.min(event.clientY + 14, window.innerHeight - box.height - 12))}px`);
   }
 
   hideTooltip() {
@@ -979,12 +1001,19 @@ class TopicMapVisualizer {
   }
 
   pageTooltip(page) {
-    return `<strong>${escapeHtml(page.domain)}</strong><br>${escapeHtml(page.title)}<br>${page.visitCount} visits`;
+    return `<strong>${escapeHtml(page.domain)}</strong><br>${escapeHtml(page.title)}<br>${formatCount(page.visitCount, 'visit')}`;
   }
 
   transitionTooltip(transition) {
-    return `<strong>${escapeHtml(transition.sourceLabel)} -> ${escapeHtml(transition.targetLabel)}</strong><br>${escapeHtml(transition.label)}<br>${transition.visitCount} consecutive visits<br>on ${(transition.days || []).length} day(s)${transition.uncertain ? ' · label uncertain' : ''}`;
+    return `<strong>${escapeHtml(transition.sourceLabel)} → ${escapeHtml(transition.targetLabel)}</strong><br>${escapeHtml(transition.label)}<br>${transition.visitCount} consecutive visits<br>on ${(transition.days || []).length} day(s)${transition.uncertain ? ' · label uncertain' : ''}`;
   }
+}
+
+// A stable value in [0, 1) from a string, for seeded initial positions.
+function hashUnit(value) {
+  let hash = 2166136261;
+  for (const char of String(value)) hash = Math.imul(hash ^ char.charCodeAt(0), 16777619);
+  return (hash >>> 0) / 4294967296;
 }
 
 function flowPath(source, target, sourcePadding, targetPadding, bend) {
@@ -1006,24 +1035,10 @@ function flowPath(source, target, sourcePadding, targetPadding, bend) {
   const canonicalFlip = (source.x > target.x || (source.x === target.x && source.y > target.y)) ? -1 : 1;
   const midX = (x1 + x2) / 2;
   const midY = (y1 + y2) / 2;
-  const offset = Math.min(38, distance * 0.18) * bend * canonicalFlip;
+  const offset = Math.min(46, distance * 0.2) * bend * canonicalFlip;
   const cx = midX + -uy * offset;
   const cy = midY + ux * offset;
   return `M${x1},${y1} Q${cx},${cy} ${x2},${y2}`;
-}
-
-// Evidence strength renders as a bar with a coarse word, never a number:
-// the heuristic score ranks clusters for the audit gate, it is not a
-// probability the record can honestly display (spec D4).
-function confidenceBar(confidence) {
-  const value = Math.max(0, Math.min(1, confidence || 0));
-  const strength = value >= 0.75 ? 'strong' : value >= 0.55 ? 'moderate' : 'limited';
-  return `
-    <div class="confidence">
-      <div class="confidence-meta"><span>Evidence</span><strong>${strength}</strong></div>
-      <div class="confidence-track"><div style="width:${Math.round(value * 100)}%"></div></div>
-    </div>
-  `;
 }
 
 function hourHistogram(hourCounts) {
@@ -1033,16 +1048,6 @@ function hourHistogram(hourCounts) {
   return `<div class="hour-histogram">${counts.map((count, hour) => `
     <span title="${hour}:00 - ${count} movement(s)" style="height:${Math.round((count / max) * 100)}%"></span>
   `).join('')}</div><div class="hour-axis"><span>00</span><span>06</span><span>12</span><span>18</span><span>23</span></div>`;
-}
-
-function pageList(pages) {
-  if (!pages || !pages.length) return '<p>No page evidence available.</p>';
-  return `<ul class="evidence-list">${pages.map(page => `
-    <li>
-      <strong>${escapeHtml(page.title)}</strong>
-      <span>${escapeHtml(page.domain)} · ${page.visitCount} visits · ${page.estimatedDwellMinutes}m estimated</span>
-    </li>
-  `).join('')}</ul>`;
 }
 
 function transitionExamples(items) {
@@ -1057,7 +1062,7 @@ function transitionExamples(items) {
 }
 
 function formatCount(value, noun) {
-  return `${value} ${noun}${value === 1 ? '' : 's'}`;
+  return `${value} ${noun}${value === 1 ? '' : noun.endsWith('ch') ? 'es' : 's'}`;
 }
 
 function formatDate(ms) {
@@ -1090,7 +1095,7 @@ function formatPercent(value) {
 
 function truncate(text, limit) {
   const value = String(text || '');
-  return value.length > limit ? `${value.slice(0, limit - 1)}...` : value;
+  return value.length > limit ? `${value.slice(0, limit - 1)}…` : value;
 }
 
 function escapeHtml(value) {
@@ -1130,9 +1135,6 @@ if (typeof document !== 'undefined' && (typeof module === 'undefined' || !module
         range: (lower, upper) => ({ lower, upper }),
         byIndex: async (name, index, query) => (snapshot[name] || []).filter(r => !query || (r.dayKey >= query.lower && r.dayKey <= query.upper)) };
       const lastDay = (snapshot.daily_metrics || []).map(r => r.day).sort().pop();
-      for (const a of document.querySelectorAll('.buttons a')) {
-        a.href = a.textContent === 'Audit' ? 'demo.html?view=audit' : a.textContent === 'Settings' ? 'demo.html?view=setup' : 'demo.html';
-      }
       const view=new TopicMapVisualizer({ store, now: CTText.dayKeyToNoonMs(lastDay) + 9 * 3600000, isDemo: true });window.CTPageDispose=()=>view.dispose();await view.ready;
     } catch (error) { document.getElementById('loading').textContent = error.message; }
   });

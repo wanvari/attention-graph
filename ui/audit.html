@@ -5,23 +5,21 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Cognitive Trails Audit</title>
   <link rel="icon" type="image/png" href="../icon48.png">
-  <link rel="stylesheet" href="shared.css" />
-  <link rel="stylesheet" href="audit.css" />
+  <link rel="preload" href="../vendor/fonts/inter-latin-opsz-normal.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="preload" href="../vendor/fonts/fraunces-latin-opsz-normal.woff2" as="font" type="font/woff2" crossorigin>
   <link rel="stylesheet" href="studio.css">
+  <link rel="stylesheet" href="audit.css" />
   <script src="studio.js"></script>
 </head>
 <body>
   <div class="audit-page" data-studio-view="audit">
-    <header class="audit-header">
+    <header class="page-head audit-header">
       <div>
-        <h1>Trust audit</h1>
-        <div id="status" class="audit-status">Loading the record…</div>
+        <h1>Record &amp; privacy</h1>
+        <p id="status" class="page-sub audit-status">Loading the record…</p>
       </div>
       <div class="audit-actions">
-        <a class="btn" href="newtab.html">Home</a>
-        <a class="btn" href="map.html">Map</a>
         <a class="btn" href="diagnostics.html">Inspect a page</a>
-        <a class="btn" href="options.html">Settings</a>
         <button id="repair-evidence" class="btn">Recalculate evidence</button>
         <button id="run-now" class="btn primary">Run now</button>
         <button id="export-json" class="btn">Export JSON</button>

@@ -35,8 +35,9 @@ try {
   await page.getByLabel('Your note', { exact: true }).fill('Resume the borrow checker example.');
   await page.getByRole('button', { name: 'Save on this device' }).click();
   await page.locator('.nt-detail-heading').getByRole('heading', { name: 'Weekend Rust project' }).waitFor();
-  await page.getByRole('button', { name: 'Pin Weekend Rust project', exact: true }).click();
-  await page.getByRole('button', { name: 'Unpin Weekend Rust project', exact: true }).waitFor();
+  // Trail detail opens as a sheet over the list; its row has the same pin.
+  await page.locator('.nt-sheet').getByRole('button', { name: 'Pin Weekend Rust project', exact: true }).click();
+  await page.locator('.nt-sheet').getByRole('button', { name: 'Unpin Weekend Rust project', exact: true }).waitFor();
   await page.reload();
   await page.getByRole('button', { name: 'Pinned', exact: true }).click();
   await page.getByRole('button', { name: 'Weekend Rust project', exact: true }).waitFor();
@@ -72,7 +73,8 @@ try {
   await page.getByLabel('Page grouping', { exact: true }).selectOption('test-rust');
   await page.getByRole('button', { name: 'Save grouping', exact: true }).click();
   const send = message => page.evaluate(message => new Promise(resolve => chrome.runtime.sendMessage(message, resolve)), message);
-  await page.reload();
+  // Home's continue card offers the session; Your trails shows only a running one.
+  await page.goto(`${origin}/ui/newtab.html`);
   await page.getByRole('button', { name: 'Start session', exact: true }).click();
   await page.getByLabel('Duration').selectOption('25');
   await page.getByLabel('Next step (optional)').fill('Private next step');

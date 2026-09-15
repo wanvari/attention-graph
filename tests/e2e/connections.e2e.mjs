@@ -35,9 +35,11 @@ try {
     store.close();
   });
   await page.reload();await page.waitForFunction(()=>document.querySelectorAll('.topic-node').length===5);
-  assert.equal(await page.locator('.atlas-group').count(),2,'FINNY and other trails are named groups');
+  assert.equal(await page.locator('.graph-region').count(),1,'FINNY titles share one halo; other trails stand alone');
+  assert.equal(await page.locator('.group-label').first().textContent(),'FINNY');
   assert.equal(await page.locator('.flow-link').count(),0,'single cross-trail visits cannot become repeated routes');
-  await page.getByRole('button',{name:'Group: FINNY, 4 trails',exact:true}).click();
+  // Circles sit inside the halo, so the keyboard is the reliable way to select it.
+  await page.getByRole('button',{name:'Related titles: FINNY, 4 trails',exact:true}).focus();await page.keyboard.press('Enter');
   await page.getByRole('heading',{name:'FINNY',exact:true}).waitFor();
   assert.equal(await page.locator('.graph-result').count(),4);
   assert.equal(await page.locator('.graph-site-row').first().locator('small').textContent(),'40 visits · 1 page');
