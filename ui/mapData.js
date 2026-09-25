@@ -52,9 +52,7 @@
     long_tail: ['#9aa3b8', '#a8b0c2', '#8a93a8']
   };
 
-  function msToMinutes(ms) {
-    return Math.round((ms || 0) / 60000);
-  }
+  const { msToMinutes } = CTText;
 
   // A read-only visual layer over the saved trails. Shared distinctive title
   // words suggest related subjects, never a click, intention or new membership.

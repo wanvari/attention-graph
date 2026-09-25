@@ -574,7 +574,9 @@
     const view = render(d.container || document.getElementById('app'), data, {
       ...d,
       loadSnapshot: d.loadSnapshot || (() => CTTrails.loadData(store, { reuseUnchanged: true })),
-      onSaveMetadata: d.readOnly ? null : d.onSaveMetadata || (row => store.put('corrections', row))
+      // Saves go through the worker's deletion barrier; without a saver the
+      // view is read-only rather than writing IndexedDB directly.
+      onSaveMetadata: d.readOnly ? null : d.onSaveMetadata || null
     });
     const dispose = view.dispose;
     view.dispose = () => { dispose(); if (!d.store) store.close(); };

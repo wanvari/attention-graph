@@ -419,23 +419,25 @@ function maintenance() {
   });
 }
 
+const logFailure = label => error => console.warn(label, error);
+
 chrome.runtime.onInstalled.addListener(() => {
   installOllamaOriginRules();
   ensureAlarms();
-  maintenance();
+  maintenance().catch(logFailure('maintenance failed'));
 });
 
 chrome.runtime.onStartup.addListener(() => {
   installOllamaOriginRules();
   ensureAlarms();
-  maintenance();
+  maintenance().catch(logFailure('maintenance failed'));
 });
 
 chrome.alarms.onAlarm.addListener(alarm => {
-  if (alarm.name.startsWith(CTSessions.PREFIX)) withWriter(() => sessions.reconcile()).catch(error => console.warn('Session reconciliation failed', error));
-  if (alarm.name === FLUSH_ALARM) withWriter(async () => { await flushCaptures(); await sessions.reconcile(); }).catch(error => console.warn(error));
-  if (alarm.name === DAILY_ALARM) withWriter(dailyAlarmFired);
-  if (alarm.name === RETENTION_ALARM) withWriter(runRetention);
+  if (alarm.name.startsWith(CTSessions.PREFIX)) withWriter(() => sessions.reconcile()).catch(logFailure('session reconciliation failed'));
+  if (alarm.name === FLUSH_ALARM) withWriter(async () => { await flushCaptures(); await sessions.reconcile(); }).catch(logFailure('capture flush failed'));
+  if (alarm.name === DAILY_ALARM) withWriter(dailyAlarmFired).catch(logFailure('scheduled run check failed'));
+  if (alarm.name === RETENTION_ALARM) withWriter(runRetention).catch(logFailure('retention failed'));
 });
 
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {

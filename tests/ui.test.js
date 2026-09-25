@@ -128,7 +128,9 @@ async function mount(populate, extra = {}) {
   await store.open();
   if (populate) await populate(store);
   const searched = [];
-  const result = await CTNewtab.main({ store, container: dom.window.document.getElementById('app'), now, onSearch: q => searched.push(q), ...extra });
+  // Stands in for the worker's SAVE_TRAIL_METADATA handler.
+  const onSaveMetadata = row => store.put('corrections', row);
+  const result = await CTNewtab.main({ store, container: dom.window.document.getElementById('app'), now, onSearch: q => searched.push(q), onSaveMetadata, ...extra });
   return { window: dom.window, document: dom.window.document, store, result, searched,
     async close() { result.dispose(); dom.window.close(); await store.close(); } };
 }

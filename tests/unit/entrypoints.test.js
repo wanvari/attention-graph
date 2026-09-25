@@ -19,5 +19,23 @@ for (const file of ['ui/newtab.html', 'ui/options.html', 'ui/audit.html', 'ui/di
   }
   if (file.includes('map')) assert.ok(scripts.indexOf('../lib/dashboard.js') < scripts.indexOf('mapData.js'));
   if (file.includes('analysis')) assert.ok(scripts.indexOf('../lib/relevance.js') >= 0 && scripts.indexOf('../lib/relevance.js') < scripts.indexOf('../lib/pipeline.js'), 'pipeline receives its relevance dependency');
+  assertEveryLibraryUsed(file, scripts.map(src => path.resolve(root, path.dirname(file), src)));
+}
+assertEveryLibraryUsed('background.js', [
+  ...[...fs.readFileSync(path.join(root, 'background.js'), 'utf8').match(/importScripts\(([^)]*)\)/)[1].matchAll(/'([^']+)'/g)].map(m => path.join(root, m[1])),
+  path.join(root, 'background.js')
+]);
+
+// Each page parses every library it loads, and Home loads on every new tab.
+// A library must be referenced by some other script in the same context.
+function assertEveryLibraryUsed(context, files) {
+  const sources = files.map(f => [f, fs.readFileSync(f, 'utf8')]);
+  for (const [file, source] of sources) {
+    if (!file.includes(`${path.sep}lib${path.sep}`)) continue;
+    const name = source.match(/root\.(CT\w+)\s*=/)?.[1];
+    assert.ok(name, `${file} declares a CT global`);
+    const used = sources.some(([other, text]) => other !== file && new RegExp(`\\b${name}\\b`).test(text));
+    assert.ok(used, `${context} loads ${path.relative(root, file)} but nothing there uses ${name}`);
+  }
 }
 console.log('extension entrypoint assets passed');

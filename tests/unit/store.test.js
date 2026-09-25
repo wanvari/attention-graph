@@ -280,6 +280,32 @@ async function testSettingsAllowlist() {
   assert.strictEqual(after.embeddingModel, 'bge-m3:latest');
 }
 
+// Run history is bounded, but the scheduler's latest successful run survives.
+async function testRunHistoryIsPruned() {
+  const store = CTStore.createStore({ indexedDB: freshFactory(), IDBKeyRange });
+  await store.open();
+  const rows = [{ runId: 'old-ok', startedAt: 1, status: 'ok' }];
+  for (let i = 0; i < 12; i++) rows.push({ runId: `r${i}`, startedAt: 100 + i, status: i % 2 ? 'deferred' : 'skipped' });
+  await store.bulkPut('runs', rows);
+  assert.strictEqual(await store.pruneRuns(5), 7, 'every row past the newest five is removed except the latest ok run');
+  const kept = (await store.getAll('runs')).map(r => r.runId).sort();
+  assert.deepStrictEqual(kept, ['old-ok', 'r10', 'r11', 'r7', 'r8', 'r9']);
+  assert.strictEqual(await store.pruneRuns(5), 0, 'pruning is idempotent');
+  await store.close();
+}
+
+// A failed evidence transform reports its own error, and the page it had
+// already written (pages are written before memberships) is rolled back.
+async function testEvidenceTransformErrorSurfaces() {
+  const store = CTStore.createStore({ indexedDB: freshFactory(), IDBKeyRange });
+  await store.open();
+  await store.put('pages', { normalizedUrl: 'https://example.com/a', dwellMs: 5 });
+  await assert.rejects(store.updateEvidence(() => ({ pages: [{ normalizedUrl: 'https://example.com/a', dwellMs: 9 }], get memberships() { throw new Error('bad evidence'); } })),
+    /bad evidence/, 'the transform error is not replaced by a generic abort');
+  assert.strictEqual((await store.get('pages', 'https://example.com/a')).dwellMs, 5, 'the aborted transaction wrote nothing');
+  await store.close();
+}
+
 async function run() {
   await testSchemaCreation();
   await testSettingsAllowlist();
@@ -289,6 +315,8 @@ async function run() {
   await testEmbeddingPruneRespectsMembership();
   await testRetentionDeletesTextOnly();
   await testDayCommitSemantics();
+  await testRunHistoryIsPruned();
+  await testEvidenceTransformErrorSurfaces();
   console.log('store tests passed');
 }
 

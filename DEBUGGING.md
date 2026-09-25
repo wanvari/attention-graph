@@ -4,7 +4,7 @@ Where to look when something is wrong, in the order worth checking.
 
 ## Start at the Audit page
 
-`ui/audit.html` is the first stop for almost everything. It shows the run history with per-run status, the stage a failed run died at, its error, per-stage timings, counts (visits ingested, embedded vs cached, audited, excluded), warnings, registry state by lifecycle, the uncategorized bucket by reason, and which models Ollama currently has resident.
+`ui/audit.html` is the first stop for almost everything. It shows the run history (the newest 200 runs, plus the latest successful one) with per-run status, the stage a failed run died at, its error, per-stage timings, counts (visits ingested, embedded vs cached, audited, excluded), warnings, registry state by lifecycle, the uncategorized bucket by reason, and which models Ollama currently has resident.
 
 A run's `status` tells you most of what you need:
 

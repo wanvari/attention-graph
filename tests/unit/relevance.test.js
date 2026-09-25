@@ -66,6 +66,6 @@ assert.strictEqual(CTRelevance.classify(null), null);
 assert.strictEqual(CTRelevance.classify({ url: '' }), null);
 assert.strictEqual(CTRelevance.classify({ url: 'not a url', title: 'x' }), null,
   'an unparseable URL is not evidence of plumbing');
-assert.strictEqual(CTRelevance.isUtilityPage({ url: 'https://zoom.us/download', title: '' }), true);
+assert.notStrictEqual(CTRelevance.classify({ url: 'https://zoom.us/download', title: '' }), null);
 
 console.log('relevance tests passed');
