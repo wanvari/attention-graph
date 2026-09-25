@@ -80,8 +80,13 @@
     }
   }
 
-  chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
-    if (message && message.type === 'RUN_PIPELINE') {
+  // Content scripts reach this listener too. Only the extension's own
+  // contexts (in practice the service worker's gated start) may begin a run.
+  const fromExtension = sender => !!sender && sender.id === chrome.runtime.id &&
+    typeof sender.url === 'string' && sender.url.startsWith(chrome.runtime.getURL(''));
+
+  chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+    if (message && message.type === 'RUN_PIPELINE' && fromExtension(sender)) {
       if (running) { sendResponse({ started: false, reason: 'already-running' }); return; }
       runPipeline(message.trigger, message.force);
       sendResponse({ started: true });
