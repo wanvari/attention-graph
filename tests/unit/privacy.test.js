@@ -66,3 +66,17 @@ assert.strictEqual(CTPrivacy.inPauseInterval(9999999, intervals), true, 'open in
 }
 
 console.log('privacy tests passed');
+
+// Calendar days can be 23 or 25 hours. A fixed 24h step loops forever at
+// 23:00 on the fall-back day and miscounts a fully paused spring day.
+{
+  const old=process.env.TZ;process.env.TZ='America/New_York';
+  try {
+    for(const [month,day,hours] of [[2,8,23],[10,1,25]]) {
+      const start=new Date(2026,month,day).getTime(),end=new Date(2026,month,day+1).getTime();
+      assert.equal((end-start)/3600000,hours);
+      assert.deepEqual([...CTPrivacy.fullyPausedDays([{start,end}],CTText.dayKeyFromMs)],[CTText.dayKeyFromMs(start)]);
+      assert.equal(CTPrivacy.fullyPausedDays([{start,end:end-1}],CTText.dayKeyFromMs).size,0);
+    }
+  }finally{if(old===undefined)delete process.env.TZ;else process.env.TZ=old;}
+}

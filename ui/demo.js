@@ -22,7 +22,7 @@
       target.appendChild(node);
     }
   }
-  document.addEventListener('DOMContentLoaded', async () => {
+  CTStudio.onPage('demo.html', async () => {
     try {
       const response = await fetch('../fixtures/current/snapshot.json');
       if (!response.ok) throw new Error('Recorded sample is unavailable.');
@@ -31,9 +31,10 @@
       const days = (snapshot.daily_metrics || []).map(r => r.day).sort();
       const now = CTText.dayKeyToNoonMs(days.at(-1)) + 9 * 3600000;
       document.getElementById('demo-sub').textContent = 'Synthetic history · real local model output · read-only';
-      await CTNewtab.main({ store, container: document.getElementById('app'), now, readOnly: true,
+      const viewHandle=await CTNewtab.main({ store, container: document.getElementById('app'), now, readOnly: true,
         trailId: new URLSearchParams(location.search).get('trail'),
         links: { home: 'demo.html', map: 'map.html?demo=1', audit: 'demo.html?view=audit', settings: 'demo.html?view=setup', demo: 'demo.html' } });
+      window.CTPageDispose=()=>viewHandle.dispose();
       const audit = await CTAudit.loadData(store); audit.record = CTTrails.buildRecord(snapshot, { now });
       CTAudit.render(audit, document, {});
       try {
@@ -46,6 +47,7 @@
         tab.addEventListener('click', () => {
           for (const other of document.querySelectorAll('.demo-tab')) other.classList.toggle('active', other === tab);
           for (const view of views) document.getElementById(`view-${view}`).hidden = view !== tab.dataset.view;
+          if(tab.dataset.view!=='home') CTStudio.mount(document.getElementById(`view-${tab.dataset.view}`), {view:tab.dataset.view==='setup'?'settings':tab.dataset.view, demo:true});
         });
       }
       const view = new URLSearchParams(location.search).get('view');

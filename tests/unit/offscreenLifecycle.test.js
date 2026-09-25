@@ -10,6 +10,7 @@ function harness(options = {}) {
     clearTimeout: id => h.timers.delete(id),
     window: { close: () => { h.closed = true; h.calls.push('close'); } },
     chrome: { runtime: {
+      id: 'test-extension', getURL: value => `chrome-extension://test-extension/${value}`,
       onMessage: { addListener: fn => { h.listener = fn; } },
       sendMessage: (message, callback) => { h.calls.push(message.type); if (!options.missingReply) callback({ ok: true }); }
     } },
@@ -21,11 +22,17 @@ function harness(options = {}) {
     CTPipeline: { createPipeline: () => ({ run: async () => { h.calls.push('run'); return options.run ? options.run() : { ok: true }; } }) }
   };
   vm.runInNewContext(fs.readFileSync(path.resolve(__dirname, '../../offscreen/analysis.js'), 'utf8'), sandbox);
-  h.dispatch = () => { let reply; h.listener({ type: 'RUN_PIPELINE', trigger: 'manual' }, {}, r => { reply = r; }); return reply; };
+  const worker = { id: 'test-extension', url: 'chrome-extension://test-extension/background.js' };
+  h.dispatch = (sender = worker) => { let reply; h.listener({ type: 'RUN_PIPELINE', trigger: 'manual' }, sender, r => { reply = r; }); return reply; };
   return h;
 }
 
 (async () => {
+  const forged = harness();
+  assert.equal(forged.dispatch({ id: 'test-extension', url: 'https://example.com/', tab: { id: 1 } }), undefined, 'a content-script sender cannot start a run');
+  assert.equal(forged.dispatch({}), undefined, 'an unidentified sender cannot start a run');
+  await settle(); assert.deepEqual(forged.calls, [], 'no run, cleanup or completion for a forged start');
+
   const model = deferred();
   const h = harness({ embed: () => model.promise });
   assert.equal(h.dispatch()?.started, true, 'offscreen explicitly acknowledges accepted work');
@@ -48,5 +55,5 @@ function harness(options = {}) {
   assert.ok([...lostReply.timers.values()][0].ms <= 5000);
   for (const { fn } of lostReply.timers.values()) fn();
   await settle(); assert.equal(lostReply.closed, true, 'a missing worker reply cannot prevent shutdown');
-  console.log('offscreen admission, cleanup ordering, failure and lost-reply recovery passed');
+  console.log('offscreen sender check, admission, cleanup ordering, failure and lost-reply recovery passed');
 })().catch(error => { console.error(error); process.exit(1); });

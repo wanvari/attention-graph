@@ -15,6 +15,7 @@ try {
   const page = await context.newPage();
   const errors = []; page.on('pageerror', e => errors.push(e.message));
   await page.goto(`${origin}/ui/newtab.html`);
+  await page.getByRole('link', { name: 'Your trails', exact: true }).click();
   await page.getByText('The next page is a place to begin.').waitFor();
   const status = await page.evaluate(() => new Promise(resolve => chrome.runtime.sendMessage({ type: 'GET_STATUS' }, resolve)));
   assert.equal(typeof status.paused, 'boolean', 'home and settings use the real worker status route');
@@ -34,8 +35,9 @@ try {
   await page.getByLabel('Your note', { exact: true }).fill('Resume the borrow checker example.');
   await page.getByRole('button', { name: 'Save on this device' }).click();
   await page.locator('.nt-detail-heading').getByRole('heading', { name: 'Weekend Rust project' }).waitFor();
-  await page.getByRole('button', { name: 'Pin Weekend Rust project', exact: true }).click();
-  await page.getByRole('button', { name: 'Unpin Weekend Rust project', exact: true }).waitFor();
+  // Trail detail opens as a sheet over the list; its row has the same pin.
+  await page.locator('.nt-sheet').getByRole('button', { name: 'Pin Weekend Rust project', exact: true }).click();
+  await page.locator('.nt-sheet').getByRole('button', { name: 'Unpin Weekend Rust project', exact: true }).waitFor();
   await page.reload();
   await page.getByRole('button', { name: 'Pinned', exact: true }).click();
   await page.getByRole('button', { name: 'Weekend Rust project', exact: true }).waitFor();
@@ -49,11 +51,13 @@ try {
     assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1), `no overflow at ${width}`);
   }
   // Literal signals expose their denominators and restore keyboard focus.
+  await page.getByRole('link', { name: 'Home', exact: true }).click();
   const ring = page.getByRole('button', { name: /^Continuity .*Inspect evidence/ });
   await ring.click();
   await page.getByRole('dialog').getByText(/Same-trail transitions ÷/).waitFor();
   await page.keyboard.press('Escape');
   assert.equal(await ring.evaluate(el => document.activeElement === el), true);
+  await page.getByRole('link', { name: 'Your trails', exact: true }).click();
   await page.getByRole('searchbox').fill('');
   await page.getByRole('button', { name: 'Search', exact: true }).click();
   await page.getByRole('button', { name: 'Weekend Rust project', exact: true }).click();
@@ -69,7 +73,8 @@ try {
   await page.getByLabel('Page grouping', { exact: true }).selectOption('test-rust');
   await page.getByRole('button', { name: 'Save grouping', exact: true }).click();
   const send = message => page.evaluate(message => new Promise(resolve => chrome.runtime.sendMessage(message, resolve)), message);
-  await page.reload();
+  // Home's continue card offers the session; Your trails shows only a running one.
+  await page.goto(`${origin}/ui/newtab.html`);
   await page.getByRole('button', { name: 'Start session', exact: true }).click();
   await page.getByLabel('Duration').selectOption('25');
   await page.getByLabel('Next step (optional)').fill('Private next step');

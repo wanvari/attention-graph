@@ -221,9 +221,8 @@ async function renderMap() {
     assert.strictEqual(typeof a.source, 'string', 'analysis.source is missing — the evidence panel prints it');
 
     const strip = window.document.getElementById('summary-strip').textContent;
-    assert.ok(/topics shown/.test(strip), 'summary strip did not render');
-    assert.ok(/between-topic visits/.test(strip), 'switch count missing from the summary strip');
-    assert.ok(/changes per est. hour/.test(strip), 'switch rate missing from the summary strip');
+    assert.ok(/trails shown/.test(strip), 'summary strip did not render');
+    assert.ok(/How connections are counted/.test(window.document.getElementById('evidence-panel').textContent), 'connection audit is available');
     assert.ok(!/undefined/.test(strip), `summary strip printed "undefined": ${strip}`);
   }
 
@@ -255,7 +254,7 @@ async function renderMap() {
     assert.ok(!/undefined/.test(evidence), `evidence panel printed "undefined": ${evidence}`);
 
     const legend = window.document.getElementById('legend').textContent;
-    assert.ok(/Highest estimated time/.test(legend), 'legend did not render');
+    assert.ok(/more visits/.test(legend), 'legend did not render');
   }
 
   // Repeated edges show actual examples; correcting one page removes stale
@@ -280,6 +279,36 @@ async function renderMap() {
     const { store } = await renderMap();
     const morning = await global.CTMapData.build(store, { now: new Date(2026, 8, 10, 8).getTime() });
     assert.deepEqual(morning.topics.map(t => t.id), ['topic-bread']);
+  }
+
+  // A populated view becoming unavailable must clear the separate screen
+  // labels too, and controls must still work before a successful reload.
+  {
+    const { viz, window } = await renderMap();
+    const analysis = viz.analysis;
+    assert.ok(window.document.querySelectorAll('.label-overlay text').length > 0);
+    viz.renderUnavailable({ ok: false, message: 'Registry read interrupted' });
+    assert.strictEqual(window.document.querySelectorAll('#graph circle, .label-overlay text').length, 0);
+    assert.strictEqual(viz.graphData.nodes.length, 0);
+    viz.clearSelection();
+    viz.handleResize();
+    viz.renderAnalysis(analysis);
+    assert.strictEqual(window.document.querySelectorAll('.topic-node').length, 2);
+  }
+
+  // A slow older window read cannot overwrite the user's newer selection.
+  {
+    const {viz} = await renderMap(), build = global.CTMapData.build;
+    const pending=[];
+    global.CTMapData.build=()=>new Promise(resolve=>pending.push(resolve));
+    try {
+      const older=viz.loadAnalysis(false); await new Promise(resolve=>setTimeout(resolve,10));
+      const newer=viz.loadAnalysis(false); await new Promise(resolve=>setTimeout(resolve,10));
+      const base=viz.analysis;
+      pending[1]({...base,windowDays:7});await newer;
+      pending[0]({...base,windowDays:90});await older;
+      assert.equal(viz.analysis.windowDays,7,'latest request wins');
+    }finally{global.CTMapData.build=build;}
   }
 
   // ---- empty registry takes the honest path, not the failure path ------

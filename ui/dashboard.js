@@ -1,5 +1,6 @@
-// Dashboard, evidence drawers and opt-in sessions. All persistence goes through
-// the host's worker action callback; this renderer never invokes a model.
+// Home's continue card and daily ratios, evidence drawers, and opt-in
+// sessions. All persistence goes through the host's worker action callback;
+// this renderer never invokes a model.
 (function(root, factory) {
   const api = typeof module !== 'undefined' && module.exports ? factory(require('../lib/dashboard'), require('../lib/trails')) : factory(root.CTDashboard, root.CTTrails);
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
@@ -7,14 +8,17 @@
 })(typeof globalThis !== 'undefined' ? globalThis : this, function(D, T) {
   'use strict';
   const labels = { continuity: 'Continuity', top: 'Top trail', return: 'Return share', time: 'Estimated time recorded' };
+  const descriptions = { continuity: 'Consecutive visits that stayed in one trail.', top: 'Your largest trail by recorded time.', return: 'Time spent revisiting earlier trails.' };
   const percent = value => value === null ? '—' : `${Math.round(value * 100)}%`;
   const minutes = ms => `${Math.round(ms / 60000 * 10) / 10}m`;
   const duration = ms => ms === 0 ? '0m' : ms < 1000 ? '<1s' : ms < 60000 ? `${Math.floor(ms / 1000)}s` : ms < 3600000 ? `${Math.round(ms / 60000)}m` : `${Math.floor(ms / 3600000)}h ${Math.floor(ms / 60000) % 60}m`;
   const stamp = at => new Date(at).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
+  // options.mode: 'home' shows the continue card, ratios and rings;
+  // 'trails' shows only a running session and past session recaps.
   function mount(container, initial, options = {}) {
     const doc = container.ownerDocument;
     let record = initial, signals, dialog = null, opener = null;
-    const main = doc.createElement('div'); container.appendChild(main);
+    const main = doc.createElement('div'); main.className = 'nt-daily-content'; container.appendChild(main);
     const el = (tag, cls, text) => { const e = doc.createElement(tag); if (cls) e.className = cls; if (text !== undefined) e.textContent = text; return e; };
     const button = (text, cls, fn) => { const b = el('button', cls, text); b.type = 'button'; if (fn) b.addEventListener('click', fn); return b; };
     const link = event => { const a = el('a', 'nt-page-link', event.title); a.href = event.url; a.target = '_blank'; a.rel = 'noopener noreferrer'; return a; };
@@ -45,15 +49,19 @@
     const paragraph = (parent, text, cls = 'nt-help') => parent.appendChild(el('p', cls, text));
     function comparison(key) {
       const range = signals.comparisons[key];
-      if (!signals[key].eligible) return 'More recorded evidence needed for a comparison';
-      if (range.n < 7) return `Building your comparison: ${range.n} of 7 days`;
+      if (!signals[key].eligible) return 'Not enough data to compare';
+      if (range.n < 7) return `Comparison needs 7 days · ${range.n} recorded`;
       return `${range.direction[0].toUpperCase() + range.direction.slice(1)} recent range`;
     }
-    const raw = key => key === 'continuity' ? `${signals.continuity.numerator} of ${signals.continuity.denominator} classified transitions stayed in one trail`
+    const raw = key => key === 'continuity' ? `${signals.continuity.numerator} of ${signals.continuity.denominator} grouped steps stayed in one trail`
       : `${minutes(signals[key].numerator)} of ${minutes(signals[key].denominator)} grouped time`;
+    // The compact form keeps both terms of the ratio visible.
+    const fraction = key => !signals[key].denominator ? '—' : key === 'continuity'
+      ? `${signals.continuity.numerator} of ${signals.continuity.denominator} steps`
+      : `${duration(signals[key].numerator)} of ${duration(signals[key].denominator)}`;
     function coverage(parent, stats) {
       const c = stats.coverage;
-      paragraph(parent, `${c.groupedVisits} of ${c.visits} recorded visits grouped · interaction timing for ${c.measuredVisits} of ${c.visits} · ${c.exactTimingVisits} with timestamped activity`, 'nt-signal-coverage');
+      paragraph(parent, `${c.groupedVisits} of ${c.visits} visits grouped · timing measured for ${c.measuredVisits}`, 'nt-signal-coverage');
     }
     function pageRows(parent, events, bounds) {
       const list = el('ol', 'nt-evidence-list'); let limit = 30;
@@ -190,58 +198,90 @@
         }
       }
     }
+    function continuationCard() {
+      const resume = D.continuation(record);
+      if (!resume.page && !resume.session) return null;
+      const card = el('section', 'nt-continuation'); card.setAttribute('aria-label', 'Continue where you left off');
+      if (resume.trail && options.topicColor) card.style.setProperty('--trail-color', options.topicColor(resume.trail.id));
+      const body = el('div', 'nt-continuation-body');
+      body.append(el('p', 'kicker', resume.session ? 'Session in progress' : 'Pick up where you left off'), el('h2', null, resume.trail?.label || resume.session?.targetLabel || resume.page.title));
+      if (resume.session) {
+        const remaining = resume.session.durationMinutes === null ? null : Math.max(0, resume.session.startedAt + resume.session.durationMinutes * 60000 - record.now);
+        paragraph(body, remaining === null ? `${duration(record.now - resume.session.startedAt)} elapsed · untimed` : remaining ? `${duration(remaining)} remaining` : 'Time ended · preparing recap', 'nt-session-countdown');
+        if (resume.session.note) paragraph(body, resume.session.note, 'nt-session-note');
+      } else if (resume.trail?.personal.note) paragraph(body, resume.trail.personal.note, 'nt-session-note');
+      if (resume.page && resume.trail) paragraph(body, `Last page · ${resume.page.title}`, 'nt-continuation-page');
+      const actions = el('div', 'nt-session-actions');
+      if (resume.page) { const a = link(resume.page); a.textContent = 'Open last page ↗'; a.className = 'nt-primary-link'; actions.append(a); }
+      if (resume.trail && options.openTrail) actions.append(button('Open trail', 'nt-secondary-button', () => options.openTrail(resume.trail.id, true)));
+      if (resume.session) actions.append(button('View or end session', 'nt-secondary-button', () => openRecap(resume.session)));
+      else if (resume.trail) actions.append(button('Start session', 'nt-secondary-button', () => startSession(resume.trail)));
+      card.append(body, actions);
+      return { card, trailId: resume.trail?.id || null, session: resume.session };
+    }
+    function ringCard(key) {
+      const metric = signals[key];
+      const ring = button('', 'nt-ring-card', () => openMetric(key));
+      ring.setAttribute('aria-label', `${labels[key]} ${percent(metric.value)}. ${raw(key)}. Inspect evidence.`);
+      ring.title = `Today · ${labels[key]} · ${comparison(key)}. Select to inspect evidence.`;
+      const dial = el('span', 'nt-ring-dial'); dial.setAttribute('aria-hidden', 'true');
+      const svg = doc.createElementNS('http://www.w3.org/2000/svg', 'svg'); svg.setAttribute('viewBox', '0 0 144 144');
+      for (const cls of ['nt-ring-track', 'nt-ring-progress']) {
+        const circle = doc.createElementNS(svg.namespaceURI, 'circle');
+        for (const [name, value] of Object.entries({ cx: 72, cy: 72, r: 66, fill: 'none', pathLength: 100, class: cls })) circle.setAttribute(name, value);
+        if (cls === 'nt-ring-progress') { circle.style.strokeDasharray = `${(metric.value || 0) * 100} 100`; if (!metric.value) circle.style.visibility = 'hidden'; }
+        svg.append(circle);
+      }
+      dial.append(svg, el('strong', null, percent(metric.value)));
+      ring.append(dial, el('span', 'nt-ring-title', labels[key]), el('span', 'nt-ring-description', descriptions[key]));
+      const top = key === 'top' ? record.trails.find(t => t.id === metric.topicId)?.label : null;
+      if (top) ring.append(el('span', 'nt-ring-subject', top));
+      ring.append(el('span', 'nt-ring-raw', raw(key)), el('span', 'nt-inspect', 'View details'));
+      return ring;
+    }
+    function sessionHistory(parent) {
+      const completed = record.sessions.filter(s => s.status === 'complete').sort((a, b) => b.startedAt - a.startedAt);
+      if (!completed.length) return;
+      const history = el('details', 'nt-session-history'); history.append(el('summary', null, `${completed.length} session recap${completed.length === 1 ? '' : 's'}`));
+      for (const session of completed) history.append(button(`${stamp(session.startedAt)} · ${session.targetLabel || 'Trail session'}`, 'nt-text-button', () => openRecap(session)));
+      parent.append(history);
+    }
     function draw() {
       signals = D.buildDailySignals(record); main.textContent = '';
-      const dashboard = el('section', 'nt-dashboard'); dashboard.setAttribute('aria-labelledby', 'nt-today-title');
-      const heading = el('div', 'nt-dashboard-heading'); const title = el('h2', null, 'Today, so far'); title.id = 'nt-today-title';
-      heading.append(title, el('span', 'nt-scope', `Through ${new Date(record.now).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' })}`)); dashboard.append(heading);
-      const time = button('', 'nt-time-headline', () => openMetric('time'));
-      time.append(el('strong', null, duration(signals.totalMs)), el('span', null, 'estimated time recorded'));
-      const timeRow = el('div', 'nt-time-row'); timeRow.append(time);
-      const timeCompare = el('div', `nt-comparison nt-direction-${signals.comparisons.time.direction}`); timeCompare.append(el('span', null, comparison('time')));
-      if (signals.comparisons.time.n) timeCompare.append(el('small', null, `${duration(signals.comparisons.time.median)} recent median · ${signals.comparisons.time.n} days`));
-      timeRow.append(timeCompare); dashboard.append(timeRow);
-      const rings = el('div', 'nt-rings');
+      const resume = continuationCard();
+      if (options.mode === 'trails') {
+        if (resume?.session) main.append(resume.card);
+        sessionHistory(main);
+        return;
+      }
+      if (resume) main.append(resume.card);
+      options.renderChips?.(main, resume?.trailId || null);
+      const fractions = el('nav', 'nt-fractions'); fractions.setAttribute('aria-label', 'Today’s ratios');
       for (const key of ['continuity', 'top', 'return']) {
-        const metric = signals[key], range = signals.comparisons[key];
-        const ring = button('', `nt-ring-card nt-direction-${range.direction}`, () => openMetric(key)); ring.setAttribute('aria-label', `${labels[key]} ${percent(metric.value)}. ${raw(key)}. Inspect evidence.`);
-        const dial = el('span', 'nt-ring-dial'); dial.style.setProperty('--ring-turn', `${(metric.value || 0) * 360}deg`); dial.setAttribute('aria-hidden', 'true');
-        dial.append(el('strong', null, percent(metric.value))); ring.append(dial, el('span', 'nt-ring-title', labels[key]));
-        const top = key === 'top' ? record.trails.find(t => t.id === metric.topicId)?.label : null;
-        ring.append(el('span', 'nt-ring-subject', top || (key === 'continuity' ? 'Stayed in one trail' : key === 'return' ? 'Earlier trails revisited' : 'No grouped time yet')),
-          el('span', 'nt-ring-raw', raw(key)), el('span', 'nt-comparison', comparison(key)), el('span', 'nt-inspect', 'Inspect evidence ↗'));
-        rings.append(ring);
+        const item = button('', 'nt-fraction', () => openMetric(key));
+        item.setAttribute('aria-label', `${labels[key]}: ${raw(key)}. Inspect evidence.`);
+        item.append(el('span', 'nt-fraction-label', labels[key]), el('strong', 'nt-fraction-value', fraction(key)));
+        fractions.append(item);
       }
-      dashboard.append(rings); paragraph(dashboard, signals.observation, 'nt-observation'); coverage(dashboard, signals);
-      paragraph(dashboard, 'Your recent range describes your own recorded days.', 'nt-signal-note'); main.append(dashboard);
-      const resume = D.continuation(record);
-      if (resume.page || resume.session) {
-        const card = el('section', 'nt-continuation'); card.setAttribute('aria-label', 'Continue your trail');
-        const body = el('div'); body.append(el('div', 'nt-eyebrow', resume.session ? 'Session in progress' : 'A place to continue'), el('h2', null, resume.trail?.label || resume.session?.targetLabel || resume.page.title));
-        if (resume.session) {
-          const remaining = resume.session.durationMinutes === null ? null : Math.max(0, resume.session.startedAt + resume.session.durationMinutes * 60000 - record.now);
-          paragraph(body, remaining === null ? `${duration(record.now - resume.session.startedAt)} elapsed · untimed` : remaining ? `${duration(remaining)} remaining` : 'Time ended · preparing recap', 'nt-session-countdown');
-          if (resume.session.note) paragraph(body, resume.session.note, 'nt-session-note');
-        } else if (resume.trail?.personal.note) paragraph(body, resume.trail.personal.note, 'nt-session-note');
-        const actions = el('div', 'nt-session-actions');
-        if (resume.page) { const a = link(resume.page); a.textContent = 'Open last page ↗'; a.className = 'nt-primary-link'; actions.append(a); }
-        if (resume.session) actions.append(button('View or end session', 'nt-secondary-button', () => openRecap(resume.session)));
-        else if (resume.trail) actions.append(button('Start session', 'nt-secondary-button', () => startSession(resume.trail)));
-        card.append(body, actions); main.append(card);
-      }
-      const completed = record.sessions.filter(s => s.status === 'complete').sort((a, b) => b.startedAt - a.startedAt);
-      if (completed.length) {
-        const history = el('details', 'nt-session-history'); history.append(el('summary', null, `${completed.length} session recap${completed.length === 1 ? '' : 's'}`));
-        for (const session of completed) history.append(button(`${stamp(session.startedAt)} · ${session.targetLabel || 'Trail session'}`, 'nt-text-button', () => openRecap(session)));
-        main.append(history);
-      }
+      const cue = el('a', 'nt-today-cue', 'Today in detail ↓'); cue.href = '#nt-today';
+      fractions.append(cue); main.append(fractions);
+      const today = el('section', 'nt-today'); today.id = 'nt-today'; today.setAttribute('aria-labelledby', 'nt-today-title');
+      const heading = el('div', 'nt-today-heading'), title = el('h2', null, 'Today in detail'); title.id = 'nt-today-title';
+      heading.append(title, el('span', 'nt-scope', new Date(record.now).toLocaleDateString(undefined, { weekday: 'long', month: 'short', day: 'numeric' })),
+        button(`${duration(signals.totalMs)} estimated`, 'nt-text-button', () => openMetric('time')));
+      const rings = el('div', 'nt-rings');
+      for (const key of ['continuity', 'top', 'return']) rings.append(ringCard(key));
+      today.append(heading, rings); coverage(today, signals);
+      paragraph(today, 'Each ring is a literal share of today’s recorded pages, not a target. Select one for its calculation and source pages.', 'nt-today-note');
+      main.append(today);
+      sessionHistory(main);
     }
     draw();
     if (options.sessionId) {
       const session = record.sessions.find(s => s.sessionId === options.sessionId);
       if (session) openRecap(session); else { const box = open('Session unavailable'); paragraph(box, 'This session is no longer in your record.'); }
     }
-    return { openPage, startSession, openRecap, get isEditing() { return !!dialog; },
+    return { openPage, startSession, openRecap, openMetric, get signals() { return signals; }, get isEditing() { return !!dialog; },
       update(next) { record = next; draw(); }, dispose() { close(); container.textContent = ''; } };
   }
   return { mount, duration, percent };

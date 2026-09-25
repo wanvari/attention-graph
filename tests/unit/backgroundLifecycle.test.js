@@ -15,7 +15,7 @@ const deferred = () => {
   return { promise, resolve };
 };
 
-async function harness() {
+async function harness(options = {}) {
   const store = CTStore.createStore({ indexedDB: new IDBFactory(), IDBKeyRange });
   await store.open();
   const handlers = {};
@@ -27,6 +27,7 @@ async function harness() {
     runtime: {
       id: 'test-extension', onInstalled: event('installed'), onStartup: event('startup'), onMessage: event('message'),
       getURL: value => `chrome-extension://test-extension/${value}`,
+      getManifest: () => options.manifest || { manifest_version: 3 },
       getContexts: async () => h.hasOffscreen ? [{}] : [],
       sendMessage: async message => { events.push(message.type); if (message.type === 'RUN_PIPELINE') return h.pipelineReply || { started: true }; }
     },
@@ -59,7 +60,12 @@ async function harness() {
     CTSessions: require('../../lib/sessions.js'), CTDashboard: require('../../lib/dashboard.js'), CTIntegrity: require('../../lib/integrity.js'), CTTrails: require('../../lib/trails.js'), CTOllamaRules: require('../../lib/ollamaRules.js'), importScripts() {}
   };
   vm.runInNewContext(fs.readFileSync(path.join(root, 'background.js'), 'utf8'), sandbox);
-  h.send = (message, sender = {}) => new Promise(resolve => handlers.message(message, sender, resolve));
+  // Realistic senders: captures come from the page's own tab, everything
+  // else from an extension page.
+  h.page = { id: 'test-extension', url: 'chrome-extension://test-extension/ui/newtab.html', tab: { id: 7 } };
+  h.tab = (url, tab = {}) => ({ id: 'test-extension', url, tab: { id: 3, incognito: false, ...tab }, frameId: 0 });
+  h.send = (message, sender) => new Promise(resolve => handlers.message(message,
+    sender || (message?.type === 'CAPTURE_UPDATE' ? h.tab(message.capture?.url) : h.page), resolve));
   h.capture = (id, overrides = {}) => ({
     type: 'CAPTURE_UPDATE', capture: { captureId: id, url: `https://example.com/article?id=${id}`, title: 'Article', startedAt: Date.now() - 5000,
       updatedAt: Date.now(), activeMs: 4000, textHash: 'hash', textLength: 20, extractedText: 'Some useful material', ...overrides }
@@ -97,7 +103,10 @@ async function harness() {
     assert.strictEqual((await h.send(message)).ok, true);
     assert.ok((await h.store.get('captures', 'terminal')).endedAt, 'final state is durable without an alarm or explicit flush');
     assert.strictEqual((await h.send(h.capture('secret', { url: 'https://example.com/#/login?token=FAKE' }))).ok, false, 'worker rechecks raw sensitive routes');
-    assert.strictEqual((await h.send(h.capture('private'), { tab: { incognito: true } })).ok, false);
+    const incognito = await h.send(h.capture('private'), h.tab('https://example.com/article?id=private', { incognito: true }));
+    assert.strictEqual(incognito.ok, false);
+    assert.strictEqual(incognito.reason, undefined, 'incognito is refused by the capture check, not the sender check');
+    assert.strictEqual(await h.store.get('captures', 'private'), null);
     await h.send(h.capture('safe', { url: 'https://example.com/watch?v=42&utm_source=test#anchor', normalizedUrl: 'untrusted' }));
     const row = await h.store.get('captures', 'safe');
     assert.strictEqual(row.url, 'https://example.com/watch?v=42');
@@ -159,7 +168,13 @@ async function harness() {
     assert.equal((await h.send({ type: 'SAVE_PREFERENCES', values: { days: 7, watermark: 1 } })).ok, true);
     assert.equal(await h.store.getSetting('watermark'), undefined);
     assert.equal((await h.send({ type: 'SAVE_PREFERENCES', values: { maxNewPagesPerRun: 1000000 } })).ok, false);
+    assert.equal((await h.send({ type: 'GET_UI_THEME' })).theme, 'dark');
+    assert.equal((await h.send({ type: 'SET_UI_THEME', theme: 'light' })).ok, true);
+    assert.equal((await h.send({ type: 'GET_UI_THEME' })).theme, 'light');
+    assert.equal(h.storage.ctUiTheme, 'light');
+    assert.equal((await h.send({ type: 'SET_UI_THEME', theme: 'invalid' })).ok, false);
     await h.send({ type: 'DELETE_EVERYTHING' });
+    assert.equal((await h.send({ type: 'GET_UI_THEME' })).theme, 'dark');
     assert.equal((await h.send({ type: 'SAVE_TRAIL_METADATA', row })).ok, false, 'stale page cannot resurrect a deleted note');
     assert.equal((await h.store.getAll('corrections')).length, 0);
   }
@@ -204,6 +219,50 @@ async function harness() {
     assert.equal((await h.send(h.capture('during-pause', { startedAt: at + 3000 }))).ok, false, 'late capture from a closed pause is still rejected');
     const record = require('../../lib/trails').buildRecord(await require('../../lib/trails').loadData(h.store));
     assert.equal(record.estimatedMs, 4000, 'shared evidence also subtracts pauses from existing captures');
+  }
+  {
+    // A content script runs inside a web page; a compromised renderer can
+    // forge anything it can send. Only same-origin capture updates pass.
+    const h = await harness();
+    await h.send(h.capture('kept'));
+    const page = h.tab('https://example.com/article?id=kept');
+    for (const type of ['HISTORY_SEARCH', 'HISTORY_GET_VISITS', 'DELETE_EVERYTHING', 'SAVE_PREFERENCES', 'RUN_PIPELINE_MANUAL', 'SET_CAPTURE_PAUSED', 'TEST_SET_SETTING', 'GET_STATUS']) {
+      const reply = await h.send({ type, key: 'testMode', value: true, values: { denylist: ['x.com'] }, paused: true }, page);
+      assert.equal(reply.reason, 'sender-not-allowed', `${type} is refused from a web page`);
+    }
+    assert.ok(await h.store.get('captures', 'kept'), 'a forged deletion leaves the record intact');
+    assert.equal(await h.store.getSetting('testMode'), undefined);
+    assert.equal(await h.store.getSetting('denylist'), undefined);
+    assert.equal(h.events.includes('create'), false, 'a forged manual run never opens the analysis document');
+    const crossOrigin = await h.send(h.capture('forged', { url: 'https://bank.example/statement' }), page);
+    assert.equal(crossOrigin.reason, 'sender-not-allowed', 'a tab can only record its own origin');
+    assert.equal(await h.store.get('captures', 'forged'), null);
+    const noTab = await h.send(h.capture('no-tab'), h.page);
+    assert.equal(noTab.reason, 'sender-not-allowed', 'captures must come from a tab');
+    const otherExtension = await h.send({ type: 'GET_STATUS' }, { id: 'other-extension', url: 'chrome-extension://other-extension/page.html' });
+    assert.equal(otherExtension.reason, 'sender-not-allowed');
+    assert.equal((await h.send({ type: 'GET_STATUS' }, {})).reason, 'sender-not-allowed', 'an unidentified sender is refused');
+    assert.equal((await h.send({ type: 'GET_UI_THEME' })).ok, true, 'extension pages still reach the worker');
+  }
+  {
+    // Test hooks: nothing but testMode itself can be set before test mode.
+    const h = await harness();
+    const early = await h.send({ type: 'TEST_SET_SETTING', key: 'watermark', value: 1 });
+    assert.deepEqual(early, { ok: false, reason: 'not in test mode' });
+    assert.equal(await h.store.getSetting('watermark'), undefined, 'watermark is not writable outside test mode');
+    assert.equal((await h.send({ type: 'TEST_SET_SETTING', key: 'uiTheme', value: 'light' })).reason, 'key not allowed');
+    assert.equal((await h.send({ type: 'TEST_FIRE_ALARM', alarm: 'flush' })).reason, 'not in test mode');
+    assert.equal((await h.send({ type: 'TEST_SET_SETTING', key: 'testMode', value: true })).ok, true);
+    assert.equal((await h.send({ type: 'TEST_SET_SETTING', key: 'watermark', value: 1 })).ok, true);
+    assert.equal(await h.store.getSetting('watermark'), 1);
+    assert.equal((await h.send({ type: 'TEST_FIRE_ALARM', alarm: 'flush' })).ok, true);
+
+    // Web Store builds carry update_url: test hooks do not exist there.
+    const store = await harness({ manifest: { manifest_version: 3, update_url: 'https://clients2.google.com/service/update2/crx' } });
+    assert.equal((await store.send({ type: 'TEST_SET_SETTING', key: 'testMode', value: true })).reason, 'test hooks unavailable');
+    assert.equal(await store.store.getSetting('testMode'), undefined);
+    await store.store.setSetting('testMode', true);
+    assert.equal((await store.send({ type: 'TEST_FIRE_ALARM', alarm: 'flush' })).reason, 'test hooks unavailable', 'a stored testMode flag cannot enable hooks in a release build');
   }
   console.log('background lifecycle tests passed');
 })().catch(error => { console.error(error); process.exit(1); });

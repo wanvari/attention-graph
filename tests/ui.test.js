@@ -1,5 +1,5 @@
 // UI tests (spec §7.6):
-//  - no red/green hue anywhere in ui/*.css (Whoop's valence is what D4 forbids)
+//  - no red/green judgement colors; the Studio brand uses the requested green palette
 //  - newtab renders an empty DB without throwing (jsdom + fake-indexeddb)
 //  - newtab performs at most 4 IndexedDB transactions on load
 'use strict';
@@ -55,21 +55,28 @@ const hueViolations = [];
 
 for (const name of cssFiles) {
   const source = fs.readFileSync(path.join(uiDir, name), 'utf8');
+  if (name === 'studio.css') {
+    for (const direction of ['below', 'within', 'above', 'neutral']) {
+      assert.ok(source.includes(`--signal-${direction}: var(--ring-ink)`), 'all ring comparison directions use the same neutral ink');
+    }
+    assert.ok(source.includes('--accent: #7fee64'), 'the requested phosphor accent is available for navigation and focus');
+  }
+  const forbidden = hsl => isValenceHue(hsl) && !(name === 'studio.css' && hsl.hue >= 90 && hsl.hue <= 150);
   for (const match of source.matchAll(/#[0-9a-fA-F]{3,8}\b/g)) {
     const hsl = parseHex(match[0]);
-    if (isValenceHue(hsl)) {
+    if (forbidden(hsl)) {
       hueViolations.push(`${name}: ${match[0]} (hue ${hsl.hue}, sat ${hsl.saturation.toFixed(0)}%)`);
     }
   }
   for (const match of source.matchAll(/rgba?\(\s*(\d+)[,\s]+(\d+)[,\s]+(\d+)/g)) {
     const hsl = hslFromRgb(Number(match[1]), Number(match[2]), Number(match[3]));
-    if (isValenceHue(hsl)) {
+    if (forbidden(hsl)) {
       hueViolations.push(`${name}: ${match[0]}) (hue ${hsl.hue}, sat ${hsl.saturation.toFixed(0)}%)`);
     }
   }
   for (const match of source.matchAll(/hsla?\(\s*(\d+)[,\s]+(\d+)%/g)) {
     const hsl = { hue: Number(match[1]), saturation: Number(match[2]), lightness: 50 };
-    if (isValenceHue(hsl)) hueViolations.push(`${name}: ${match[0]}) (hue ${hsl.hue})`);
+    if (forbidden(hsl)) hueViolations.push(`${name}: ${match[0]}) (hue ${hsl.hue})`);
   }
   for (const word of ['red', 'green', 'crimson', 'firebrick', 'tomato', 'lime', 'forestgreen', 'seagreen']) {
     const pattern = new RegExp(`:\\s*${word}\\b|\\b${word};`, 'i');
@@ -91,52 +98,7 @@ assert.deepStrictEqual(hueViolations, [],
   assert.deepStrictEqual(jsViolations, [], `valence hues in map palettes:\n${jsViolations.join('\n')}`);
 }
 
-// ------------------------------------------------------ contrast (WCAG AA)
-function relativeLuminance(hex) {
-  const value = hex.replace('#', '');
-  const channels = [0, 2, 4]
-    .map(i => parseInt(value.slice(i, i + 2), 16) / 255)
-    .map(c => (c <= 0.03928 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4)));
-  return 0.2126 * channels[0] + 0.7152 * channels[1] + 0.0722 * channels[2];
-}
-
-function contrastRatio(a, b) {
-  const l1 = relativeLuminance(a);
-  const l2 = relativeLuminance(b);
-  return (Math.max(l1, l2) + 0.05) / (Math.min(l1, l2) + 0.05);
-}
-
-{
-  // The band badges are small text, so AA is 4.5:1. Painting the light
-  // `--bg` colour on the low-intensity swatches gave 2.3:1 in light mode.
-  const shared = fs.readFileSync(path.join(uiDir, 'shared.css'), 'utf8');
-  const tokens = {};
-  for (const match of shared.matchAll(/(--band-\w+(?:-\w+)?)\s*:\s*(#[0-9a-fA-F]{6})/g)) {
-    // Later definitions are the dark-mode block; keep both under a scheme key.
-    const key = match[1];
-    if (!tokens[key]) tokens[key] = [];
-    tokens[key].push(match[2]);
-  }
-  const failures = [];
-  for (const band of ['within', 'outside', 'unusual']) {
-    const backgrounds = tokens[`--band-${band}-bg`] || [];
-    const foregrounds = tokens[`--band-${band}-fg`] || [];
-    assert.ok(backgrounds.length >= 1 && foregrounds.length >= 1,
-      `band "${band}" defines an explicit background and text colour`);
-    // index 0 = light mode, index 1 = dark mode (if present)
-    for (let scheme = 0; scheme < Math.min(backgrounds.length, foregrounds.length); scheme++) {
-      const ratio = contrastRatio(foregrounds[scheme], backgrounds[scheme]);
-      if (ratio < 4.5) {
-        failures.push(`${band} (${scheme === 0 ? 'light' : 'dark'}): ${foregrounds[scheme]} on ${backgrounds[scheme]} = ${ratio.toFixed(2)}:1`);
-      }
-      // And the badge must still be free of valence hues.
-      assert.ok(!isValenceHue(parseHex(backgrounds[scheme])),
-        `band "${band}" background stays out of the red/green bands`);
-    }
-  }
-  assert.deepStrictEqual(failures, [],
-    `band badges must meet WCAG AA (4.5:1) in both themes:\n${failures.join('\n')}`);
-}
+// Text contrast for the shared tokens is checked in tests/unit/tokens.test.js.
 
 // ------------------------------------------------- real record journeys
 const CTText = require('../lib/text.js');
@@ -161,7 +123,7 @@ async function seed(store) {
   await store.put('captures', { captureId: 'fresh', normalizedUrl: c, url: c, title: 'Sourdough hydration', startedAt: at(5), updatedAt: at(5, 12, 2), activeMs: 40000 });
 }
 async function mount(populate, extra = {}) {
-  const dom = new JSDOM('<!doctype html><html><body><main id="app"></main></body></html>', { pretendToBeVisual: true, url: 'https://localhost/ui/newtab.html' });
+  const dom = new JSDOM('<!doctype html><html><body><main id="app"></main></body></html>', { pretendToBeVisual: true, url: 'https://localhost/ui/newtab.html?view=trails' });
   const store = CTStore.createStore({ indexedDB: new IDBFactory(), IDBKeyRange });
   await store.open();
   if (populate) await populate(store);
@@ -176,6 +138,21 @@ function search(window, document, query) {
 }
 
 (async () => {
+  // Weekly time includes only the part of a visit inside the seven-day window.
+  {
+    const boundary = new Date(2026, 7, 30).getTime();
+    const m = await mount(async store => {
+      await store.put('captures', {captureId:'overnight',url:a,title:'Rust across midnight',startedAt:boundary-60000,endedAt:boundary+60000,activeMs:120000,activityIntervals:[[boundary-60000,boundary+60000]]});
+      await store.put('visits', {visitId:'in-week',url:b,title:'Async',visitTime:at(1),dwellMs:60000});
+    });
+    assert.equal(m.document.querySelector('.nt-time-estimate strong').textContent,'2m');
+    assert.equal(m.document.querySelectorAll('.nt-mini-day').length,7);
+    const oldRecord=m.result.record;
+    m.result.update({visits:[]});
+    assert.notEqual(m.result.record,oldRecord,'main must preserve the live record getter');
+    assert.equal(m.result.record.events.length,0);
+    await m.close();
+  }
   // Unknown operational durations must not appear as observed zero time.
   {
     const m = await mount(async store => {
@@ -195,7 +172,7 @@ function search(window, document, query) {
     assert.ok(m.document.body.textContent.includes('Search works before they are installed.'));
     assert.ok(m.document.querySelector('a[href="demo.html"]'));
     assert.ok(m.document.querySelector('a[href="options.html"]'));
-    assert.ok(m.document.querySelector('.nt-footer'));
+    assert.ok(m.document.querySelector('.studio-sidebar a[aria-label="Record & privacy"]'));
     assert.equal(m.result.readTransactions, 1);
     assert.equal(m.document.querySelectorAll('.nt-ring').length, 0);
     await m.close();
@@ -205,9 +182,9 @@ function search(window, document, query) {
     const m = await mount(seed);
     assert.equal(m.result.state, 'rendered');
     assert.equal(m.result.readTransactions, 1);
-    assert.ok(m.document.body.textContent.includes('returned on 1 later day'));
-    assert.ok(m.document.body.textContent.includes('3 visits grouped of 4 recorded'));
-    assert.ok(m.document.body.textContent.includes('Interaction timing available for 1 of 4'));
+    assert.equal(m.result.record.trails[0].returnDays, 1);
+    assert.ok(m.document.body.textContent.includes('3 of 4 visits grouped'));
+    assert.ok(m.document.body.textContent.includes('Timing measured for 1'));
     assert.ok(m.document.querySelector('.nt-freshness').textContent.includes('Latest recorded visit'));
     assert.equal(m.document.querySelectorAll('.nt-ring, .nt-band').length, 0);
     click(m.window, m.document.querySelector('.nt-trail-title'));
@@ -319,7 +296,7 @@ function search(window, document, query) {
   {
     const m = await mount(seed, { readOnly: true, links: { home: '#home', map: '#map', audit: '#audit', settings: '#setup' } });
     assert.equal(m.document.querySelector('.nt-pin').disabled, true);
-    assert.equal(m.document.querySelector('.nt-nav a').getAttribute('href'), '#map');
+    assert.equal(m.document.querySelector('.studio-nav a[aria-label="Graph"]').getAttribute('href'), '#map');
     click(m.window, m.document.querySelector('.nt-trail-title'));
     assert.equal(m.document.querySelector('.nt-edit-form'), null);
     assert.ok(m.document.querySelector('.nt-edit').textContent.includes('sample record'));

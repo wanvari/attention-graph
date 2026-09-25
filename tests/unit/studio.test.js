@@ -1,0 +1,20 @@
+'use strict';
+const assert=require('node:assert/strict');
+const {JSDOM}=require('jsdom');
+const Studio=require('../../ui/studio');
+(async()=>{
+  const dom=new JSDOM('<main id="host"><input type="search"></main>',{url:'https://localhost/ui/newtab.html',pretendToBeVisual:true});
+  const doc=dom.window.document,calls=[];
+  dom.window.chrome={runtime:{id:'test',sendMessage:(message,reply)=>calls.push({message,reply})}};
+  Studio.mount(doc.getElementById('host'));
+  const stale=calls.find(c=>c.message.type==='GET_UI_THEME');
+  doc.querySelector('[data-studio-theme-toggle]').click();
+  assert.equal(doc.documentElement.dataset.theme,'light');
+  stale.reply({ok:true,theme:'dark'});await Promise.resolve();await Promise.resolve();
+  assert.equal(doc.documentElement.dataset.theme,'light','a delayed initial preference cannot undo the user’s toggle');
+  calls.find(c=>c.message.type==='SET_UI_THEME').reply({ok:true,theme:'light'});await Promise.resolve();await Promise.resolve();
+  doc.querySelector('.studio-brand').click();assert.equal(doc.activeElement,doc.querySelector('input'),'top dock action sends keyboard input to search');
+  assert.equal(dom.window.location.href,'https://localhost/ui/newtab.html');
+  assert.equal(doc.querySelector('.studio-sidebar a[aria-label="Settings"] svg circle').getAttribute('r'),'3');
+  dom.window.close();console.log('Theme bootstrap race, persistence, search action and settings icon passed');
+})().catch(e=>{console.error(e);process.exit(1);});

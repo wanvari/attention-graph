@@ -30,6 +30,33 @@ function withWriter(work, blocked = { ok: false, reason: 'deletion-in-progress' 
   return task;
 }
 
+// ---- message senders ---------------------------------------------------
+
+// Content scripts share the runtime channel with extension pages, but they
+// run inside web pages, so a compromised renderer can forge anything they
+// could send. Only capture updates may come from a tab, and only for that
+// tab's own origin. Every other message must come from this extension's own
+// pages (Home, settings, the offscreen analysis document).
+const EXTENSION_ORIGIN = chrome.runtime.getURL('');
+
+function fromExtensionPage(sender) {
+  return !!sender && sender.id === chrome.runtime.id &&
+    typeof sender.url === 'string' && sender.url.startsWith(EXTENSION_ORIGIN);
+}
+
+function fromCaptureTab(sender, message) {
+  if (!sender || sender.id !== chrome.runtime.id || !sender.tab) return false;
+  try {
+    return new URL(sender.url).origin === new URL(message.capture.url).origin;
+  } catch {
+    return false;
+  }
+}
+
+// Test hooks exist only in unpacked builds (the Web Store adds update_url),
+// and only switching test mode on is allowed before test mode is on.
+const TEST_HOOKS_AVAILABLE = !('update_url' in chrome.runtime.getManifest());
+
 // ---- scoped Ollama origin rewrite -------------------------------------
 
 // Registered dynamically so the rule can name this extension as the only
@@ -412,7 +439,13 @@ chrome.alarms.onAlarm.addListener(alarm => {
 });
 
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
-  switch (message && message.type) {
+  const type = message && message.type;
+  const allowed = type === 'CAPTURE_UPDATE' ? fromCaptureTab(sender, message) : fromExtensionPage(sender);
+  if (!allowed) {
+    sendResponse({ ok: false, textStored: false, reason: 'sender-not-allowed' });
+    return false;
+  }
+  switch (type) {
     case 'CAPTURE_UPDATE':
       withWriter(() => handleCaptureUpdate(message, sender), { ok: false, textStored: false }).then(sendResponse, error => {
         console.warn('capture update failed', error);
@@ -488,6 +521,17 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       withWriter(async () => { await store.open(); return { ok: true, audit: await CTIntegrity.repair(store) }; })
         .then(sendResponse, error => sendResponse({ ok: false, error: error.message }));
       return true;
+    case 'GET_UI_THEME':
+      store.getSetting('uiTheme').then(theme => sendResponse({ ok: true, theme: theme === 'light' ? 'light' : 'dark' }), error => sendResponse({ ok: false, error: error.message }));
+      return true;
+    case 'SET_UI_THEME':
+      withWriter(async () => {
+        if (!['dark', 'light'].includes(message.theme)) throw new Error('Invalid theme');
+        await store.open(); await store.setSetting('uiTheme', message.theme);
+        await chrome.storage.local.set({ ctUiTheme: message.theme });
+        return { ok: true, theme: message.theme };
+      }).then(sendResponse, error => sendResponse({ ok: false, error: error.message }));
+      return true;
     case 'SAVE_PREFERENCES':
       withWriter(async () => {
         await store.open(); await store.saveEditableSettings(message.values);
@@ -534,6 +578,10 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       return true;
     case 'TEST_FIRE_ALARM': {
       // Exposed only in test mode for the e2e suite (§7.7).
+      if (!TEST_HOOKS_AVAILABLE) {
+        sendResponse({ ok: false, reason: 'test hooks unavailable' });
+        return false;
+      }
       withWriter(() => store.open()
         .then(() => store.getSetting('testMode'))
         .then(async testMode => {
@@ -548,15 +596,19 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       return true;
     }
     case 'TEST_SET_SETTING': {
-      // Test-only escape hatch, gated the same way (used to enable testMode
-      // itself via an explicit key allowlist).
-      const allowed = ['testMode', 'watermark', 'notificationsEnabled', 'idleGatingEnabled'];
-      if (!allowed.includes(message.key)) {
-        sendResponse({ ok: false, reason: 'key not allowed' });
+      // Test-only escape hatch with an explicit key allowlist. testMode itself
+      // can be switched on here; every other key requires it to be on already.
+      const keys = ['testMode', 'watermark', 'notificationsEnabled', 'idleGatingEnabled'];
+      if (!TEST_HOOKS_AVAILABLE || !keys.includes(message.key)) {
+        sendResponse({ ok: false, reason: TEST_HOOKS_AVAILABLE ? 'key not allowed' : 'test hooks unavailable' });
         return false;
       }
-      withWriter(() => store.open().then(() => store.setSetting(message.key, message.value)))
-        .then(() => sendResponse({ ok: true }), error => sendResponse({ ok: false, reason: String(error) }));
+      withWriter(async () => {
+        await store.open();
+        if (message.key !== 'testMode' && !(await store.getSetting('testMode'))) return { ok: false, reason: 'not in test mode' };
+        await store.setSetting(message.key, message.value);
+        return { ok: true };
+      }).then(sendResponse, error => sendResponse({ ok: false, reason: String(error) }));
       return true;
     }
     default:

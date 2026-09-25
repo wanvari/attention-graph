@@ -4,8 +4,9 @@
     {
       "name": "demo",
       "runtimeExecutable": "node",
-      "runtimeArgs": ["tools/serveDemo.js", "8912"],
-      "port": 8912
+      "runtimeArgs": ["tools/serveDemo.js"],
+      "port": 8912,
+      "autoPort": true
     }
   ]
 }

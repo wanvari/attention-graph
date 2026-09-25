@@ -350,3 +350,23 @@ console.log('registry tests passed');
   assert.equal(result.topicRows[0].state, 'dormant');
   assert.ok(!result.events.some(e => e.type === 'revived'));
 }
+
+// Production always supplies member vectors and a 0.05 assignment margin.
+// A <0.03 ambiguity can still suggest review without arbitrarily assigning
+// the pages or silently merging existing trails.
+{
+  const topics=[makeTopic({topicId:'a',centroid:vecAt(.99)}),makeTopic({topicId:'b',centroid:vecAt(.97)})];
+  const cluster=makeCluster();cluster.pages=cluster.pages.map(p=>({...p,embedding:baseVec}));
+  const memberVectorsByTopic=new Map(topics.map(t=>[t.topicId,[t.centroid,t.centroid]]));
+  const cfg={today:'2026-03-10',memberVectorsByTopic,assignMargin:.05};
+  const decisions=CTRegistry.matchNewClusters([cluster],topics,[],cfg);
+  assert.equal(decisions[0].action,'create');assert.ok(decisions[0].mergeProposal);
+  const before=topics.map(t=>({...t}));
+  const result=CTRegistry.applyMatches(decisions,new Map(topics.map(t=>[t.topicId,t])),new Map(),{today:'2026-03-10',now:1000});
+  assert.equal(result.events.filter(e=>e.detail?.proposal).length,1);
+  assert.ok(result.topicRows.every(t=>!['a','b'].includes(t.topicId)),'existing trails remain untouched');
+  assert.deepStrictEqual(topics,before);
+  assert.equal(result.membershipRows.length,2);
+  memberVectorsByTopic.set('b',[vecAt(.1)]);
+  assert.ok(!CTRegistry.matchNewClusters([cluster],topics,[],cfg)[0].mergeProposal,'both topics need member evidence');
+}

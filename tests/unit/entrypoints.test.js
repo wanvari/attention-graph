@@ -5,7 +5,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 const root = path.resolve(__dirname, '../..');
-for (const file of ['ui/newtab.html', 'ui/options.html', 'ui/audit.html', 'ui/diagnostics.html', 'ui/map.html', 'ui/demo.html', 'offscreen/analysis.html']) {
+for (const file of ['ui/newtab.html', 'ui/options.html', 'ui/audit.html', 'ui/diagnostics.html', 'ui/map.html', 'ui/explore.html', 'ui/demo.html', 'offscreen/analysis.html']) {
   const html = fs.readFileSync(path.join(root, file), 'utf8');
   const scripts = [...html.matchAll(/<script[^>]*src="([^"]+)"/g)].map(m => m[1]);
   for (const ref of [...html.matchAll(/(?:src|href)="([^"]+)"/g)].map(m => m[1])) {

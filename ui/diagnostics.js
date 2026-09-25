@@ -1,6 +1,6 @@
 /* global CTDiagnostics */
 'use strict';
-document.addEventListener('DOMContentLoaded', () => {
+CTStudio.onPage('diagnostics.html', () => {
   const query = document.getElementById('query'), status = document.getElementById('diagnostic-status'), results = document.getElementById('diagnostic-results');
   async function inspect() {
     status.textContent = 'Reading local evidence…'; results.textContent = '';

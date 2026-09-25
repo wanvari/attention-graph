@@ -1,0 +1,26 @@
+{
+  "at": "2026-09-12T18:16:55.715Z",
+  "scope": "Synthetic in-memory metadata; no IndexedDB or DOM cost. Five warm measurements, medians.",
+  "host": {
+    "cpu": "Apple M3 Pro",
+    "memoryGiB": 18
+  },
+  "measurements": [
+    {
+      "visits": 1962,
+      "pages": 1025,
+      "trails": 117,
+      "recordMs": 13.8,
+      "dailyMs": 6,
+      "mapIncludingRecordMs": 17.6
+    },
+    {
+      "visits": 19620,
+      "pages": 10250,
+      "trails": 117,
+      "recordMs": 154.3,
+      "dailyMs": 63.1,
+      "mapIncludingRecordMs": 171.8
+    }
+  ]
+}

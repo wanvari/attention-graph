@@ -3,15 +3,28 @@ const assert = require('node:assert/strict');
 const T = require('../../lib/trails'), D = require('../../lib/dashboard');
 const OldT = require('../helpers/reference/trails-5.1.1'), OldD = require('../helpers/reference/dashboard-5.1.1');
 const { makeRecordFixture } = require('../helpers/performanceFixture');
+// The connection audit (0b0b804) added fields to measure().flow after 5.1.1
+// was frozen. Every field the reference has must still match exactly; the
+// additions are checked for internal consistency instead.
+const AUDIT_FIELDS = ['candidateCount', 'excluded', 'ungroupedPairs', 'uniqueUngroupedPagePairs', 'uniqueUngroupedWebsitePairs'];
+const withoutAudit = result => {
+  if (!result?.flow?.excluded) return result;
+  const excluded = Object.values(result.flow.excluded).reduce((sum, n) => sum + n, 0);
+  assert.equal(result.flow.candidateCount, excluded + result.flow.pairs.length + result.flow.uncovered, 'every candidate step is excluded, grouped or ungrouped');
+  assert.equal(result.flow.ungroupedPairs.length, result.flow.uncovered);
+  const flow = { ...result.flow };
+  for (const key of AUDIT_FIELDS) delete flow[key];
+  return { ...result, flow };
+};
 const check = (data, now) => {
   const actual = T.buildRecord(data, { now }), expected = OldT.buildRecord(data, { now });
   assert.deepEqual(actual, expected, 'every record field must match the frozen pre-optimization implementation');
-  assert.deepEqual(D.buildDailySignals(actual), OldD.buildDailySignals(expected));
+  assert.deepEqual(withoutAudit(D.buildDailySignals(actual)), OldD.buildDailySignals(expected));
   for (const from of [now - 40 * 86400000, now - 1800000, now - 11000, now]) {
     const bounds = { from, to: now };
-    assert.deepEqual(D.measure(actual, bounds), OldD.measure(expected, bounds));
+    assert.deepEqual(withoutAudit(D.measure(actual, bounds)), OldD.measure(expected, bounds));
     const session = { topicId: 't0', startedAt: from, endedAt: now };
-    assert.deepEqual(D.buildSessionRecap(actual, session), OldD.buildSessionRecap(expected, session));
+    assert.deepEqual(withoutAudit(D.buildSessionRecap(actual, session)), OldD.buildSessionRecap(expected, session));
   }
 };
 let seed = 42;
